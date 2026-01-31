@@ -1,0 +1,570 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nexus-rtp.io/schemas/audit-bundle.json",
+  "title": "Nexus RTP Audit Bundle",
+  "description": "Cryptographically signed evidence bundle for regulatory submission. Contains complete transaction history, balance derivations, and tamper-evident signatures.",
+  "type": "object",
+  "required": [
+    "bundle_id",
+    "version",
+    "generated_at",
+    "request",
+    "evidence",
+    "integrity",
+    "signatures"
+  ],
+  "properties": {
+    "bundle_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this audit bundle (UUIDv4)"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Audit bundle schema version"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when bundle was generated"
+    },
+    "request": {
+      "type": "object",
+      "description": "The audit request that triggered this bundle",
+      "required": [
+        "request_id",
+        "requester",
+        "request_type",
+        "scope"
+      ],
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "description": "External reference number from regulator/auditor"
+        },
+        "requester": {
+          "type": "object",
+          "required": ["name", "organization", "jurisdiction"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of requesting individual"
+            },
+            "organization": {
+              "type": "string",
+              "description": "Regulatory body or audit firm"
+            },
+            "jurisdiction": {
+              "type": "string",
+              "enum": ["US", "EU", "UK", "APAC", "GLOBAL"],
+              "description": "Regulatory jurisdiction"
+            },
+            "contact_email": {
+              "type": "string",
+              "format": "email"
+            }
+          }
+        },
+        "request_type": {
+          "type": "string",
+          "enum": [
+            "REGULATORY_EXAMINATION",
+            "ANNUAL_AUDIT",
+            "INCIDENT_INVESTIGATION",
+            "CUSTOMER_DISPUTE",
+            "AML_SAR",
+            "LEGAL_DISCOVERY",
+            "INTERNAL_REVIEW"
+          ],
+          "description": "Type of audit request"
+        },
+        "scope": {
+          "type": "object",
+          "required": ["period_start", "period_end"],
+          "properties": {
+            "period_start": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "period_end": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "account_ids": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Specific accounts (empty = all accounts)"
+            },
+            "transaction_ids": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Specific transactions to include"
+            },
+            "currencies": {
+              "type": "array",
+              "items": {"type": "string", "pattern": "^[A-Z]{3}$"},
+              "description": "Filter by currencies"
+            },
+            "minimum_amount": {
+              "type": "integer",
+              "description": "Minimum transaction amount (smallest unit)"
+            }
+          }
+        },
+        "received_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the audit request was received"
+        },
+        "due_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Deadline for bundle submission"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "description": "The actual audit evidence",
+      "required": [
+        "summary",
+        "accounts",
+        "transactions"
+      ],
+      "properties": {
+        "summary": {
+          "type": "object",
+          "required": [
+            "total_accounts",
+            "total_transactions",
+            "total_volume",
+            "currencies_involved"
+          ],
+          "properties": {
+            "total_accounts": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_transactions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_volume": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "description": "Total volume per currency in smallest unit"
+              }
+            },
+            "currencies_involved": {
+              "type": "array",
+              "items": {"type": "string", "pattern": "^[A-Z]{3}$"}
+            },
+            "period_covered": {
+              "type": "object",
+              "properties": {
+                "first_transaction": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "last_transaction": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        },
+        "accounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "account_id",
+              "opening_balance",
+              "closing_balance",
+              "currency",
+              "transaction_count"
+            ],
+            "properties": {
+              "account_id": {
+                "type": "string"
+              },
+              "account_type": {
+                "type": "string",
+                "enum": ["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"]
+              },
+              "opening_balance": {
+                "type": "integer",
+                "description": "Balance at period start (smallest unit)"
+              },
+              "closing_balance": {
+                "type": "integer",
+                "description": "Balance at period end (smallest unit)"
+              },
+              "currency": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$"
+              },
+              "transaction_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "total_credits": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "total_debits": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "balance_derivation_hash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "SHA-256 hash of balance derivation computation"
+              }
+            }
+          }
+        },
+        "transactions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "transaction_id",
+              "timestamp",
+              "entries",
+              "status"
+            ],
+            "properties": {
+              "transaction_id": {
+                "type": "string"
+              },
+              "idempotency_key": {
+                "type": "string",
+                "description": "Client-provided deduplication key"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "TRANSFER",
+                  "DEPOSIT",
+                  "WITHDRAWAL",
+                  "FX_CONVERSION",
+                  "FEE",
+                  "INTEREST",
+                  "ADJUSTMENT",
+                  "REVERSAL"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": ["COMPLETED", "PENDING", "FAILED", "REVERSED"]
+              },
+              "entries": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "account_id",
+                    "amount",
+                    "direction",
+                    "currency"
+                  ],
+                  "properties": {
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": ["DEBIT", "CREDIT"]
+                    },
+                    "currency": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{3}$"
+                    },
+                    "running_balance_after": {
+                      "type": "integer",
+                      "description": "Account balance after this entry"
+                    }
+                  }
+                }
+              },
+              "metadata": {
+                "type": "object",
+                "description": "Additional transaction context"
+              },
+              "reference": {
+                "type": "string",
+                "description": "External payment reference"
+              },
+              "counterparty": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "account": {"type": "string"},
+                  "institution": {"type": "string"}
+                }
+              },
+              "fx_details": {
+                "type": "object",
+                "properties": {
+                  "source_currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+                  "target_currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+                  "rate": {"type": "number"},
+                  "rate_timestamp": {"type": "string", "format": "date-time"},
+                  "rate_source": {"type": "string"}
+                }
+              },
+              "entry_hash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "SHA-256 hash linking to previous entry (hash chain)"
+              }
+            }
+          }
+        },
+        "balance_proofs": {
+          "type": "array",
+          "description": "Step-by-step balance derivation proofs for auditor verification",
+          "items": {
+            "type": "object",
+            "required": [
+              "account_id",
+              "steps"
+            ],
+            "properties": {
+              "account_id": {
+                "type": "string"
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "step_number",
+                    "transaction_id",
+                    "timestamp",
+                    "operation",
+                    "amount",
+                    "balance_before",
+                    "balance_after",
+                    "step_hash"
+                  ],
+                  "properties": {
+                    "step_number": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "transaction_id": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "enum": ["CREDIT", "DEBIT"]
+                    },
+                    "amount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "balance_before": {
+                      "type": "integer"
+                    },
+                    "balance_after": {
+                      "type": "integer"
+                    },
+                    "step_hash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "description": "Hash of this step linked to previous"
+                    }
+                  }
+                }
+              },
+              "merkle_root": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "Merkle root of all step hashes"
+              }
+            }
+          }
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "description": "Cryptographic integrity proofs",
+      "required": [
+        "algorithm",
+        "evidence_hash",
+        "hash_chain_verified",
+        "merkle_root"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "SHA-256"
+        },
+        "evidence_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash of canonical evidence JSON"
+        },
+        "hash_chain_verified": {
+          "type": "boolean",
+          "description": "All transaction hash chains verified"
+        },
+        "hash_chain_break": {
+          "type": "string",
+          "description": "Transaction ID where chain broke (if any)"
+        },
+        "merkle_root": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Merkle root of all transaction hashes"
+        },
+        "balance_invariant_check": {
+          "type": "object",
+          "properties": {
+            "passed": {
+              "type": "boolean"
+            },
+            "total_debits": {
+              "type": "integer"
+            },
+            "total_credits": {
+              "type": "integer"
+            },
+            "difference": {
+              "type": "integer",
+              "const": 0,
+              "description": "Must always be 0 for valid ledger"
+            }
+          }
+        }
+      }
+    },
+    "signatures": {
+      "type": "object",
+      "description": "Ed25519 signatures for non-repudiation",
+      "required": [
+        "bundle_signature",
+        "signing_key_id",
+        "signed_at"
+      ],
+      "properties": {
+        "bundle_signature": {
+          "type": "string",
+          "description": "Base64-encoded Ed25519 signature of evidence_hash"
+        },
+        "signing_key_id": {
+          "type": "string",
+          "description": "Vault key ID used for signing"
+        },
+        "signed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "signer_identity": {
+          "type": "string",
+          "description": "Identity of signing service/process"
+        },
+        "certificate_chain": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "PEM-encoded X.509 certificates"
+          }
+        },
+        "timestamp_authority": {
+          "type": "object",
+          "description": "RFC 3161 timestamp for legal evidence",
+          "properties": {
+            "tsa_url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "timestamp_token": {
+              "type": "string",
+              "description": "Base64-encoded RFC 3161 timestamp token"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "witness_signatures": {
+          "type": "array",
+          "description": "Additional signatures for multi-party attestation",
+          "items": {
+            "type": "object",
+            "properties": {
+              "witness_id": {"type": "string"},
+              "role": {"type": "string"},
+              "signature": {"type": "string"},
+              "signed_at": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Bundle metadata for tracking and retention",
+      "properties": {
+        "system_version": {
+          "type": "string",
+          "description": "Nexus RTP platform version"
+        },
+        "generation_duration_ms": {
+          "type": "integer",
+          "description": "Time to generate bundle in milliseconds"
+        },
+        "compression": {
+          "type": "string",
+          "enum": ["none", "gzip", "zstd"]
+        },
+        "retention": {
+          "type": "object",
+          "properties": {
+            "policy": {
+              "type": "string",
+              "enum": ["7_YEARS", "10_YEARS", "PERMANENT"]
+            },
+            "delete_after": {
+              "type": "string",
+              "format": "date"
+            },
+            "legal_hold": {
+              "type": "boolean",
+              "description": "If true, cannot be deleted regardless of retention"
+            }
+          }
+        },
+        "compliance_frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["PCI-DSS", "SOC2-TypeII", "ISO27001", "GDPR", "SOX", "GLBA", "MAS-TRM", "FCA"]
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
