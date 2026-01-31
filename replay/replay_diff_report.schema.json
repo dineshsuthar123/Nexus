@@ -1,0 +1,342 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nexus-rtp.io/schemas/replay-diff-report.json",
+  "title": "Nexus RTP Replay Diff Report",
+  "description": "Deterministic replay state comparison report for regulatory and reconciliation purposes",
+  "type": "object",
+  "required": [
+    "report_id",
+    "generated_at",
+    "source_label",
+    "target_label",
+    "replay_timestamp",
+    "summary",
+    "hash_verification"
+  ],
+  "properties": {
+    "report_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this diff report"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this report was generated"
+    },
+    "source_label": {
+      "type": "string",
+      "description": "Label identifying the source state (e.g., 'live_database')",
+      "examples": ["live_database", "primary_replica", "cockroach_node_1"]
+    },
+    "target_label": {
+      "type": "string",
+      "description": "Label identifying the target state (e.g., 'replayed_state')",
+      "examples": ["replayed_state", "kafka_replay", "disaster_recovery"]
+    },
+    "replay_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The point-in-time to which the ledger was replayed"
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "match",
+        "total_accounts_source",
+        "total_accounts_target",
+        "matched_count",
+        "discrepancy_count",
+        "source_only_count",
+        "target_only_count"
+      ],
+      "properties": {
+        "match": {
+          "type": "boolean",
+          "description": "True if all accounts match exactly between source and target"
+        },
+        "total_accounts_source": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of accounts in source state"
+        },
+        "total_accounts_target": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of accounts in target state"
+        },
+        "matched_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of accounts with identical balances"
+        },
+        "discrepancy_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of accounts with balance mismatches"
+        },
+        "source_only_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of accounts only in source"
+        },
+        "target_only_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of accounts only in target"
+        },
+        "total_discrepancy_amount": {
+          "type": "integer",
+          "description": "Sum of absolute balance differences (in smallest currency unit)"
+        }
+      }
+    },
+    "discrepancies": {
+      "type": "array",
+      "description": "List of accounts with balance mismatches",
+      "items": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "source_balance",
+          "target_balance",
+          "difference",
+          "currency"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "description": "Unique account identifier"
+          },
+          "source_balance": {
+            "type": "integer",
+            "description": "Balance in source state (smallest currency unit)"
+          },
+          "target_balance": {
+            "type": "integer",
+            "description": "Balance in target state (smallest currency unit)"
+          },
+          "difference": {
+            "type": "integer",
+            "description": "source_balance - target_balance"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "ISO 4217 currency code"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "Severity based on magnitude and account type"
+          },
+          "last_transaction_id": {
+            "type": "string",
+            "description": "Last transaction affecting this account"
+          }
+        }
+      }
+    },
+    "source_only_accounts": {
+      "type": "array",
+      "description": "Accounts present only in source state",
+      "items": {
+        "type": "object",
+        "required": ["account_id", "balance", "currency"],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      }
+    },
+    "target_only_accounts": {
+      "type": "array",
+      "description": "Accounts present only in target state",
+      "items": {
+        "type": "object",
+        "required": ["account_id", "balance", "currency"],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      }
+    },
+    "hash_verification": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "source_state_hash",
+        "target_state_hash",
+        "hash_match"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "SHA-256",
+          "description": "Hash algorithm used"
+        },
+        "source_state_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash of canonical source state"
+        },
+        "target_state_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash of canonical target state"
+        },
+        "hash_match": {
+          "type": "boolean",
+          "description": "True if hashes are identical"
+        },
+        "hash_chain_verified": {
+          "type": "boolean",
+          "description": "True if event hash chain integrity verified"
+        },
+        "hash_chain_break_event": {
+          "type": "string",
+          "description": "Event ID where hash chain broke (if applicable)"
+        }
+      }
+    },
+    "event_analysis": {
+      "type": "object",
+      "description": "Analysis of events processed during replay",
+      "properties": {
+        "total_events_replayed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "first_event_timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_event_timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "events_per_second_avg": {
+          "type": "number"
+        },
+        "replay_duration_ms": {
+          "type": "integer",
+          "description": "Time taken to perform replay in milliseconds"
+        },
+        "snapshot_used": {
+          "type": "boolean",
+          "description": "Whether a snapshot was used to accelerate replay"
+        },
+        "snapshot_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of snapshot used (if applicable)"
+        }
+      }
+    },
+    "investigation": {
+      "type": "object",
+      "description": "Automated investigation results for discrepancies",
+      "properties": {
+        "likely_root_cause": {
+          "type": "string",
+          "enum": [
+            "event_ordering_issue",
+            "duplicate_event_processing",
+            "missing_event",
+            "timestamp_skew",
+            "concurrent_modification",
+            "unknown"
+          ]
+        },
+        "affected_transactions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Transaction IDs that may have caused discrepancies"
+        },
+        "recommended_action": {
+          "type": "string",
+          "enum": [
+            "no_action_required",
+            "manual_review",
+            "reprocess_events",
+            "halt_and_investigate",
+            "escalate_to_oncall"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence in root cause analysis (0-1)"
+        }
+      }
+    },
+    "regulatory_metadata": {
+      "type": "object",
+      "description": "Metadata for regulatory compliance",
+      "properties": {
+        "jurisdiction": {
+          "type": "string",
+          "description": "Regulatory jurisdiction (e.g., US, EU, UK)"
+        },
+        "retention_required_until": {
+          "type": "string",
+          "format": "date",
+          "description": "Date until which this report must be retained"
+        },
+        "auditor_reference": {
+          "type": "string",
+          "description": "External auditor reference number"
+        },
+        "compliance_frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["PCI-DSS", "SOC2", "ISO27001", "GDPR", "SOX", "GLBA"]
+          }
+        }
+      }
+    },
+    "signatures": {
+      "type": "object",
+      "description": "Cryptographic signatures for tamper evidence",
+      "properties": {
+        "report_signature": {
+          "type": "string",
+          "description": "Ed25519 signature of canonical report hash"
+        },
+        "signing_key_id": {
+          "type": "string",
+          "description": "Key ID used for signing"
+        },
+        "timestamp_authority": {
+          "type": "string",
+          "description": "RFC 3161 timestamp authority URL"
+        },
+        "timestamp_token": {
+          "type": "string",
+          "description": "Base64-encoded RFC 3161 timestamp token"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
