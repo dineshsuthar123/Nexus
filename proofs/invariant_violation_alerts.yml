@@ -1,0 +1,326 @@
+# Invariant Violation Alerts
+# Prometheus alerting rules for ledger invariant violations
+# These are CRITICAL alerts that require immediate action
+
+groups:
+  - name: nexus.invariants.critical
+    interval: 10s
+    rules:
+      # ========================================================================
+      # INV-1: Conservation of Value
+      # ========================================================================
+      - alert: INV1_ConservationOfValueViolation
+        expr: increase(ledger_invariant_violations_total{invariant="INV-1"}[1m]) > 0
+        for: 0s  # Immediate - no waiting
+        labels:
+          severity: critical
+          invariant: INV-1
+          team: ledger
+          pager: "true"
+          halt_settlement: "true"
+        annotations:
+          summary: "CRITICAL: Conservation of value violated"
+          description: |
+            Transaction debits != credits detected.
+            This indicates a fundamental ledger corruption.
+            Settlement MUST be halted immediately.
+            
+            Violation count: {{ $value }}
+            
+            IMMEDIATE ACTIONS:
+            1. Halt all payment processing
+            2. Page on-call DBA and Platform Lead
+            3. Execute runbooks/invariant-violation.md
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv1"
+          
+      # ========================================================================
+      # INV-2: Double-Entry Closure
+      # ========================================================================
+      - alert: INV2_DoubleEntryClosureViolation
+        expr: increase(ledger_invariant_violations_total{invariant="INV-2"}[1m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          invariant: INV-2
+          team: ledger
+          pager: "true"
+        annotations:
+          summary: "CRITICAL: Double-entry closure violated"
+          description: |
+            Entry without proper debit/credit accounts or self-transfer detected.
+            
+            Violation count: {{ $value }}
+            
+            IMMEDIATE ACTIONS:
+            1. Identify and quarantine affected transactions
+            2. Check for code deployment issues
+            3. Review recent schema changes
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv2"
+
+      # ========================================================================
+      # INV-3: Balance Derivation Mismatch
+      # ========================================================================
+      - alert: INV3_BalanceDerivationMismatch
+        expr: increase(ledger_invariant_violations_total{invariant="INV-3"}[5m]) > 0
+        for: 0s
+        labels:
+          severity: high
+          invariant: INV-3
+          team: reconciliation
+          pager: "true"
+        annotations:
+          summary: "HIGH: Cached balance != derived balance"
+          description: |
+            Account balance cache is out of sync with ledger entries.
+            This may indicate:
+            - Missed entry during balance update
+            - Concurrent modification issue
+            - Recovery from crash with uncommitted changes
+            
+            Affected accounts: Check ledger_balance_mismatch_accounts metric
+            
+            ACTIONS:
+            1. Trigger emergency reconciliation
+            2. Compare with replay engine output
+            3. Identify root cause before resuming
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv3"
+
+      # ========================================================================
+      # INV-4: Idempotency Violation
+      # ========================================================================
+      - alert: INV4_IdempotencyViolation
+        expr: increase(ledger_invariant_violations_total{invariant="INV-4"}[5m]) > 5
+        for: 1m
+        labels:
+          severity: medium
+          invariant: INV-4
+          team: platform
+        annotations:
+          summary: "MEDIUM: Excessive idempotency key collisions"
+          description: |
+            Multiple transactions attempting same idempotency key.
+            May indicate:
+            - Client retry storms
+            - Duplicate submission bugs
+            - Replay attacks
+            
+            Rate: {{ $value }} violations in 5 minutes
+            
+            ACTIONS:
+            1. Check client retry configuration
+            2. Review idempotency key generation
+            3. Consider rate limiting
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv4"
+
+      # ========================================================================
+      # INV-5: Negative Balance
+      # ========================================================================
+      - alert: INV5_NegativeBalanceViolation
+        expr: increase(ledger_invariant_violations_total{invariant="INV-5"}[1m]) > 0
+        for: 0s
+        labels:
+          severity: high
+          invariant: INV-5
+          team: ledger
+          pager: "true"
+        annotations:
+          summary: "HIGH: Liability account went negative"
+          description: |
+            Customer account balance went below zero (or overdraft limit).
+            This indicates failed balance check before debit.
+            
+            ACTIONS:
+            1. Identify affected account
+            2. Check for race condition in balance check
+            3. Review transaction isolation level
+            4. Consider account suspension
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv5"
+
+      # ========================================================================
+      # INV-6: Currency Mismatch
+      # ========================================================================
+      - alert: INV6_CurrencyMismatchViolation
+        expr: increase(ledger_invariant_violations_total{invariant="INV-6"}[5m]) > 0
+        for: 0s
+        labels:
+          severity: medium
+          invariant: INV-6
+          team: ledger
+        annotations:
+          summary: "MEDIUM: Currency mismatch in non-FX transaction"
+          description: |
+            Transaction has entries in different currencies but not marked as FX.
+            
+            ACTIONS:
+            1. Review transaction details
+            2. Check FX flag setting logic
+            3. May need manual correction
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv6"
+
+      # ========================================================================
+      # INV-7: FX Rate Out of Bounds
+      # ========================================================================
+      - alert: INV7_FXRateOutOfBounds
+        expr: increase(ledger_invariant_violations_total{invariant="INV-7"}[5m]) > 0
+        for: 0s
+        labels:
+          severity: high
+          invariant: INV-7
+          team: treasury
+          pager: "true"
+        annotations:
+          summary: "HIGH: FX rate exceeds 5% deviation"
+          description: |
+            Applied FX rate deviates more than 5% from reference rate.
+            Possible causes:
+            - Stale reference rate
+            - Market volatility
+            - Rate manipulation attempt
+            
+            ACTIONS:
+            1. Verify reference rate source
+            2. Check for market events
+            3. Review rejected transactions
+            4. Alert treasury team
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv7"
+
+      # ========================================================================
+      # INV-10/11: Overflow/Precision
+      # ========================================================================
+      - alert: INV10_11_OverflowViolation
+        expr: increase(ledger_invariant_violations_total{invariant=~"INV-10|INV-11"}[1m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          invariant: INV-10-11
+          team: platform
+          pager: "true"
+          halt_settlement: "true"
+        annotations:
+          summary: "CRITICAL: Integer overflow detected"
+          description: |
+            Balance overflow or underflow detected.
+            This could corrupt ledger state.
+            
+            IMMEDIATE ACTIONS:
+            1. HALT all processing
+            2. Identify affected accounts
+            3. Check for unusually large transactions
+            4. Review balance computation logic
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv10"
+
+      # ========================================================================
+      # INV-15: Immutability Violation
+      # ========================================================================
+      - alert: INV15_ImmutabilityViolation
+        expr: increase(ledger_invariant_violations_total{invariant="INV-15"}[1m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          invariant: INV-15
+          team: security
+          pager: "true"
+          security_incident: "true"
+        annotations:
+          summary: "CRITICAL SECURITY: Settled entry modified"
+          description: |
+            A settled/immutable ledger entry was modified.
+            This is a SECURITY INCIDENT.
+            
+            IMMEDIATE ACTIONS:
+            1. Initiate security incident response
+            2. Preserve all logs and audit trails
+            3. Identify source of modification
+            4. Consider system isolation
+          runbook_url: "https://runbooks.nexus.internal/security-incident"
+
+      # ========================================================================
+      # INV-16: Hash Chain Broken
+      # ========================================================================
+      - alert: INV16_HashChainBroken
+        expr: increase(ledger_invariant_violations_total{invariant="INV-16"}[1m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          invariant: INV-16
+          team: security
+          pager: "true"
+          security_incident: "true"
+        annotations:
+          summary: "CRITICAL: Ledger hash chain integrity failure"
+          description: |
+            Hash chain verification failed.
+            Entry hash does not match computed hash from previous entry.
+            
+            Possible causes:
+            - Data corruption
+            - Unauthorized modification
+            - Storage failure
+            
+            IMMEDIATE ACTIONS:
+            1. HALT all processing
+            2. Identify break point in chain
+            3. Compare with backup/replica
+            4. Initiate forensic analysis
+          runbook_url: "https://runbooks.nexus.internal/invariant-inv16"
+
+  # ==========================================================================
+  # AGGREGATE HEALTH
+  # ==========================================================================
+  - name: nexus.invariants.health
+    interval: 30s
+    rules:
+      # Invariant check latency
+      - record: nexus:invariant_check_latency:p99
+        expr: histogram_quantile(0.99, sum(rate(ledger_invariant_check_duration_seconds_bucket[5m])) by (le, invariant))
+        
+      - alert: InvariantCheckSlow
+        expr: nexus:invariant_check_latency:p99 > 0.01  # 10ms
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Invariant checks taking too long"
+          description: |
+            Invariant {{ $labels.invariant }} P99 latency: {{ $value | humanizeDuration }}
+            This may impact transaction throughput.
+
+      # Overall invariant health
+      - record: nexus:invariant_health:1h
+        expr: |
+          1 - (
+            sum(increase(ledger_invariant_violations_total[1h])) 
+            / 
+            (sum(increase(ledger_invariant_checks_total[1h])) + 1)
+          )
+          
+      - alert: InvariantHealthDegraded
+        expr: nexus:invariant_health:1h < 0.9999  # 99.99%
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Invariant health below 99.99%"
+          description: |
+            Current invariant health: {{ $value | humanizePercentage }}
+            Review violation patterns.
+
+      # Signed violation events
+      - alert: ViolationSignatureFailure
+        expr: increase(ledger_violation_signature_failures_total[5m]) > 0
+        for: 0s
+        labels:
+          severity: high
+          team: security
+        annotations:
+          summary: "Failed to sign invariant violation"
+          description: |
+            Audit key may be unavailable or corrupted.
+            Violations are being recorded unsigned.
+            
+            ACTIONS:
+            1. Check Vault connectivity
+            2. Verify audit key availability
+            3. Rotate key if compromised
