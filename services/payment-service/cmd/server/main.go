@@ -1,0 +1,161 @@
+// Package main provides the entry point for the Payment Service
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/nexus-rtp/payment-service/internal/api"
+	"github.com/nexus-rtp/payment-service/internal/config"
+	"github.com/nexus-rtp/payment-service/internal/db"
+	"github.com/nexus-rtp/payment-service/internal/kafka"
+	"github.com/nexus-rtp/payment-service/internal/observability"
+	"github.com/nexus-rtp/payment-service/internal/sanctions"
+	"github.com/nexus-rtp/payment-service/internal/service"
+	"go.uber.org/zap"
+)
+
+func main() {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("Failed to load configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize logger
+	logger, err := observability.NewLogger(cfg.LogLevel)
+	if err != nil {
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer logger.Sync()
+
+	// Initialize tracer
+	shutdown, err := observability.InitTracer(cfg.JaegerEndpoint, "payment-service")
+	if err != nil {
+		logger.Fatal("Failed to initialize tracer", zap.Error(err))
+	}
+	defer shutdown(context.Background())
+
+	// Initialize database connection pool
+	dbPool, err := db.NewPool(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		logger.Fatal("Failed to connect to database", zap.Error(err))
+	}
+	defer dbPool.Close()
+	logger.Info("Connected to CockroachDB")
+
+	// Initialize Kafka producer
+	kafkaProducer, err := kafka.NewProducer(cfg.KafkaBrokers)
+	if err != nil {
+		logger.Fatal("Failed to create Kafka producer", zap.Error(err))
+	}
+	defer kafkaProducer.Close()
+	logger.Info("Connected to Kafka")
+
+	// Initialize sanctions client (Watchman)
+	sanctionsClient := sanctions.NewClient(cfg.WatchmanURL, logger)
+	logger.Info("Initialized sanctions screening client")
+
+	// Initialize repositories
+	accountRepo := db.NewAccountRepository(dbPool, logger)
+	transactionRepo := db.NewTransactionRepository(dbPool, logger)
+	outboxRepo := db.NewOutboxRepository(dbPool, logger)
+
+	// Initialize services
+	paymentService := service.NewPaymentService(
+		logger,
+		dbPool,
+		accountRepo,
+		transactionRepo,
+		outboxRepo,
+		sanctionsClient,
+		kafkaProducer,
+	)
+
+	// Initialize Gin router
+	if cfg.Environment == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(observability.GinLogger(logger))
+	router.Use(observability.TracingMiddleware())
+
+	// Register API routes
+	api.RegisterRoutes(router, paymentService, logger)
+
+	// Register health and metrics endpoints
+	router.GET("/health", healthHandler)
+	router.GET("/ready", readinessHandler(dbPool))
+	observability.RegisterMetricsHandler(router)
+
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in goroutine
+	go func() {
+		logger.Info("Starting Payment Service", zap.Int("port", cfg.Port))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal("Failed to start server", zap.Error(err))
+		}
+	}()
+
+	// Wait for interrupt signal for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	logger.Info("Shutting down server...")
+
+	// Give outstanding requests 30 seconds to complete
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Fatal("Server forced to shutdown", zap.Error(err))
+	}
+
+	logger.Info("Server exited gracefully")
+}
+
+func healthHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "healthy",
+		"service": "payment-service",
+		"time":    time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func readinessHandler(dbPool *db.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer cancel()
+
+		if err := dbPool.Ping(ctx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "not ready",
+				"error":  "database connection failed",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ready",
+			"service": "payment-service",
+		})
+	}
+}

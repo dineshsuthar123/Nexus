@@ -1,0 +1,141 @@
+{{/*
+Watchman Sanctions Screening Service
+Provides OFAC/SDN sanctions list screening for payments
+*/}}
+{{- if .Values.watchman.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus.fullname" . }}-watchman
+  labels:
+    {{- include "nexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watchman
+spec:
+  replicas: {{ .Values.watchman.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nexus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: watchman
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "nexus.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: watchman
+    spec:
+      serviceAccountName: {{ include "nexus.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: watchman
+          image: "{{ .Values.watchman.image.repository }}:{{ .Values.watchman.image.tag }}"
+          imagePullPolicy: {{ .Values.watchman.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8084
+              protocol: TCP
+            - name: admin
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: APP_PORT
+              value: "8084"
+            - name: ADMIN_PORT
+              value: "9090"
+            - name: DATABASE_TYPE
+              value: "sqlite"
+            - name: DOWNLOAD_REFRESH_INTERVAL
+              value: "12h"
+            - name: LOG_FORMAT
+              value: "json"
+          resources:
+            {{- toYaml .Values.watchman.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: admin
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: admin
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # Watchman needs to download SDN lists
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: watchman
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nexus.fullname" . }}-watchman
+  labels:
+    {{- include "nexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watchman
+spec:
+  type: {{ .Values.watchman.service.type }}
+  ports:
+    - port: {{ .Values.watchman.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9090
+      targetPort: admin
+      protocol: TCP
+      name: admin
+  selector:
+    {{- include "nexus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: watchman
+---
+{{- if .Values.watchman.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nexus.fullname" . }}-watchman
+  labels:
+    {{- include "nexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watchman
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nexus.fullname" . }}-watchman
+  minReplicas: {{ .Values.watchman.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.watchman.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.watchman.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

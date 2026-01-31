@@ -1,0 +1,50 @@
+{
+    "name": "nexus-transactions-connector",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        
+        "database.hostname": "cockroachdb",
+        "database.port": "26257",
+        "database.user": "root",
+        "database.password": "",
+        "database.dbname": "nexus",
+        "database.server.name": "nexus-transactions",
+        
+        "plugin.name": "pgoutput",
+        "slot.name": "transactions_slot",
+        "publication.name": "transactions_publication",
+        
+        "table.include.list": "public.transaction,public.transaction_leg",
+        
+        "tombstones.on.delete": "false",
+        
+        "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "key.converter.schemas.enable": "false",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable": "false",
+        
+        "topic.prefix": "nexus.cdc",
+        "topic.creation.enable": "true",
+        "topic.creation.default.replication.factor": "3",
+        "topic.creation.default.partitions": "6",
+        
+        "snapshot.mode": "initial",
+        "schema.history.internal.kafka.bootstrap.servers": "kafka1:9092,kafka2:9093,kafka3:9094",
+        "schema.history.internal.kafka.topic": "nexus.transactions.schema-history",
+        
+        "transforms": "unwrap,route",
+        "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+        "transforms.unwrap.drop.tombstones": "true",
+        "transforms.unwrap.delete.handling.mode": "rewrite",
+        "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+        "transforms.route.regex": "nexus-transactions\\.public\\.(.*)",
+        "transforms.route.replacement": "nexus.cdc.$1",
+        
+        "heartbeat.interval.ms": "10000",
+        "provide.transaction.metadata": "true",
+        
+        "errors.log.enable": "true",
+        "errors.log.include.messages": "true"
+    }
+}

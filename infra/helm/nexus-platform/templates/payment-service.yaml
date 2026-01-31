@@ -1,0 +1,122 @@
+{{- if .Values.paymentService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus-platform.paymentService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: payment-service
+spec:
+  {{- if not .Values.paymentService.autoscaling.enabled }}
+  replicas: {{ .Values.paymentService.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nexus-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: payment-service
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "nexus-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: payment-service
+    spec:
+      serviceAccountName: {{ include "nexus-platform.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: payment-service
+          image: "{{ .Values.paymentService.image.repository }}:{{ .Values.paymentService.image.tag }}"
+          imagePullPolicy: {{ .Values.paymentService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              value: {{ include "nexus-platform.databaseUrl" . | quote }}
+            - name: KAFKA_BROKERS
+              value: {{ include "nexus-platform.kafkaBrokers" . | quote }}
+            - name: REDIS_URL
+              value: {{ include "nexus-platform.redisUrl" . | quote }}
+            - name: WATCHMAN_URL
+              value: "http://{{ include "nexus-platform.fullname" . }}-watchman:8084"
+            - name: JAEGER_ENDPOINT
+              value: "http://jaeger:14268/api/traces"
+            - name: ENVIRONMENT
+              value: "production"
+          {{- with .Values.paymentService.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.paymentService.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.paymentService.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: payment-service
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nexus-platform.paymentService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: payment-service
+spec:
+  type: {{ .Values.paymentService.service.type }}
+  ports:
+    - port: {{ .Values.paymentService.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nexus-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: payment-service
+{{- if .Values.paymentService.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nexus-platform.paymentService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nexus-platform.paymentService.fullname" . }}
+  minReplicas: {{ .Values.paymentService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.paymentService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.paymentService.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.paymentService.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}
+{{- end }}

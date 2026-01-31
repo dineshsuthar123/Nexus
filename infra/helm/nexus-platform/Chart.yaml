@@ -1,0 +1,36 @@
+apiVersion: v2
+name: nexus-platform
+description: Nexus RTP - Global Real-Time Payment & Settlement Network
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - payments
+  - fintech
+  - rtp
+  - real-time
+  - settlement
+maintainers:
+  - name: Nexus Team
+    email: team@nexus-rtp.io
+dependencies:
+  - name: cockroachdb
+    version: "11.0.0"
+    repository: "https://charts.cockroachdb.com/"
+    condition: cockroachdb.enabled
+  - name: kafka
+    version: "26.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: kafka.enabled
+  - name: redis
+    version: "18.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: prometheus
+    version: "25.0.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: prometheus.enabled
+  - name: grafana
+    version: "7.0.0"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: grafana.enabled

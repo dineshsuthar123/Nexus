@@ -1,0 +1,587 @@
+# Nexus - Global Real-Time Payment Network
+# Docker Compose for Local Development
+# 
+# Usage:
+#   docker compose up -d        # Start all services
+#   docker compose logs -f      # View logs
+#   docker compose down -v      # Stop and remove volumes
+
+version: "3.9"
+
+x-common-variables: &common-env
+  TZ: UTC
+  LOG_LEVEL: debug
+
+services:
+  # ============================================================================
+  # CockroachDB Cluster - Distributed SQL Ledger
+  # ============================================================================
+  cockroachdb-1:
+    image: cockroachdb/cockroach:v23.2.0
+    container_name: nexus-cockroachdb-1
+    hostname: cockroachdb-1
+    command: start --insecure --join=cockroachdb-1,cockroachdb-2,cockroachdb-3 --listen-addr=0.0.0.0:26257 --http-addr=0.0.0.0:8080 --locality=region=us-east-1,zone=us-east-1a
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    volumes:
+      - cockroach-data-1:/cockroach/cockroach-data
+      - ./cockroachdb/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cockroachdb-2:
+    image: cockroachdb/cockroach:v23.2.0
+    container_name: nexus-cockroachdb-2
+    hostname: cockroachdb-2
+    command: start --insecure --join=cockroachdb-1,cockroachdb-2,cockroachdb-3 --listen-addr=0.0.0.0:26257 --http-addr=0.0.0.0:8080 --locality=region=eu-central-1,zone=eu-central-1a
+    volumes:
+      - cockroach-data-2:/cockroach/cockroach-data
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+
+  cockroachdb-3:
+    image: cockroachdb/cockroach:v23.2.0
+    container_name: nexus-cockroachdb-3
+    hostname: cockroachdb-3
+    command: start --insecure --join=cockroachdb-1,cockroachdb-2,cockroachdb-3 --listen-addr=0.0.0.0:26257 --http-addr=0.0.0.0:8080 --locality=region=ap-southeast-1,zone=ap-southeast-1a
+    volumes:
+      - cockroach-data-3:/cockroach/cockroach-data
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+
+  # Initialize CockroachDB cluster
+  cockroachdb-init:
+    image: cockroachdb/cockroach:v23.2.0
+    container_name: nexus-cockroachdb-init
+    command: >
+      /bin/bash -c "
+        sleep 10 &&
+        cockroach init --insecure --host=cockroachdb-1:26257 || true &&
+        sleep 5 &&
+        cockroach sql --insecure --host=cockroachdb-1:26257 < /docker-entrypoint-initdb.d/001_init_schema.sql
+      "
+    volumes:
+      - ./cockroachdb/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+      - cockroachdb-2
+      - cockroachdb-3
+
+  # ============================================================================
+  # Apache Kafka - Event Backbone
+  # ============================================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: nexus-zookeeper
+    hostname: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka-1:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: nexus-kafka-1
+    hostname: kafka-1
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_NUM_PARTITIONS: 12
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    volumes:
+      - kafka-data-1:/var/lib/kafka/data
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: nexus-kafka-2
+    hostname: kafka-2
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_NUM_PARTITIONS: 12
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+    volumes:
+      - kafka-data-2:/var/lib/kafka/data
+    networks:
+      - nexus-network
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: nexus-kafka-3
+    hostname: kafka-3
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_NUM_PARTITIONS: 12
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+    volumes:
+      - kafka-data-3:/var/lib/kafka/data
+    networks:
+      - nexus-network
+
+  # Kafka topic initialization
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: nexus-kafka-init
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+    command: >
+      /bin/bash -c "
+        echo 'Waiting for Kafka to be ready...' &&
+        sleep 30 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.events.raw --partitions 12 --replication-factor 3 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.payments.initiated --partitions 12 --replication-factor 3 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.payments.enriched --partitions 12 --replication-factor 3 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.payments.completed --partitions 12 --replication-factor 3 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.fraud.alerts --partitions 6 --replication-factor 3 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.sanctions.results --partitions 6 --replication-factor 3 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.reconciliation.events --partitions 6 --replication-factor 3 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.notifications --partitions 6 --replication-factor 3 &&
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic nexus.outbox.events --partitions 12 --replication-factor 3 &&
+        echo 'Topics created successfully!'
+      "
+    networks:
+      - nexus-network
+
+  # Kafka UI for management
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.1
+    container_name: nexus-kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: nexus-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      DYNAMIC_CONFIG_ENABLED: "true"
+    networks:
+      - nexus-network
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+
+  # ============================================================================
+  # Debezium Connect - CDC for Outbox Pattern
+  # ============================================================================
+  debezium-connect:
+    image: debezium/connect:2.4
+    container_name: nexus-debezium
+    hostname: debezium-connect
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      GROUP_ID: nexus-debezium-connect
+      CONFIG_STORAGE_TOPIC: nexus.debezium.configs
+      OFFSET_STORAGE_TOPIC: nexus.debezium.offsets
+      STATUS_STORAGE_TOPIC: nexus.debezium.status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 3
+      OFFSET_STORAGE_REPLICATION_FACTOR: 3
+      STATUS_STORAGE_REPLICATION_FACTOR: 3
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      ENABLE_DEBEZIUM_SCRIPTING: "true"
+    volumes:
+      - ./debezium/connectors:/kafka/connect/connectors:ro
+    networks:
+      - nexus-network
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+
+  # ============================================================================
+  # Apache Flink - Stream Processing
+  # ============================================================================
+  flink-jobmanager:
+    image: flink:1.18-java17
+    container_name: nexus-flink-jobmanager
+    hostname: flink-jobmanager
+    ports:
+      - "8082:8081"
+      - "6123:6123"
+    command: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        state.backend: rocksdb
+        state.checkpoints.dir: file:///flink-checkpoints
+        execution.checkpointing.interval: 60000
+        execution.checkpointing.mode: EXACTLY_ONCE
+        taskmanager.numberOfTaskSlots: 4
+        parallelism.default: 4
+    volumes:
+      - flink-checkpoints:/flink-checkpoints
+      - ./flink-jobs/build/libs:/opt/flink/jobs:ro
+    networks:
+      - nexus-network
+
+  flink-taskmanager-1:
+    image: flink:1.18-java17
+    container_name: nexus-flink-taskmanager-1
+    hostname: flink-taskmanager-1
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        state.backend: rocksdb
+        taskmanager.numberOfTaskSlots: 4
+        taskmanager.memory.process.size: 2g
+    volumes:
+      - flink-checkpoints:/flink-checkpoints
+    networks:
+      - nexus-network
+
+  flink-taskmanager-2:
+    image: flink:1.18-java17
+    container_name: nexus-flink-taskmanager-2
+    hostname: flink-taskmanager-2
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        state.backend: rocksdb
+        taskmanager.numberOfTaskSlots: 4
+        taskmanager.memory.process.size: 2g
+    volumes:
+      - flink-checkpoints:/flink-checkpoints
+    networks:
+      - nexus-network
+
+  # ============================================================================
+  # Redis - Caching and Rate Limiting
+  # ============================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: nexus-redis
+    hostname: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Kong API Gateway
+  # ============================================================================
+  kong-database:
+    image: postgres:15-alpine
+    container_name: nexus-kong-db
+    hostname: kong-database
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+      POSTGRES_DB: kong
+    volumes:
+      - kong-db-data:/var/lib/postgresql/data
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kong-migrations:
+    image: kong:3.5
+    container_name: nexus-kong-migrations
+    command: kong migrations bootstrap
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    networks:
+      - nexus-network
+    depends_on:
+      kong-database:
+        condition: service_healthy
+
+  kong:
+    image: kong:3.5
+    container_name: nexus-kong
+    hostname: kong
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+      KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+    ports:
+      - "8000:8000"   # Proxy
+      - "8443:8443"   # Proxy SSL
+      - "8001:8001"   # Admin API
+      - "8444:8444"   # Admin SSL
+    networks:
+      - nexus-network
+    depends_on:
+      - kong-migrations
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================================
+  # Moov Watchman - OFAC Sanctions Screening
+  # ============================================================================
+  watchman:
+    image: moov/watchman:v0.26.1
+    container_name: nexus-watchman
+    hostname: watchman
+    ports:
+      - "8084:8084"
+      - "9094:9094"
+    environment:
+      LOG_FORMAT: json
+      HTTP_BIND_ADDRESS: ":8084"
+      ADMIN_BIND_ADDRESS: ":9094"
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Monitoring Stack
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: nexus-prometheus
+    hostname: prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - nexus-network
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: nexus-grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: nexus123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - nexus-network
+    depends_on:
+      - prometheus
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    container_name: nexus-jaeger
+    hostname: jaeger
+    ports:
+      - "16686:16686"  # UI
+      - "6831:6831/udp"  # Thrift compact
+      - "14268:14268"  # HTTP collector
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - nexus-network
+
+  # ============================================================================
+  # Go Services (profiles for optional startup)
+  # ============================================================================
+  payment-service:
+    build:
+      context: ../../services/payment-service
+      dockerfile: Dockerfile
+    container_name: nexus-payment-service
+    hostname: payment-service
+    profiles:
+      - services
+    ports:
+      - "8085:8080"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
+      KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      REDIS_URL: redis://redis:6379
+      WATCHMAN_URL: http://watchman:8084
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+      - kafka-1
+      - redis
+      - watchman
+
+  account-service:
+    build:
+      context: ../../services/account-service
+      dockerfile: Dockerfile
+    container_name: nexus-account-service
+    hostname: account-service
+    profiles:
+      - services
+    ports:
+      - "8086:8080"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
+      KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      REDIS_URL: redis://redis:6379
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+      - kafka-1
+      - redis
+
+  reconciliation-service:
+    build:
+      context: ../../services/reconciliation-service
+      dockerfile: Dockerfile
+    container_name: nexus-reconciliation-service
+    hostname: reconciliation-service
+    profiles:
+      - services
+    ports:
+      - "8087:8080"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
+      KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+      - kafka-1
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  nexus-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  cockroach-data-1:
+  cockroach-data-2:
+  cockroach-data-3:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data-1:
+  kafka-data-2:
+  kafka-data-3:
+  redis-data:
+  kong-db-data:
+  prometheus-data:
+  grafana-data:
+  flink-checkpoints:
