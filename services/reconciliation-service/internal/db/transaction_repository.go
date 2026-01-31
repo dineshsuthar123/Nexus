@@ -12,15 +12,15 @@ import (
 
 // Transaction represents a payment transaction
 type Transaction struct {
-	ID             uuid.UUID
-	UETR           uuid.UUID
-	DebtorAccount  uuid.UUID
+	ID              uuid.UUID
+	UETR            uuid.UUID
+	DebtorAccount   uuid.UUID
 	CreditorAccount uuid.UUID
-	Amount         decimal.Decimal
-	Currency       string
-	Status         string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	Amount          decimal.Decimal
+	Currency        string
+	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 // TransactionLeg represents a double-entry leg
@@ -54,7 +54,7 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id uuid.UUID) (*Tra
 		FROM transaction WHERE id = $1
 	`
 	row := r.pool.QueryRow(ctx, query, id)
-	
+
 	var tx Transaction
 	err := row.Scan(
 		&tx.ID, &tx.UETR, &tx.DebtorAccount, &tx.CreditorAccount,
@@ -137,7 +137,7 @@ func (r *TransactionRepository) CalculateAccountBalance(ctx context.Context, acc
 		WHERE account_id = $1 AND created_at <= $2
 	`
 	row := r.pool.QueryRow(ctx, query, accountID, asOf)
-	
+
 	var balance decimal.Decimal
 	if err := row.Scan(&balance); err != nil {
 		if err == pgx.ErrNoRows {

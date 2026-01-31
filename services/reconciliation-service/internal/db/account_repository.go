@@ -37,7 +37,7 @@ func (r *AccountRepository) GetByID(ctx context.Context, id uuid.UUID) (*Account
 		FROM account WHERE id = $1
 	`
 	row := r.pool.QueryRow(ctx, query, id)
-	
+
 	var account Account
 	err := row.Scan(
 		&account.ID, &account.Number, &account.Currency,

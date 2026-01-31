@@ -126,12 +126,12 @@ type Consumer struct {
 
 // ConsumerConfig holds consumer configuration
 type ConsumerConfig struct {
-	Brokers       []string
-	Topic         string
-	GroupID       string
-	StartOffset   int64
-	MinBytes      int
-	MaxBytes      int
+	Brokers        []string
+	Topic          string
+	GroupID        string
+	StartOffset    int64
+	MinBytes       int
+	MaxBytes       int
 	CommitInterval time.Duration
 }
 
@@ -192,29 +192,29 @@ func (c *Consumer) Close() error {
 
 // Event types for Kafka messages
 type PaymentEvent struct {
-	EventType   string      `json:"eventType"`
-	Timestamp   time.Time   `json:"timestamp"`
-	UETR        string      `json:"uetr"`
-	MessageID   string      `json:"messageId"`
-	Amount      string      `json:"amount"`
-	Currency    string      `json:"currency"`
-	DebtorName  string      `json:"debtorName"`
-	CreditorName string     `json:"creditorName"`
-	Status      string      `json:"status"`
-	Payload     interface{} `json:"payload,omitempty"`
+	EventType    string      `json:"eventType"`
+	Timestamp    time.Time   `json:"timestamp"`
+	UETR         string      `json:"uetr"`
+	MessageID    string      `json:"messageId"`
+	Amount       string      `json:"amount"`
+	Currency     string      `json:"currency"`
+	DebtorName   string      `json:"debtorName"`
+	CreditorName string      `json:"creditorName"`
+	Status       string      `json:"status"`
+	Payload      interface{} `json:"payload,omitempty"`
 }
 
 // FraudAlertEvent represents a fraud alert
 type FraudAlertEvent struct {
-	EventType    string    `json:"eventType"`
-	Timestamp    time.Time `json:"timestamp"`
-	UETR         string    `json:"uetr"`
-	AccountID    string    `json:"accountId"`
-	AlertType    string    `json:"alertType"` // VELOCITY, SMURFING, GEO_ANOMALY
-	Severity     string    `json:"severity"`  // LOW, MEDIUM, HIGH, CRITICAL
-	Description  string    `json:"description"`
-	Score        float64   `json:"score"`
-	Indicators   []string  `json:"indicators"`
+	EventType   string    `json:"eventType"`
+	Timestamp   time.Time `json:"timestamp"`
+	UETR        string    `json:"uetr"`
+	AccountID   string    `json:"accountId"`
+	AlertType   string    `json:"alertType"` // VELOCITY, SMURFING, GEO_ANOMALY
+	Severity    string    `json:"severity"`  // LOW, MEDIUM, HIGH, CRITICAL
+	Description string    `json:"description"`
+	Score       float64   `json:"score"`
+	Indicators  []string  `json:"indicators"`
 }
 
 // SanctionsResultEvent represents a sanctions screening result

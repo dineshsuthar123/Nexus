@@ -1,0 +1,272 @@
+# SLO Rules for Nexus RTP Platform
+# These define Service Level Objectives and generate alerts when violated
+
+groups:
+  - name: nexus.slo.latency
+    interval: 30s
+    rules:
+      # Payment API Latency SLOs
+      - record: nexus:payment_latency:p50
+        expr: histogram_quantile(0.50, sum(rate(payment_request_duration_seconds_bucket[5m])) by (le))
+        
+      - record: nexus:payment_latency:p95
+        expr: histogram_quantile(0.95, sum(rate(payment_request_duration_seconds_bucket[5m])) by (le))
+        
+      - record: nexus:payment_latency:p99
+        expr: histogram_quantile(0.99, sum(rate(payment_request_duration_seconds_bucket[5m])) by (le))
+        
+      # SLO: P95 latency < 500ms
+      - alert: SLO_PaymentLatencyP95High
+        expr: nexus:payment_latency:p95 > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency
+          team: platform
+        annotations:
+          summary: "Payment P95 latency exceeds 500ms SLO"
+          description: "Current P95 latency: {{ $value | humanizeDuration }}. SLO target: 500ms."
+          runbook_url: "https://runbooks.nexus.internal/slo-latency-high"
+          
+      # SLO: P99 latency < 1s
+      - alert: SLO_PaymentLatencyP99Critical
+        expr: nexus:payment_latency:p99 > 1.0
+        for: 5m
+        labels:
+          severity: critical
+          slo: latency
+          team: platform
+        annotations:
+          summary: "Payment P99 latency exceeds 1s SLO"
+          description: "Current P99 latency: {{ $value | humanizeDuration }}. SLO target: 1s. Immediate investigation required."
+          runbook_url: "https://runbooks.nexus.internal/slo-latency-critical"
+
+      # End-to-end payment processing time
+      - record: nexus:payment_e2e_latency:p99
+        expr: histogram_quantile(0.99, sum(rate(payment_e2e_duration_seconds_bucket[5m])) by (le))
+        
+      - alert: SLO_PaymentE2ELatencyHigh
+        expr: nexus:payment_e2e_latency:p99 > 3.0
+        for: 10m
+        labels:
+          severity: warning
+          slo: e2e_latency
+          team: platform
+        annotations:
+          summary: "End-to-end payment processing exceeds 3s SLO"
+          description: "Payment processing from submission to settlement takes {{ $value | humanizeDuration }}."
+          runbook_url: "https://runbooks.nexus.internal/e2e-latency-high"
+
+  - name: nexus.slo.availability
+    interval: 30s
+    rules:
+      # Success rate calculation
+      - record: nexus:payment_success_rate:5m
+        expr: |
+          sum(rate(payment_requests_total{status="success"}[5m])) 
+          / 
+          sum(rate(payment_requests_total[5m]))
+          
+      - record: nexus:payment_success_rate:1h
+        expr: |
+          sum(rate(payment_requests_total{status="success"}[1h])) 
+          / 
+          sum(rate(payment_requests_total[1h]))
+          
+      # SLO: 99.9% success rate
+      - alert: SLO_PaymentSuccessRateLow
+        expr: nexus:payment_success_rate:5m < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+          team: platform
+        annotations:
+          summary: "Payment success rate below 99.9% SLO"
+          description: "Current success rate: {{ $value | humanizePercentage }}. Error budget being consumed rapidly."
+          runbook_url: "https://runbooks.nexus.internal/availability-low"
+          
+      # Error budget tracking (monthly)
+      - record: nexus:error_budget:remaining
+        expr: |
+          1 - (
+            (1 - nexus:payment_success_rate:1h) 
+            / 
+            (1 - 0.999)
+          )
+        
+      - alert: SLO_ErrorBudgetExhausted
+        expr: nexus:error_budget:remaining < 0.25
+        for: 1h
+        labels:
+          severity: warning
+          slo: error_budget
+          team: platform
+        annotations:
+          summary: "Error budget 75% exhausted"
+          description: "Only {{ $value | humanizePercentage }} of monthly error budget remaining."
+          runbook_url: "https://runbooks.nexus.internal/error-budget-low"
+
+  - name: nexus.slo.throughput
+    interval: 30s
+    rules:
+      # Throughput metrics
+      - record: nexus:payment_throughput:1m
+        expr: sum(rate(payment_requests_total[1m]))
+        
+      - record: nexus:payment_throughput:5m
+        expr: sum(rate(payment_requests_total[5m]))
+        
+      # SLO: Minimum 1000 TPS capacity
+      - alert: SLO_ThroughputCapacityLow
+        expr: nexus:payment_throughput:5m < 100 and sum(rate(payment_requests_total[5m])) > 50
+        for: 10m
+        labels:
+          severity: warning
+          slo: throughput
+          team: platform
+        annotations:
+          summary: "Payment throughput unexpectedly low"
+          description: "Current throughput: {{ $value | humanize }}/s. May indicate capacity issues."
+          runbook_url: "https://runbooks.nexus.internal/throughput-low"
+
+  - name: nexus.slo.fraud_detection
+    interval: 30s
+    rules:
+      # Fraud detection latency
+      - record: nexus:fraud_detection_latency:p99
+        expr: histogram_quantile(0.99, sum(rate(fraud_detection_duration_seconds_bucket[5m])) by (le))
+        
+      # SLO: Fraud detection < 100ms P99
+      - alert: SLO_FraudDetectionLatencyHigh
+        expr: nexus:fraud_detection_latency:p99 > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          slo: fraud_latency
+          team: fraud
+        annotations:
+          summary: "Fraud detection latency exceeds 100ms SLO"
+          description: "Current P99 latency: {{ $value | humanizeDuration }}. May impact real-time screening."
+          runbook_url: "https://runbooks.nexus.internal/fraud-latency-high"
+          
+      # Fraud detection accuracy (false positive rate)
+      - record: nexus:fraud_false_positive_rate:1h
+        expr: |
+          sum(rate(fraud_alerts_total{outcome="false_positive"}[1h])) 
+          / 
+          sum(rate(fraud_alerts_total[1h]))
+          
+      - alert: SLO_FraudFalsePositiveHigh
+        expr: nexus:fraud_false_positive_rate:1h > 0.05
+        for: 1h
+        labels:
+          severity: warning
+          slo: fraud_accuracy
+          team: fraud
+        annotations:
+          summary: "Fraud false positive rate exceeds 5%"
+          description: "Current false positive rate: {{ $value | humanizePercentage }}. May impact customer experience."
+          runbook_url: "https://runbooks.nexus.internal/fraud-false-positive-high"
+
+  - name: nexus.slo.reconciliation
+    interval: 1m
+    rules:
+      # Reconciliation match rate
+      - record: nexus:reconciliation_match_rate:1h
+        expr: |
+          sum(rate(reconciliation_matches_total{status="matched"}[1h])) 
+          / 
+          sum(rate(reconciliation_matches_total[1h]))
+          
+      # SLO: 95% auto-match rate
+      - alert: SLO_ReconciliationMatchRateLow
+        expr: nexus:reconciliation_match_rate:1h < 0.95
+        for: 30m
+        labels:
+          severity: warning
+          slo: reconciliation
+          team: operations
+        annotations:
+          summary: "Reconciliation auto-match rate below 95%"
+          description: "Current match rate: {{ $value | humanizePercentage }}. Manual intervention may be required."
+          runbook_url: "https://runbooks.nexus.internal/reconciliation-match-low"
+          
+      # Reconciliation backlog
+      - alert: SLO_ReconciliationBacklogHigh
+        expr: nexus_reconciliation_pending_count > 10000
+        for: 1h
+        labels:
+          severity: warning
+          slo: reconciliation
+          team: operations
+        annotations:
+          summary: "Reconciliation backlog exceeds 10,000 items"
+          description: "Current pending items: {{ $value }}. Processing may be delayed."
+          runbook_url: "https://runbooks.nexus.internal/reconciliation-backlog-high"
+
+  - name: nexus.slo.database
+    interval: 30s
+    rules:
+      # Database query latency
+      - record: nexus:db_query_latency:p99
+        expr: histogram_quantile(0.99, sum(rate(db_query_duration_seconds_bucket[5m])) by (le, query_type))
+        
+      # SLO: DB queries < 50ms P99
+      - alert: SLO_DatabaseLatencyHigh
+        expr: nexus:db_query_latency:p99 > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          slo: db_latency
+          team: platform
+        annotations:
+          summary: "Database query latency exceeds 50ms SLO"
+          description: "Query type {{ $labels.query_type }} P99: {{ $value | humanizeDuration }}."
+          runbook_url: "https://runbooks.nexus.internal/db-latency-high"
+          
+      # Connection pool saturation
+      - alert: SLO_DatabaseConnectionPoolSaturated
+        expr: (nexus_db_connections_in_use / nexus_db_connections_max) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          slo: db_capacity
+          team: platform
+        annotations:
+          summary: "Database connection pool 80% saturated"
+          description: "{{ $value | humanizePercentage }} of connections in use. May hit connection limits."
+          runbook_url: "https://runbooks.nexus.internal/db-pool-saturated"
+
+  - name: nexus.slo.kafka
+    interval: 30s
+    rules:
+      # Consumer lag
+      - record: nexus:kafka_consumer_lag:max
+        expr: max(kafka_consumer_group_lag) by (topic, consumer_group)
+        
+      # SLO: Consumer lag < 1000 messages
+      - alert: SLO_KafkaConsumerLagHigh
+        expr: nexus:kafka_consumer_lag:max > 1000
+        for: 5m
+        labels:
+          severity: warning
+          slo: kafka_lag
+          team: platform
+        annotations:
+          summary: "Kafka consumer lag exceeds 1000 messages"
+          description: "Topic {{ $labels.topic }} group {{ $labels.consumer_group }} lag: {{ $value }}."
+          runbook_url: "https://runbooks.nexus.internal/kafka-lag-high"
+          
+      # SLO: Consumer lag < 10000 (critical)
+      - alert: SLO_KafkaConsumerLagCritical
+        expr: nexus:kafka_consumer_lag:max > 10000
+        for: 5m
+        labels:
+          severity: critical
+          slo: kafka_lag
+          team: platform
+        annotations:
+          summary: "Kafka consumer lag CRITICAL"
+          description: "Topic {{ $labels.topic }} group {{ $labels.consumer_group }} lag: {{ $value }}. Immediate action required."
+          runbook_url: "https://runbooks.nexus.internal/kafka-lag-critical"

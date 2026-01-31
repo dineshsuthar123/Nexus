@@ -18,12 +18,12 @@ import (
 
 // TestConfig holds test configuration
 type TestConfig struct {
-	PaymentServiceURL       string
-	AccountServiceURL       string
+	PaymentServiceURL        string
+	AccountServiceURL        string
 	ReconciliationServiceURL string
-	KafkaBrokers            string
-	DatabaseURL             string
-	Timeout                 time.Duration
+	KafkaBrokers             string
+	DatabaseURL              string
+	Timeout                  time.Duration
 }
 
 // DefaultTestConfig returns default test config for local environment
@@ -32,9 +32,9 @@ func DefaultTestConfig() *TestConfig {
 		PaymentServiceURL:        "http://localhost:8080",
 		AccountServiceURL:        "http://localhost:8081",
 		ReconciliationServiceURL: "http://localhost:8082",
-		KafkaBrokers:            "localhost:9092",
-		DatabaseURL:             "postgres://root@localhost:26257/nexus?sslmode=disable",
-		Timeout:                 30 * time.Second,
+		KafkaBrokers:             "localhost:9092",
+		DatabaseURL:              "postgres://root@localhost:26257/nexus?sslmode=disable",
+		Timeout:                  30 * time.Second,
 	}
 }
 

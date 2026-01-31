@@ -52,11 +52,11 @@ func NewHandler(paymentService *service.PaymentService, logger *zap.Logger) *Han
 
 // ErrorResponse represents an error response
 type ErrorResponse struct {
-	Code       string    `json:"code"`
-	Message    string    `json:"message"`
-	Details    string    `json:"details,omitempty"`
-	TraceID    string    `json:"traceId,omitempty"`
-	Timestamp  time.Time `json:"timestamp"`
+	Code      string    `json:"code"`
+	Message   string    `json:"message"`
+	Details   string    `json:"details,omitempty"`
+	TraceID   string    `json:"traceId,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // CreatePayment handles POST /api/v1/payments
@@ -241,19 +241,19 @@ func (h *Handler) ReturnPayment(c *gin.Context) {
 
 	// TODO: Implement payment return logic
 	c.JSON(http.StatusOK, gin.H{
-		"uetr":         uetr,
-		"returnId":     "RTN-" + uetr[:8],
-		"status":       "RETURN_INITIATED",
-		"reasonCode":   req.ReasonCode,
-		"initiatedAt":  time.Now(),
+		"uetr":        uetr,
+		"returnId":    "RTN-" + uetr[:8],
+		"status":      "RETURN_INITIATED",
+		"reasonCode":  req.ReasonCode,
+		"initiatedAt": time.Now(),
 	})
 }
 
 // ReturnPaymentRequest represents a payment return request
 type ReturnPaymentRequest struct {
-	ReasonCode     string `json:"reasonCode" binding:"required"`
-	ReasonText     string `json:"reasonText,omitempty"`
-	ReturnAmount   string `json:"returnAmount,omitempty"` // Optional partial return
+	ReasonCode   string `json:"reasonCode" binding:"required"`
+	ReasonText   string `json:"reasonText,omitempty"`
+	ReturnAmount string `json:"returnAmount,omitempty"` // Optional partial return
 }
 
 // CreatePaymentFromPacs008 handles POST /api/v1/messages/pacs.008

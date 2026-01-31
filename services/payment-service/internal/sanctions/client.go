@@ -33,29 +33,29 @@ func NewClient(baseURL string, logger *zap.Logger) *Client {
 
 // ScreeningRequest represents a sanctions screening request
 type ScreeningRequest struct {
-	Name        string `json:"name"`
-	Address     string `json:"address,omitempty"`
-	City        string `json:"city,omitempty"`
-	Country     string `json:"country,omitempty"`
-	AltNames    []string `json:"altNames,omitempty"`
-	SDNType     string `json:"sdnType,omitempty"` // individual, entity, vessel, aircraft
-	Limit       int    `json:"limit,omitempty"`
-	MinMatch    float64 `json:"minMatch,omitempty"`
+	Name     string   `json:"name"`
+	Address  string   `json:"address,omitempty"`
+	City     string   `json:"city,omitempty"`
+	Country  string   `json:"country,omitempty"`
+	AltNames []string `json:"altNames,omitempty"`
+	SDNType  string   `json:"sdnType,omitempty"` // individual, entity, vessel, aircraft
+	Limit    int      `json:"limit,omitempty"`
+	MinMatch float64  `json:"minMatch,omitempty"`
 }
 
 // ScreeningResult represents the sanctions screening result
 type ScreeningResult struct {
-	Name          string   `json:"name"`
-	MatchScore    float64  `json:"matchScore"`
-	EntityType    string   `json:"entityType"`
-	SDNName       string   `json:"sdnName,omitempty"`
-	SDNType       string   `json:"sdnType,omitempty"`
-	Programs      []string `json:"programs,omitempty"`
-	Remarks       string   `json:"remarks,omitempty"`
-	Addresses     []string `json:"addresses,omitempty"`
-	Aliases       []string `json:"aliases,omitempty"`
-	IsSanctioned  bool     `json:"isSanctioned"`
-	RequiresReview bool    `json:"requiresReview"`
+	Name           string   `json:"name"`
+	MatchScore     float64  `json:"matchScore"`
+	EntityType     string   `json:"entityType"`
+	SDNName        string   `json:"sdnName,omitempty"`
+	SDNType        string   `json:"sdnType,omitempty"`
+	Programs       []string `json:"programs,omitempty"`
+	Remarks        string   `json:"remarks,omitempty"`
+	Addresses      []string `json:"addresses,omitempty"`
+	Aliases        []string `json:"aliases,omitempty"`
+	IsSanctioned   bool     `json:"isSanctioned"`
+	RequiresReview bool     `json:"requiresReview"`
 }
 
 // SDNSearchResponse represents the Watchman search response
@@ -65,31 +65,31 @@ type SDNSearchResponse struct {
 
 // SDNEntry represents an SDN list entry
 type SDNEntry struct {
-	EntityID   string   `json:"entityID"`
-	SDNName    string   `json:"sdnName"`
-	SDNType    string   `json:"sdnType"`
-	Programs   []string `json:"programs"`
-	Title      string   `json:"title,omitempty"`
-	Remarks    string   `json:"remarks,omitempty"`
-	Match      float64  `json:"match"`
-	Addresses  []Address `json:"addresses,omitempty"`
-	Aliases    []Alias   `json:"alts,omitempty"`
+	EntityID  string    `json:"entityID"`
+	SDNName   string    `json:"sdnName"`
+	SDNType   string    `json:"sdnType"`
+	Programs  []string  `json:"programs"`
+	Title     string    `json:"title,omitempty"`
+	Remarks   string    `json:"remarks,omitempty"`
+	Match     float64   `json:"match"`
+	Addresses []Address `json:"addresses,omitempty"`
+	Aliases   []Alias   `json:"alts,omitempty"`
 }
 
 // Address represents an SDN address
 type Address struct {
-	EntityID  string `json:"entityID"`
-	Address   string `json:"address"`
-	City      string `json:"city,omitempty"`
-	State     string `json:"stateOrProvince,omitempty"`
+	EntityID   string `json:"entityID"`
+	Address    string `json:"address"`
+	City       string `json:"city,omitempty"`
+	State      string `json:"stateOrProvince,omitempty"`
 	PostalCode string `json:"postalCode,omitempty"`
-	Country   string `json:"country,omitempty"`
+	Country    string `json:"country,omitempty"`
 }
 
 // Alias represents an SDN alias
 type Alias struct {
-	EntityID  string `json:"entityID"`
-	AlternateID string `json:"alternateID"`
+	EntityID      string `json:"entityID"`
+	AlternateID   string `json:"alternateID"`
 	AlternateName string `json:"alternateName"`
 	AlternateType string `json:"alternateType"`
 }
@@ -145,7 +145,7 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 
 	// Analyze results
 	result := c.analyzeResults(req.Name, searchResp.SDNs)
-	
+
 	c.logger.Info("Sanctions screening result",
 		zap.String("name", req.Name),
 		zap.Float64("matchScore", result.MatchScore),
@@ -159,7 +159,7 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 // ScreenBatch performs batch sanctions screening
 func (c *Client) ScreenBatch(ctx context.Context, requests []*ScreeningRequest) ([]*ScreeningResult, error) {
 	results := make([]*ScreeningResult, len(requests))
-	
+
 	for i, req := range requests {
 		result, err := c.Screen(ctx, req)
 		if err != nil {
@@ -169,8 +169,8 @@ func (c *Client) ScreenBatch(ctx context.Context, requests []*ScreeningRequest) 
 			)
 			// Continue with other entries but mark this as requiring review
 			results[i] = &ScreeningResult{
-				Name:          req.Name,
-				MatchScore:    0,
+				Name:           req.Name,
+				MatchScore:     0,
 				RequiresReview: true,
 			}
 			continue
@@ -184,9 +184,9 @@ func (c *Client) ScreenBatch(ctx context.Context, requests []*ScreeningRequest) 
 // analyzeResults analyzes the SDN search results
 func (c *Client) analyzeResults(searchName string, sdns []SDNEntry) *ScreeningResult {
 	result := &ScreeningResult{
-		Name:          searchName,
-		MatchScore:    0,
-		IsSanctioned:  false,
+		Name:           searchName,
+		MatchScore:     0,
+		IsSanctioned:   false,
 		RequiresReview: false,
 	}
 
@@ -261,7 +261,7 @@ func (c *Client) ScreenParties(ctx context.Context, debtorName, creditorName, de
 // HealthCheck checks if the Watchman service is available
 func (c *Client) HealthCheck(ctx context.Context) error {
 	url := fmt.Sprintf("%s/ping", c.baseURL)
-	
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create health check request: %w", err)
@@ -283,7 +283,7 @@ func (c *Client) HealthCheck(ctx context.Context) error {
 // DownloadLatestLists triggers a download of the latest OFAC lists
 func (c *Client) DownloadLatestLists(ctx context.Context) error {
 	url := fmt.Sprintf("%s/admin/download", c.baseURL)
-	
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(nil))
 	if err != nil {
 		return fmt.Errorf("failed to create download request: %w", err)
@@ -305,10 +305,10 @@ func (c *Client) DownloadLatestLists(ctx context.Context) error {
 
 // Sanctions status constants
 const (
-	StatusPending  = "PENDING"
-	StatusClear    = "CLEAR"
-	StatusBlocked  = "BLOCKED"
-	StatusReview   = "REVIEW"
+	StatusPending = "PENDING"
+	StatusClear   = "CLEAR"
+	StatusBlocked = "BLOCKED"
+	StatusReview  = "REVIEW"
 )
 
 // DetermineStatus determines the sanctions status based on screening result

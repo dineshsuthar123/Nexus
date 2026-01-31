@@ -64,7 +64,7 @@ func Initialize(serviceName, environment, jaegerEndpoint string) (*zap.Logger, f
 		config = zap.NewDevelopmentConfig()
 		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
-	
+
 	logger, err := config.Build()
 	if err != nil {
 		return nil, nil, err
@@ -120,9 +120,9 @@ func GinMiddleware() gin.HandlerFunc {
 			),
 		)
 		c.Request = c.Request.WithContext(ctx)
-		
+
 		c.Next()
-		
+
 		span.SetAttributes(attribute.Int("http.status_code", c.Writer.Status()))
 		span.End()
 	}

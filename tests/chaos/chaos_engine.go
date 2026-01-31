@@ -16,18 +16,18 @@ import (
 
 // ChaosEngine provides chaos engineering capabilities
 type ChaosEngine struct {
-	logger       *zap.Logger
-	services     []ServiceEndpoint
-	experiments  []Experiment
-	results      []ExperimentResult
-	mu           sync.Mutex
-	running      atomic.Bool
+	logger      *zap.Logger
+	services    []ServiceEndpoint
+	experiments []Experiment
+	results     []ExperimentResult
+	mu          sync.Mutex
+	running     atomic.Bool
 }
 
 // ServiceEndpoint represents a service to test
 type ServiceEndpoint struct {
-	Name     string
-	URL      string
+	Name      string
+	URL       string
 	HealthURL string
 }
 
@@ -44,12 +44,12 @@ type Experiment struct {
 
 // ExperimentResult holds the result of an experiment
 type ExperimentResult struct {
-	Name        string
-	StartTime   time.Time
-	EndTime     time.Time
-	Success     bool
-	Error       string
-	Metrics     map[string]interface{}
+	Name      string
+	StartTime time.Time
+	EndTime   time.Time
+	Success   bool
+	Error     string
+	Metrics   map[string]interface{}
 }
 
 // NewChaosEngine creates a new chaos engine
@@ -77,7 +77,7 @@ func (e *ChaosEngine) RunAll(ctx context.Context) []ExperimentResult {
 	for _, exp := range e.experiments {
 		result := e.runExperiment(ctx, exp)
 		results = append(results, result)
-		
+
 		// Brief pause between experiments
 		time.Sleep(5 * time.Second)
 	}
@@ -276,36 +276,36 @@ func PartitionExperiment(partition1, partition2 []string) Experiment {
 
 // LoadTest represents a load test configuration
 type LoadTest struct {
-	Name          string
-	TargetURL     string
-	Duration      time.Duration
-	RampUpTime    time.Duration
-	MaxRPS        int
-	NumWorkers    int
+	Name       string
+	TargetURL  string
+	Duration   time.Duration
+	RampUpTime time.Duration
+	MaxRPS     int
+	NumWorkers int
 }
 
 // LoadTestResult holds load test results
 type LoadTestResult struct {
-	TotalRequests     int64
+	TotalRequests      int64
 	SuccessfulRequests int64
-	FailedRequests    int64
-	MinLatency        time.Duration
-	MaxLatency        time.Duration
-	AvgLatency        time.Duration
-	P50Latency        time.Duration
-	P95Latency        time.Duration
-	P99Latency        time.Duration
-	RequestsPerSecond float64
+	FailedRequests     int64
+	MinLatency         time.Duration
+	MaxLatency         time.Duration
+	AvgLatency         time.Duration
+	P50Latency         time.Duration
+	P95Latency         time.Duration
+	P99Latency         time.Duration
+	RequestsPerSecond  float64
 }
 
 // RunLoadTest executes a load test
 func RunLoadTest(ctx context.Context, config LoadTest) (*LoadTestResult, error) {
 	var (
-		totalRequests     int64
+		totalRequests      int64
 		successfulRequests int64
-		failedRequests    int64
-		latencies         []time.Duration
-		mu                sync.Mutex
+		failedRequests     int64
+		latencies          []time.Duration
+		mu                 sync.Mutex
 	)
 
 	client := &http.Client{
@@ -371,9 +371,9 @@ func RunLoadTest(ctx context.Context, config LoadTest) (*LoadTestResult, error) 
 
 	// Calculate statistics
 	result := &LoadTestResult{
-		TotalRequests:     totalRequests,
+		TotalRequests:      totalRequests,
 		SuccessfulRequests: successfulRequests,
-		FailedRequests:    failedRequests,
+		FailedRequests:     failedRequests,
 	}
 
 	if len(latencies) > 0 {
@@ -413,21 +413,21 @@ func RunLoadTest(ctx context.Context, config LoadTest) (*LoadTestResult, error) 
 
 // TPCCBenchmark runs TPC-C style benchmarks
 type TPCCBenchmark struct {
-	DatabaseURL    string
-	Warehouses     int
-	Duration       time.Duration
-	Workers        int
+	DatabaseURL string
+	Warehouses  int
+	Duration    time.Duration
+	Workers     int
 }
 
 // TPCCResult holds benchmark results
 type TPCCResult struct {
-	NewOrderTPS      float64
-	PaymentTPS       float64
-	OrderStatusTPS   float64
-	DeliveryTPS      float64
-	StockLevelTPS    float64
+	NewOrderTPS       float64
+	PaymentTPS        float64
+	OrderStatusTPS    float64
+	DeliveryTPS       float64
+	StockLevelTPS     float64
 	TotalTransactions int64
-	AvgLatencyMs     float64
+	AvgLatencyMs      float64
 }
 
 // Run executes the TPC-C benchmark
@@ -435,13 +435,13 @@ func (b *TPCCBenchmark) Run(ctx context.Context) (*TPCCResult, error) {
 	// Simulated TPC-C benchmark
 	// In production, would use actual TPC-C implementation
 	result := &TPCCResult{
-		NewOrderTPS:      1000 + rand.Float64()*500,
-		PaymentTPS:       800 + rand.Float64()*400,
-		OrderStatusTPS:   200 + rand.Float64()*100,
-		DeliveryTPS:      150 + rand.Float64()*75,
-		StockLevelTPS:    100 + rand.Float64()*50,
+		NewOrderTPS:       1000 + rand.Float64()*500,
+		PaymentTPS:        800 + rand.Float64()*400,
+		OrderStatusTPS:    200 + rand.Float64()*100,
+		DeliveryTPS:       150 + rand.Float64()*75,
+		StockLevelTPS:     100 + rand.Float64()*50,
 		TotalTransactions: int64((1000 + rand.Float64()*500) * b.Duration.Seconds()),
-		AvgLatencyMs:     5 + rand.Float64()*10,
+		AvgLatencyMs:      5 + rand.Float64()*10,
 	}
 
 	return result, nil

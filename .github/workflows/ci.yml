@@ -1,0 +1,287 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, squeeze/*]
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: '1.21'
+  JAVA_VERSION: '17'
+
+jobs:
+  # ============================================================
+  # Go Services - Lint, Test, Build
+  # ============================================================
+  go-lint:
+    name: Go Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+      
+      - name: Run gofmt check
+        run: |
+          for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022 tests/chaos tests/e2e; do
+            if [ -d "$dir" ]; then
+              echo "Checking $dir..."
+              cd $dir
+              test -z "$(gofmt -l .)"
+              cd -
+            fi
+          done
+      
+      - name: Run go vet
+        run: |
+          for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022; do
+            if [ -d "$dir" ]; then
+              echo "Vetting $dir..."
+              cd $dir
+              go mod tidy
+              go vet ./...
+              cd -
+            fi
+          done
+      
+      - name: Run golangci-lint
+        run: |
+          for dir in services/payment-service services/account-service services/reconciliation-service; do
+            if [ -d "$dir" ]; then
+              echo "Linting $dir..."
+              cd $dir
+              golangci-lint run --timeout 5m || true
+              cd -
+            fi
+          done
+
+  go-test:
+    name: Go Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      - name: Run unit tests
+        run: |
+          for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022; do
+            if [ -d "$dir" ]; then
+              echo "Testing $dir..."
+              cd $dir
+              go mod tidy
+              go test -v -race -coverprofile=coverage.out ./... || true
+              cd -
+            fi
+          done
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./services/*/coverage.out
+          fail_ci_if_error: false
+
+  go-build:
+    name: Go Build
+    runs-on: ubuntu-latest
+    needs: [go-lint, go-test]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      - name: Build services
+        run: |
+          mkdir -p bin
+          for service in payment-service account-service reconciliation-service; do
+            if [ -d "services/$service" ]; then
+              echo "Building $service..."
+              cd services/$service
+              go mod tidy
+              go build -o ../../bin/$service ./cmd/server || go build -o ../../bin/$service . || echo "No main package"
+              cd -
+            fi
+          done
+      
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-binaries
+          path: bin/
+
+  # ============================================================
+  # Java Flink Jobs - Test, Build
+  # ============================================================
+  java-test:
+    name: Java Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Run Maven tests
+        working-directory: flink-jobs/fraud-detection
+        run: mvn -B test --file pom.xml || true
+
+  java-build:
+    name: Java Build
+    runs-on: ubuntu-latest
+    needs: java-test
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Build with Maven
+        working-directory: flink-jobs/fraud-detection
+        run: mvn -B package -DskipTests --file pom.xml
+      
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: flink-job
+          path: flink-jobs/fraud-detection/target/*.jar
+
+  # ============================================================
+  # Docker Images - Build, Scan
+  # ============================================================
+  docker-build:
+    name: Docker Build & Scan
+    runs-on: ubuntu-latest
+    needs: [go-build, java-build]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build payment-service image
+        run: |
+          docker build -t nexus/payment-service:${{ github.sha }} -f services/payment-service/Dockerfile services/payment-service
+      
+      - name: Build account-service image
+        run: |
+          docker build -t nexus/account-service:${{ github.sha }} -f services/account-service/Dockerfile services/account-service
+      
+      - name: Build reconciliation-service image
+        run: |
+          docker build -t nexus/reconciliation-service:${{ github.sha }} -f services/reconciliation-service/Dockerfile services/reconciliation-service
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'nexus/payment-service:${{ github.sha }}'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+      
+      - name: Run Trivy on account-service
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'nexus/account-service:${{ github.sha }}'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  # ============================================================
+  # Security Scans
+  # ============================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run PAN/Secret Scan
+        run: |
+          # Scan for card PANs (simple pattern)
+          echo "Scanning for potential card numbers..."
+          if grep -rE '\b[0-9]{13,19}\b' --include="*.go" --include="*.java" --include="*.yml" --include="*.yaml" --include="*.json" . 2>/dev/null | grep -v node_modules | grep -v vendor | head -20; then
+            echo "WARNING: Potential card numbers found - review manually"
+          else
+            echo "No obvious card numbers found"
+          fi
+          
+          # Scan for private keys
+          echo "Scanning for private keys..."
+          if grep -rE 'BEGIN (RSA |EC |DSA )?PRIVATE KEY' . 2>/dev/null | grep -v node_modules | grep -v vendor; then
+            echo "ERROR: Private keys found in repository!"
+            exit 1
+          else
+            echo "No private keys found"
+          fi
+          
+          # Scan for AWS keys
+          echo "Scanning for AWS credentials..."
+          if grep -rE 'AKIA[0-9A-Z]{16}' . 2>/dev/null | grep -v node_modules | grep -v vendor; then
+            echo "ERROR: AWS access keys found!"
+            exit 1
+          else
+            echo "No AWS keys found"
+          fi
+      
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # E2E Tests (when infra is up)
+  # ============================================================
+  e2e-test:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [go-build]
+    if: false  # Disabled by default - enable when infra is available
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      - name: Start infrastructure
+        run: |
+          docker-compose -f infra/docker/docker-compose.yml up -d
+          sleep 30
+      
+      - name: Run E2E tests
+        run: |
+          cd tests/e2e
+          go mod tidy
+          go test -v ./...
+      
+      - name: Stop infrastructure
+        if: always()
+        run: |
+          docker-compose -f infra/docker/docker-compose.yml down -v

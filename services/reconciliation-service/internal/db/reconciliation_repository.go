@@ -13,17 +13,17 @@ import (
 
 // ReconciliationCycle represents a reconciliation cycle
 type ReconciliationCycle struct {
-	ID               uuid.UUID
-	CycleDate        time.Time
-	Status           string
-	StartTime        time.Time
-	EndTime          *time.Time
-	TotalRecords     int
-	MatchedRecords   int
+	ID                uuid.UUID
+	CycleDate         time.Time
+	Status            string
+	StartTime         time.Time
+	EndTime           *time.Time
+	TotalRecords      int
+	MatchedRecords    int
 	DiscrepantRecords int
-	AutoResolved     int
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	AutoResolved      int
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // ReconciliationRecord represents a reconciliation result for a transaction
@@ -94,7 +94,7 @@ func (r *ReconciliationRepository) GetCycle(ctx context.Context, id uuid.UUID) (
 		FROM reconciliation_cycle WHERE id = $1
 	`
 	row := r.pool.QueryRow(ctx, query, id)
-	
+
 	var cycle ReconciliationCycle
 	err := row.Scan(
 		&cycle.ID, &cycle.CycleDate, &cycle.Status, &cycle.StartTime, &cycle.EndTime,
@@ -146,7 +146,7 @@ func (r *ReconciliationRepository) GetRecord(ctx context.Context, id uuid.UUID) 
 		FROM reconciliation_record WHERE id = $1
 	`
 	row := r.pool.QueryRow(ctx, query, id)
-	
+
 	var record ReconciliationRecord
 	err := row.Scan(
 		&record.ID, &record.CycleID, &record.TransactionID, &record.MatchStatus, &record.MatchScore,

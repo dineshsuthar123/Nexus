@@ -88,8 +88,8 @@ type PartyIdentification struct {
 
 // OrganisationIdentification represents organisation identification
 type OrganisationIdentification struct {
-	LEI   string `json:"lei,omitempty"`   // Legal Entity Identifier
-	BIC   string `json:"bic,omitempty"`   // Business Identifier Code
+	LEI   string `json:"lei,omitempty"` // Legal Entity Identifier
+	BIC   string `json:"bic,omitempty"` // Business Identifier Code
 	Other []struct {
 		ID       string `json:"id"`
 		SchemaNm string `json:"schemaNm"`
@@ -99,9 +99,9 @@ type OrganisationIdentification struct {
 
 // PrivateIdentification represents private (individual) identification
 type PrivateIdentification struct {
-	DateOfBirth string `json:"dateOfBirth,omitempty"` // YYYY-MM-DD
+	DateOfBirth  string `json:"dateOfBirth,omitempty"` // YYYY-MM-DD
 	PlaceOfBirth string `json:"placeOfBirth,omitempty"`
-	Other       []struct {
+	Other        []struct {
 		ID       string `json:"id"`
 		SchemaNm string `json:"schemaNm"` // PASSPORT, NATIONAL_ID, etc.
 		Issuer   string `json:"issuer,omitempty"`
@@ -124,8 +124,8 @@ type ClearingID struct {
 
 // RemittanceInformation represents payment remittance details
 type RemittanceInformation struct {
-	Unstructured []string                       `json:"unstructured,omitempty"`
-	Structured   []StructuredRemittanceInfo     `json:"structured,omitempty"`
+	Unstructured []string                   `json:"unstructured,omitempty"`
+	Structured   []StructuredRemittanceInfo `json:"structured,omitempty"`
 }
 
 // StructuredRemittanceInfo represents structured remittance information
@@ -140,7 +140,7 @@ type StructuredRemittanceInfo struct {
 
 // ReferredDocumentInfo represents referred document information
 type ReferredDocumentInfo struct {
-	Type   string `json:"type,omitempty"`   // INVOICE, CREDIT_NOTE, etc.
+	Type   string `json:"type,omitempty"` // INVOICE, CREDIT_NOTE, etc.
 	Number string `json:"number,omitempty"`
 	Date   string `json:"relatedDate,omitempty"` // YYYY-MM-DD
 }
@@ -163,8 +163,8 @@ type Pacs008 struct {
 
 // GroupHeader008 represents the group header for pacs.008
 type GroupHeader008 struct {
-	MessageID            string     `json:"messageId"`         // Max 35 chars
-	CreationDateTime     time.Time  `json:"creationDateTime"`  // ISO 8601
+	MessageID            string     `json:"messageId"`        // Max 35 chars
+	CreationDateTime     time.Time  `json:"creationDateTime"` // ISO 8601
 	NumberOfTransactions int        `json:"numberOfTransactions"`
 	TotalAmount          *Amount    `json:"controlSum,omitempty"`
 	SettlementInfo       Settlement `json:"settlementInformation"`
@@ -172,31 +172,31 @@ type GroupHeader008 struct {
 
 // Settlement represents settlement information
 type Settlement struct {
-	Method            string                `json:"settlementMethod"` // CLRG, INDA, INGA, COVE
-	ClearingSystem    *ClearingSystem       `json:"clearingSystem,omitempty"`
-	InstructingAgent  *FinancialInstitution `json:"instructingReimbursementAgent,omitempty"`
-	InstructedAgent   *FinancialInstitution `json:"instructedReimbursementAgent,omitempty"`
+	Method           string                `json:"settlementMethod"` // CLRG, INDA, INGA, COVE
+	ClearingSystem   *ClearingSystem       `json:"clearingSystem,omitempty"`
+	InstructingAgent *FinancialInstitution `json:"instructingReimbursementAgent,omitempty"`
+	InstructedAgent  *FinancialInstitution `json:"instructedReimbursementAgent,omitempty"`
 }
 
 // ClearingSystem identifies a clearing system
 type ClearingSystem struct {
-	Code        string `json:"code,omitempty"`        // FEDNOW, TIPS, SWIFT, etc.
+	Code        string `json:"code,omitempty"` // FEDNOW, TIPS, SWIFT, etc.
 	Proprietary string `json:"proprietary,omitempty"`
 }
 
 // CreditTransfer08 represents a single credit transfer within pacs.008
 type CreditTransfer08 struct {
-	PaymentID          PaymentIdentification   `json:"paymentIdentification"`
-	PaymentTypeInfo    *PaymentTypeInfo        `json:"paymentTypeInformation,omitempty"`
-	InstructedAmount   Amount                  `json:"interbankSettlementAmount"`
-	ChargeBearer       string                  `json:"chargeBearer,omitempty"` // DEBT, CRED, SHAR, SLEV
-	Debtor             Party                   `json:"debtor"`
-	DebtorAgent        *FinancialInstitution   `json:"debtorAgent,omitempty"`
-	Creditor           Party                   `json:"creditor"`
-	CreditorAgent      *FinancialInstitution   `json:"creditorAgent,omitempty"`
-	Purpose            *Purpose                `json:"purpose,omitempty"`
-	RemittanceInfo     *RemittanceInformation  `json:"remittanceInformation,omitempty"`
-	InstructionForNext *InstructionForAgent    `json:"instructionForNextAgent,omitempty"`
+	PaymentID          PaymentIdentification  `json:"paymentIdentification"`
+	PaymentTypeInfo    *PaymentTypeInfo       `json:"paymentTypeInformation,omitempty"`
+	InstructedAmount   Amount                 `json:"interbankSettlementAmount"`
+	ChargeBearer       string                 `json:"chargeBearer,omitempty"` // DEBT, CRED, SHAR, SLEV
+	Debtor             Party                  `json:"debtor"`
+	DebtorAgent        *FinancialInstitution  `json:"debtorAgent,omitempty"`
+	Creditor           Party                  `json:"creditor"`
+	CreditorAgent      *FinancialInstitution  `json:"creditorAgent,omitempty"`
+	Purpose            *Purpose               `json:"purpose,omitempty"`
+	RemittanceInfo     *RemittanceInformation `json:"remittanceInformation,omitempty"`
+	InstructionForNext *InstructionForAgent   `json:"instructionForNextAgent,omitempty"`
 }
 
 // PaymentIdentification contains payment identifiers
@@ -209,15 +209,15 @@ type PaymentIdentification struct {
 
 // PaymentTypeInfo contains payment type information
 type PaymentTypeInfo struct {
-	InstructionPriority string          `json:"instructionPriority,omitempty"` // HIGH, NORM
-	ServiceLevel        *ServiceLevel   `json:"serviceLevel,omitempty"`
+	InstructionPriority string           `json:"instructionPriority,omitempty"` // HIGH, NORM
+	ServiceLevel        *ServiceLevel    `json:"serviceLevel,omitempty"`
 	LocalInstrument     *LocalInstrument `json:"localInstrument,omitempty"`
 	CategoryPurpose     *CategoryPurpose `json:"categoryPurpose,omitempty"`
 }
 
 // ServiceLevel identifies the service level
 type ServiceLevel struct {
-	Code        string `json:"code,omitempty"`        // SEPA, INST, etc.
+	Code        string `json:"code,omitempty"` // SEPA, INST, etc.
 	Proprietary string `json:"proprietary,omitempty"`
 }
 
@@ -241,8 +241,8 @@ type Purpose struct {
 
 // InstructionForAgent contains instructions for the next agent
 type InstructionForAgent struct {
-	Code             string `json:"code,omitempty"` // CHQB, HOLD, PHOB, TELB
-	InstructionInfo  string `json:"instructionInformation,omitempty"`
+	Code            string `json:"code,omitempty"` // CHQB, HOLD, PHOB, TELB
+	InstructionInfo string `json:"instructionInformation,omitempty"`
 }
 
 // ============================================================================
@@ -251,9 +251,9 @@ type InstructionForAgent struct {
 
 // Pacs002 represents a Payment Status Report message
 type Pacs002 struct {
-	GroupHeader      GroupHeader002     `json:"groupHeader"`
+	GroupHeader       GroupHeader002    `json:"groupHeader"`
 	OriginalGroupInfo *OrigGroupInfo    `json:"originalGroupInformationAndStatus,omitempty"`
-	TransactionInfo  []TxInfoAndStatus  `json:"transactionInformationAndStatus,omitempty"`
+	TransactionInfo   []TxInfoAndStatus `json:"transactionInformationAndStatus,omitempty"`
 }
 
 // GroupHeader002 represents the group header for pacs.002
@@ -264,22 +264,22 @@ type GroupHeader002 struct {
 
 // OrigGroupInfo contains original group information
 type OrigGroupInfo struct {
-	OriginalMessageID      string          `json:"originalMessageId"`
-	OriginalMsgNmID        string          `json:"originalMessageNameId,omitempty"` // pacs.008, etc.
-	OriginalCreationDateTime time.Time     `json:"originalCreationDateTime,omitempty"`
-	GroupStatus            string          `json:"groupStatus,omitempty"` // ACCP, ACTC, ACSP, RJCT
-	StatusReasonInfo       []StatusReason  `json:"statusReasonInformation,omitempty"`
+	OriginalMessageID        string         `json:"originalMessageId"`
+	OriginalMsgNmID          string         `json:"originalMessageNameId,omitempty"` // pacs.008, etc.
+	OriginalCreationDateTime time.Time      `json:"originalCreationDateTime,omitempty"`
+	GroupStatus              string         `json:"groupStatus,omitempty"` // ACCP, ACTC, ACSP, RJCT
+	StatusReasonInfo         []StatusReason `json:"statusReasonInformation,omitempty"`
 }
 
 // TxInfoAndStatus contains transaction status information
 type TxInfoAndStatus struct {
-	StatusID              string          `json:"statusId,omitempty"`
-	OriginalInstructionID string          `json:"originalInstructionId,omitempty"`
-	OriginalEndToEndID    string          `json:"originalEndToEndId"`
-	OriginalUETR          string          `json:"originalUetr"`
-	TransactionStatus     string          `json:"transactionStatus"` // ACCP, ACTC, ACSP, RJCT, PDNG
-	StatusReasonInfo      []StatusReason  `json:"statusReasonInformation,omitempty"`
-	AcceptanceDateTime    *time.Time      `json:"acceptanceDateTime,omitempty"`
+	StatusID              string         `json:"statusId,omitempty"`
+	OriginalInstructionID string         `json:"originalInstructionId,omitempty"`
+	OriginalEndToEndID    string         `json:"originalEndToEndId"`
+	OriginalUETR          string         `json:"originalUetr"`
+	TransactionStatus     string         `json:"transactionStatus"` // ACCP, ACTC, ACSP, RJCT, PDNG
+	StatusReasonInfo      []StatusReason `json:"statusReasonInformation,omitempty"`
+	AcceptanceDateTime    *time.Time     `json:"acceptanceDateTime,omitempty"`
 }
 
 // StatusReason contains status reason information
@@ -298,43 +298,43 @@ type StatusReason struct {
 
 // Pacs004 represents a Payment Return message
 type Pacs004 struct {
-	GroupHeader      GroupHeader004     `json:"groupHeader"`
+	GroupHeader       GroupHeader004    `json:"groupHeader"`
 	OriginalGroupInfo *OrigGroupInfo004 `json:"originalGroupInformation,omitempty"`
-	TransactionInfo  []TxInfo004        `json:"transactionInformation"`
+	TransactionInfo   []TxInfo004       `json:"transactionInformation"`
 }
 
 // GroupHeader004 represents the group header for pacs.004
 type GroupHeader004 struct {
-	MessageID            string    `json:"messageId"`
-	CreationDateTime     time.Time `json:"creationDateTime"`
-	NumberOfTransactions int       `json:"numberOfTransactions"`
+	MessageID            string     `json:"messageId"`
+	CreationDateTime     time.Time  `json:"creationDateTime"`
+	NumberOfTransactions int        `json:"numberOfTransactions"`
 	SettlementInfo       Settlement `json:"settlementInformation"`
 }
 
 // OrigGroupInfo004 contains original group information for returns
 type OrigGroupInfo004 struct {
-	OriginalMessageID      string    `json:"originalMessageId"`
-	OriginalMsgNmID        string    `json:"originalMessageNameId,omitempty"`
+	OriginalMessageID        string    `json:"originalMessageId"`
+	OriginalMsgNmID          string    `json:"originalMessageNameId,omitempty"`
 	OriginalCreationDateTime time.Time `json:"originalCreationDateTime,omitempty"`
 }
 
 // TxInfo004 contains transaction information for returns
 type TxInfo004 struct {
-	ReturnID                 string         `json:"returnId"`
-	OriginalInstructionID    string         `json:"originalInstructionId,omitempty"`
-	OriginalEndToEndID       string         `json:"originalEndToEndId"`
-	OriginalUETR             string         `json:"originalUetr"`
-	OriginalInterbankAmount  Amount         `json:"originalInterbankSettlementAmount"`
-	ReturnedInterbankAmount  Amount         `json:"returnedInterbankSettlementAmount"`
-	ChargeBearer             string         `json:"chargeBearer,omitempty"`
-	ReturnReasonInfo         []ReturnReason `json:"returnReasonInformation"`
+	ReturnID                string         `json:"returnId"`
+	OriginalInstructionID   string         `json:"originalInstructionId,omitempty"`
+	OriginalEndToEndID      string         `json:"originalEndToEndId"`
+	OriginalUETR            string         `json:"originalUetr"`
+	OriginalInterbankAmount Amount         `json:"originalInterbankSettlementAmount"`
+	ReturnedInterbankAmount Amount         `json:"returnedInterbankSettlementAmount"`
+	ChargeBearer            string         `json:"chargeBearer,omitempty"`
+	ReturnReasonInfo        []ReturnReason `json:"returnReasonInformation"`
 }
 
 // ReturnReason contains return reason information
 type ReturnReason struct {
 	Originator *Party `json:"originator,omitempty"`
 	Reason     struct {
-		Code        string `json:"code"`          // AC01, AC04, AM04, etc.
+		Code        string `json:"code"` // AC01, AC04, AM04, etc.
 		Proprietary string `json:"proprietary,omitempty"`
 	} `json:"reason"`
 	AdditionalInfo []string `json:"additionalInformation,omitempty"`

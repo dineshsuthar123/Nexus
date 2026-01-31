@@ -85,22 +85,22 @@ type CreatePaymentResponse struct {
 
 // PaymentStatusResponse represents a payment status response (pacs.002)
 type PaymentStatusResponse struct {
-	TransactionID    string     `json:"transactionId"`
-	UETR             string     `json:"uetr"`
-	MessageID        string     `json:"messageId"`
-	Status           string     `json:"status"`
-	StatusReason     string     `json:"statusReason,omitempty"`
-	SanctionsStatus  string     `json:"sanctionsStatus"`
-	FraudStatus      string     `json:"fraudStatus"`
-	Amount           string     `json:"amount"`
-	Currency         string     `json:"currency"`
-	DebtorName       string     `json:"debtorName"`
-	CreditorName     string     `json:"creditorName"`
-	BookingDate      string     `json:"bookingDate"`
-	ValueDate        string     `json:"valueDate,omitempty"`
-	SettlementDate   string     `json:"settlementDate,omitempty"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	UpdatedAt        time.Time  `json:"updatedAt"`
+	TransactionID   string    `json:"transactionId"`
+	UETR            string    `json:"uetr"`
+	MessageID       string    `json:"messageId"`
+	Status          string    `json:"status"`
+	StatusReason    string    `json:"statusReason,omitempty"`
+	SanctionsStatus string    `json:"sanctionsStatus"`
+	FraudStatus     string    `json:"fraudStatus"`
+	Amount          string    `json:"amount"`
+	Currency        string    `json:"currency"`
+	DebtorName      string    `json:"debtorName"`
+	CreditorName    string    `json:"creditorName"`
+	BookingDate     string    `json:"bookingDate"`
+	ValueDate       string    `json:"valueDate,omitempty"`
+	SettlementDate  string    `json:"settlementDate,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 // CreatePayment processes a new payment (pacs.008 flow)
@@ -209,7 +209,7 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 	var statusReason string
 
 	ledgerStart := time.Now()
-	
+
 	// Use retry transaction for CockroachDB optimistic locking
 	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
 		// Get and lock debtor account

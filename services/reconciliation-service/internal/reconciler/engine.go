@@ -63,7 +63,7 @@ type ReconciliationResult struct {
 // RunReconciliation performs a full reconciliation cycle
 func (e *Engine) RunReconciliation(ctx context.Context, cycleDate time.Time) (*ReconciliationResult, error) {
 	start := time.Now()
-	
+
 	ctx, span := observability.StartSpan(ctx, "Reconciler.RunReconciliation",
 		trace.WithAttributes(
 			attribute.String("cycle_date", cycleDate.Format("2006-01-02")),
@@ -273,13 +273,13 @@ func (e *Engine) performThreeWayMatch(ctx context.Context, tx *db.Transaction) (
 		result.DiscrepancyType = "AMOUNT_MISMATCH"
 		result.DiscrepancyAmount = debitTotal.Sub(creditTotal).Abs()
 		result.Score = decimal.NewFromFloat(50)
-		
+
 		// Small differences may be auto-resolvable (rounding)
 		if result.DiscrepancyAmount.LessThan(decimal.NewFromFloat(0.01)) {
 			result.IsAutoResolvable = true
 			result.ResolutionType = "ROUNDING_ADJUSTMENT"
 		}
-		
+
 		details, _ := json.Marshal(map[string]interface{}{
 			"debit_total":  debitTotal.String(),
 			"credit_total": creditTotal.String(),
@@ -373,10 +373,10 @@ func (e *Engine) reconcileAccountBalances(ctx context.Context, start, end time.T
 		// Compare with current balance
 		if !calculatedBalance.Equal(account.Balance) {
 			discrepancies = append(discrepancies, BalanceDiscrepancy{
-				AccountID:         account.ID,
-				ExpectedBalance:   calculatedBalance,
-				ActualBalance:     account.Balance,
-				Difference:        calculatedBalance.Sub(account.Balance).Abs(),
+				AccountID:       account.ID,
+				ExpectedBalance: calculatedBalance,
+				ActualBalance:   account.Balance,
+				Difference:      calculatedBalance.Sub(account.Balance).Abs(),
 			})
 		}
 	}

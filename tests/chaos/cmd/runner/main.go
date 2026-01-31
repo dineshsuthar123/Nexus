@@ -77,7 +77,7 @@ func main() {
 		}
 	} else if *loadTest {
 		logger.Info("Running load test", zap.Int("rps", *rps), zap.Duration("duration", *duration))
-		
+
 		config := chaos.LoadTest{
 			Name:       "payment-api-load-test",
 			TargetURL:  "http://localhost:8080/api/v1/payments",
@@ -98,7 +98,7 @@ func main() {
 		printLoadTestResults(result)
 	} else if *tpcc {
 		logger.Info("Running TPC-C benchmark", zap.Duration("duration", *duration))
-		
+
 		benchmark := &chaos.TPCCBenchmark{
 			DatabaseURL: "postgres://root@localhost:26257/nexus?sslmode=disable",
 			Warehouses:  10,
@@ -155,7 +155,7 @@ func printLoadTestResults(result *chaos.LoadTestResult) {
 	fmt.Println("LOAD TEST RESULTS")
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Printf("Total Requests:     %d\n", result.TotalRequests)
-	fmt.Printf("Successful:         %d (%.2f%%)\n", result.SuccessfulRequests, 
+	fmt.Printf("Successful:         %d (%.2f%%)\n", result.SuccessfulRequests,
 		float64(result.SuccessfulRequests)/float64(result.TotalRequests)*100)
 	fmt.Printf("Failed:             %d (%.2f%%)\n", result.FailedRequests,
 		float64(result.FailedRequests)/float64(result.TotalRequests)*100)

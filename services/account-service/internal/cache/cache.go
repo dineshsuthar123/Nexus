@@ -115,11 +115,11 @@ func (c *Client) HGetAll(ctx context.Context, key string) (map[string]string, er
 
 // Cache keys
 const (
-	KeyAccountPrefix      = "account:"
-	KeyBalancePrefix      = "balance:"
-	KeyRateLimitPrefix    = "ratelimit:"
-	KeyDailyUsagePrefix   = "daily_usage:"
-	KeySessionPrefix      = "session:"
+	KeyAccountPrefix    = "account:"
+	KeyBalancePrefix    = "balance:"
+	KeyRateLimitPrefix  = "ratelimit:"
+	KeyDailyUsagePrefix = "daily_usage:"
+	KeySessionPrefix    = "session:"
 )
 
 // AccountCacheKey generates a cache key for an account
