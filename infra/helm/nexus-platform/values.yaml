@@ -1,0 +1,358 @@
+# Default values for Nexus Platform
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# ============================================================
+# Payment Service
+# ============================================================
+paymentService:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: nexus/payment-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 8080
+  
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  env:
+    DATABASE_URL: "postgres://root@cockroachdb:26257/nexus?sslmode=disable"
+    KAFKA_BROKERS: "kafka:9092"
+    REDIS_URL: "redis-master:6379"
+    WATCHMAN_URL: "http://watchman:8084"
+    JAEGER_ENDPOINT: "http://jaeger:14268/api/traces"
+  
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# ============================================================
+# Account Service
+# ============================================================
+accountService:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: nexus/account-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 8081
+  
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 800m
+      memory: 512Mi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+# ============================================================
+# Reconciliation Service
+# ============================================================
+reconciliationService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/reconciliation-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 8082
+  
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 800m
+      memory: 512Mi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+# ============================================================
+# Fraud Detection (Flink)
+# ============================================================
+fraudDetection:
+  enabled: true
+  image:
+    repository: nexus/fraud-detection
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  jobManager:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+  
+  taskManager:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 4000m
+        memory: 4Gi
+
+# ============================================================
+# Watchman (Sanctions Screening)
+# ============================================================
+watchman:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: moov/watchman
+    tag: v0.26.1
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 8084
+  
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+# ============================================================
+# API Gateway (Kong)
+# ============================================================
+kong:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: kong
+    tag: "3.5"
+  
+  proxy:
+    type: LoadBalancer
+    http:
+      enabled: true
+      containerPort: 8000
+    tls:
+      enabled: true
+      containerPort: 8443
+  
+  admin:
+    enabled: true
+    type: ClusterIP
+    containerPort: 8001
+  
+  env:
+    database: "off"
+    declarative_config: "/kong/kong.yml"
+
+# ============================================================
+# CockroachDB
+# ============================================================
+cockroachdb:
+  enabled: true
+  statefulset:
+    replicas: 3
+  conf:
+    cluster-organization: "nexus-rtp"
+    single-node: false
+  storage:
+    persistentVolume:
+      enabled: true
+      size: 50Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# ============================================================
+# Kafka
+# ============================================================
+kafka:
+  enabled: true
+  replicaCount: 3
+  heapOpts: "-Xmx1024m -Xms1024m"
+  persistence:
+    enabled: true
+    size: 50Gi
+  zookeeper:
+    replicaCount: 3
+    persistence:
+      enabled: true
+      size: 10Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# ============================================================
+# Redis
+# ============================================================
+redis:
+  enabled: true
+  architecture: replication
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+  replica:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 5Gi
+
+# ============================================================
+# Monitoring - Prometheus
+# ============================================================
+prometheus:
+  enabled: true
+  alertmanager:
+    enabled: true
+  server:
+    persistentVolume:
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+  
+  serverFiles:
+    prometheus.yml:
+      scrape_configs:
+        - job_name: 'nexus-services'
+          kubernetes_sd_configs:
+            - role: pod
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+              action: keep
+              regex: true
+
+# ============================================================
+# Monitoring - Grafana
+# ============================================================
+grafana:
+  enabled: true
+  adminPassword: "nexus-admin"
+  persistence:
+    enabled: true
+    size: 5Gi
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-server
+          isDefault: true
+        - name: Jaeger
+          type: jaeger
+          url: http://jaeger-query:16686
+
+# ============================================================
+# Tracing - Jaeger
+# ============================================================
+jaeger:
+  enabled: true
+  allInOne:
+    enabled: true
+  storage:
+    type: memory
+  query:
+    enabled: true
+
+# ============================================================
+# Ingress
+# ============================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: api.nexus.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: kong
+          port: 8000
+    - host: grafana.nexus.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: grafana
+          port: 3000
+    - host: jaeger.nexus.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: jaeger-query
+          port: 16686

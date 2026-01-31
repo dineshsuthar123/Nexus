@@ -1,0 +1,82 @@
+# Prometheus Configuration for Nexus
+# Scrape configs for all services
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'nexus-local'
+    env: 'development'
+
+# Alertmanager configuration (for future use)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files (for future use)
+rule_files: []
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # CockroachDB cluster
+  - job_name: 'cockroachdb'
+    static_configs:
+      - targets:
+          - 'cockroachdb-1:8080'
+          - 'cockroachdb-2:8080'
+          - 'cockroachdb-3:8080'
+    metrics_path: '/_status/vars'
+    scheme: 'http'
+
+  # Kafka brokers (JMX exporter would be needed in production)
+  - job_name: 'kafka'
+    static_configs:
+      - targets:
+          - 'kafka-1:9092'
+          - 'kafka-2:9093'
+          - 'kafka-3:9094'
+
+  # Kong API Gateway
+  - job_name: 'kong'
+    static_configs:
+      - targets: ['kong:8001']
+    metrics_path: '/metrics'
+
+  # Flink cluster
+  - job_name: 'flink'
+    static_configs:
+      - targets: ['flink-jobmanager:8081']
+    metrics_path: '/metrics'
+
+  # Go services
+  - job_name: 'payment-service'
+    static_configs:
+      - targets: ['payment-service:8080']
+    metrics_path: '/metrics'
+
+  - job_name: 'account-service'
+    static_configs:
+      - targets: ['account-service:8080']
+    metrics_path: '/metrics'
+
+  - job_name: 'reconciliation-service'
+    static_configs:
+      - targets: ['reconciliation-service:8080']
+    metrics_path: '/metrics'
+
+  # Watchman (sanctions screening)
+  - job_name: 'watchman'
+    static_configs:
+      - targets: ['watchman:9094']
+    metrics_path: '/metrics'
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']

@@ -1,0 +1,51 @@
+# HashiCorp Vault - Development Mode
+# NEVER use dev mode in production - this is for local development only
+
+version: '3.8'
+
+services:
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: nexus-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "nexus-dev-token"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      VAULT_ADDR: "http://127.0.0.1:8200"
+    cap_add:
+      - IPC_LOCK
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nexus-network
+    volumes:
+      - vault-data:/vault/data
+      - ./policies:/vault/policies:ro
+      - ./init-vault.sh:/vault/init-vault.sh:ro
+
+  vault-init:
+    image: hashicorp/vault:1.15
+    container_name: nexus-vault-init
+    depends_on:
+      vault:
+        condition: service_healthy
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+      VAULT_TOKEN: "nexus-dev-token"
+    entrypoint: ["/bin/sh", "/vault/init-vault.sh"]
+    volumes:
+      - ./init-vault.sh:/vault/init-vault.sh:ro
+      - ./policies:/vault/policies:ro
+    networks:
+      - nexus-network
+
+volumes:
+  vault-data:
+
+networks:
+  nexus-network:
+    external: true

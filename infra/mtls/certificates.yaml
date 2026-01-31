@@ -1,0 +1,186 @@
+# mTLS Configuration for Nexus RTP Platform
+# This uses cert-manager with a self-signed CA for local development
+# For production, use a proper CA (Let's Encrypt, internal PKI, etc.)
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: nexus-selfsigned-issuer
+spec:
+  selfSigned: {}
+
+---
+# Root CA Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nexus-ca
+  namespace: nexus-system
+spec:
+  isCA: true
+  commonName: nexus-ca
+  secretName: nexus-ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: nexus-selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+  duration: 87600h # 10 years
+  renewBefore: 720h # 30 days
+
+---
+# Issuer using the CA
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: nexus-ca-issuer
+  namespace: nexus-system
+spec:
+  ca:
+    secretName: nexus-ca-secret
+
+---
+# Payment Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: payment-service-tls
+  namespace: nexus-system
+spec:
+  secretName: payment-service-tls-secret
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - payment-service
+    - payment-service.nexus-system
+    - payment-service.nexus-system.svc
+    - payment-service.nexus-system.svc.cluster.local
+  issuerRef:
+    name: nexus-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+
+---
+# Account Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: account-service-tls
+  namespace: nexus-system
+spec:
+  secretName: account-service-tls-secret
+  duration: 2160h
+  renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - account-service
+    - account-service.nexus-system
+    - account-service.nexus-system.svc
+    - account-service.nexus-system.svc.cluster.local
+  issuerRef:
+    name: nexus-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+
+---
+# Reconciliation Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: reconciliation-service-tls
+  namespace: nexus-system
+spec:
+  secretName: reconciliation-service-tls-secret
+  duration: 2160h
+  renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - reconciliation-service
+    - reconciliation-service.nexus-system
+    - reconciliation-service.nexus-system.svc
+    - reconciliation-service.nexus-system.svc.cluster.local
+  issuerRef:
+    name: nexus-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+
+---
+# CockroachDB Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cockroachdb-tls
+  namespace: nexus-system
+spec:
+  secretName: cockroachdb-tls-secret
+  duration: 8760h # 1 year
+  renewBefore: 720h # 30 days
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - "*.cockroachdb"
+    - "*.cockroachdb.nexus-system"
+    - "*.cockroachdb.nexus-system.svc"
+    - "*.cockroachdb.nexus-system.svc.cluster.local"
+    - cockroachdb-public
+    - cockroachdb-public.nexus-system
+  issuerRef:
+    name: nexus-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+
+---
+# Kafka Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-tls
+  namespace: nexus-system
+spec:
+  secretName: kafka-tls-secret
+  duration: 8760h
+  renewBefore: 720h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - "*.kafka"
+    - "*.kafka.nexus-system"
+    - "*.kafka.nexus-system.svc"
+    - "*.kafka.nexus-system.svc.cluster.local"
+    - kafka
+    - kafka.nexus-system
+  issuerRef:
+    name: nexus-ca-issuer
+    kind: Issuer
+    group: cert-manager.io

@@ -1,0 +1,252 @@
+# Nexus RTP Platform - Alert Rules
+# Prometheus AlertManager configuration
+
+groups:
+  - name: nexus-payment-alerts
+    rules:
+      # ================================================================
+      # Payment Processing Alerts
+      # ================================================================
+      - alert: HighPaymentLatency
+        expr: histogram_quantile(0.95, sum(rate(payment_latency_bucket[5m])) by (le)) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: payment-service
+        annotations:
+          summary: "Payment latency P95 exceeds 1 second"
+          description: "Payment processing P95 latency is {{ $value }}ms, exceeding the 1000ms threshold."
+
+      - alert: CriticalPaymentLatency
+        expr: histogram_quantile(0.99, sum(rate(payment_latency_bucket[5m])) by (le)) > 3000
+        for: 2m
+        labels:
+          severity: critical
+          service: payment-service
+        annotations:
+          summary: "Payment latency P99 exceeds 3 seconds"
+          description: "Payment processing P99 latency is {{ $value }}ms. Immediate investigation required."
+
+      - alert: HighPaymentErrorRate
+        expr: sum(rate(payment_errors_total[5m])) / sum(rate(payment_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: payment-service
+        annotations:
+          summary: "Payment error rate exceeds 5%"
+          description: "Payment error rate is {{ $value | humanizePercentage }}."
+
+      - alert: PaymentServiceDown
+        expr: up{job="payment-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: payment-service
+        annotations:
+          summary: "Payment service is down"
+          description: "Payment service instance {{ $labels.instance }} is unreachable."
+
+      - alert: LowPaymentThroughput
+        expr: sum(rate(payment_requests_total[5m])) < 10
+        for: 10m
+        labels:
+          severity: warning
+          service: payment-service
+        annotations:
+          summary: "Unusually low payment throughput"
+          description: "Payment throughput is {{ $value }} RPS, which may indicate issues."
+
+  - name: nexus-fraud-alerts
+    rules:
+      # ================================================================
+      # Fraud Detection Alerts
+      # ================================================================
+      - alert: HighFraudAlertRate
+        expr: rate(fraud_alerts_total[1h]) > 100
+        for: 15m
+        labels:
+          severity: warning
+          service: fraud-detection
+        annotations:
+          summary: "High fraud alert rate detected"
+          description: "Fraud alert rate is {{ $value }}/hour. Possible attack or false positive surge."
+
+      - alert: CriticalFraudAlert
+        expr: increase(fraud_alerts_total{severity="CRITICAL"}[5m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          service: fraud-detection
+        annotations:
+          summary: "Multiple critical fraud alerts"
+          description: "{{ $value }} critical fraud alerts in the last 5 minutes."
+
+      - alert: FraudDetectionLag
+        expr: flink_fraud_detection_lag_seconds > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: fraud-detection
+        annotations:
+          summary: "Fraud detection processing lag"
+          description: "Fraud detection is lagging behind by {{ $value }} seconds."
+
+      - alert: FlinkJobManagerDown
+        expr: up{job="flink-jobmanager"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: fraud-detection
+        annotations:
+          summary: "Flink JobManager is down"
+          description: "Flink JobManager is unreachable. Fraud detection is not running."
+
+  - name: nexus-reconciliation-alerts
+    rules:
+      # ================================================================
+      # Reconciliation Alerts
+      # ================================================================
+      - alert: ReconciliationDiscrepancy
+        expr: reconciliation_discrepancies_total > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: reconciliation-service
+        annotations:
+          summary: "Reconciliation discrepancies detected"
+          description: "{{ $value }} reconciliation discrepancies require attention."
+
+      - alert: ReconciliationFailed
+        expr: reconciliation_cycle_status{status="FAILED"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: reconciliation-service
+        annotations:
+          summary: "Reconciliation cycle failed"
+          description: "Reconciliation cycle failed. Manual intervention required."
+
+      - alert: HighManualReviewBacklog
+        expr: reconciliation_manual_review_total > 100
+        for: 30m
+        labels:
+          severity: warning
+          service: reconciliation-service
+        annotations:
+          summary: "High reconciliation manual review backlog"
+          description: "{{ $value }} items pending manual review."
+
+  - name: nexus-infrastructure-alerts
+    rules:
+      # ================================================================
+      # CockroachDB Alerts
+      # ================================================================
+      - alert: CockroachDBNodeDown
+        expr: up{job="cockroachdb"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: cockroachdb
+        annotations:
+          summary: "CockroachDB node is down"
+          description: "CockroachDB node {{ $labels.instance }} is unreachable."
+
+      - alert: CockroachDBHighLatency
+        expr: histogram_quantile(0.99, rate(sql_exec_latency_bucket[5m])) > 500
+        for: 5m
+        labels:
+          severity: warning
+          service: cockroachdb
+        annotations:
+          summary: "CockroachDB query latency high"
+          description: "CockroachDB P99 query latency is {{ $value }}ms."
+
+      - alert: CockroachDBReplicationLag
+        expr: replication_lag_seconds > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: cockroachdb
+        annotations:
+          summary: "CockroachDB replication lag"
+          description: "Replication lag is {{ $value }} seconds."
+
+      # ================================================================
+      # Kafka Alerts
+      # ================================================================
+      - alert: KafkaBrokerDown
+        expr: up{job="kafka"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka broker is down"
+          description: "Kafka broker {{ $labels.instance }} is unreachable."
+
+      - alert: KafkaConsumerLag
+        expr: kafka_consumer_group_lag > 10000
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "Consumer group {{ $labels.group }} has lag of {{ $value }} messages."
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_server_replicamanager_underreplicatedpartitions > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka has under-replicated partitions"
+          description: "{{ $value }} partitions are under-replicated."
+
+      # ================================================================
+      # Redis Alerts
+      # ================================================================
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance {{ $labels.instance }} is unreachable."
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}."
+
+      # ================================================================
+      # Sanctions Screening Alerts
+      # ================================================================
+      - alert: WatchmanDown
+        expr: up{job="watchman"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: watchman
+        annotations:
+          summary: "Watchman sanctions service is down"
+          description: "Watchman is unreachable. Payment sanctions screening is not operational."
+
+      - alert: SanctionsScreeningLatency
+        expr: histogram_quantile(0.95, rate(sanctions_screening_latency_bucket[5m])) > 500
+        for: 5m
+        labels:
+          severity: warning
+          service: watchman
+        annotations:
+          summary: "Sanctions screening latency high"
+          description: "Sanctions screening P95 latency is {{ $value }}ms."

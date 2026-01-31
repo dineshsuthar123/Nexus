@@ -1,0 +1,140 @@
+{{/*
+Reconciliation Service Kubernetes Deployment
+Handles 3-way reconciliation, discrepancy detection, and auto-resolution
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus.fullname" . }}-reconciliation
+  labels:
+    {{- include "nexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reconciliation-service
+spec:
+  replicas: {{ .Values.reconciliationService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nexus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: reconciliation-service
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "nexus.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: reconciliation-service
+    spec:
+      serviceAccountName: {{ include "nexus.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: reconciliation-service
+          image: "{{ .Values.reconciliationService.image.repository }}:{{ .Values.reconciliationService.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.reconciliationService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8082
+              protocol: TCP
+          env:
+            - name: SERVICE_NAME
+              value: "reconciliation-service"
+            - name: ENVIRONMENT
+              value: {{ .Values.global.environment }}
+            - name: SERVER_PORT
+              value: "8082"
+            - name: DATABASE_URL
+              value: {{ include "nexus.databaseUrl" . }}
+            - name: JAEGER_ENDPOINT
+              value: "http://jaeger-collector:14268/api/traces"
+            - name: RECONCILIATION_AUTO_RESOLVE_ENABLED
+              value: "true"
+            - name: RECONCILIATION_ROUNDING_THRESHOLD
+              value: "0.01"
+            - name: SCHEDULER_RECONCILIATION_CRON
+              value: "0 0 2 * * *"
+            - name: SCHEDULER_REAL_TIME_ENABLED
+              value: "true"
+          resources:
+            {{- toYaml .Values.reconciliationService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: reconciliation-service
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nexus.fullname" . }}-reconciliation
+  labels:
+    {{- include "nexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reconciliation-service
+spec:
+  type: {{ .Values.reconciliationService.service.type }}
+  ports:
+    - port: {{ .Values.reconciliationService.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nexus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: reconciliation-service
+---
+{{- if .Values.reconciliationService.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nexus.fullname" . }}-reconciliation
+  labels:
+    {{- include "nexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reconciliation-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nexus.fullname" . }}-reconciliation
+  minReplicas: {{ .Values.reconciliationService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.reconciliationService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.reconciliationService.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.reconciliationService.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}

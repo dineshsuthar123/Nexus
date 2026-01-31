@@ -1,0 +1,99 @@
+# Kind cluster configuration for Nexus RTP development
+# Run: kind create cluster --config kind-config.yaml
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: nexus-rtp
+
+# Multi-node cluster for realistic testing
+nodes:
+  # Control plane
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # API Gateway (Kong)
+      - containerPort: 30080
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 30443
+        hostPort: 443
+        protocol: TCP
+      # Kafka external access
+      - containerPort: 30092
+        hostPort: 9092
+        protocol: TCP
+      # CockroachDB SQL
+      - containerPort: 30257
+        hostPort: 26257
+        protocol: TCP
+      # CockroachDB UI
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+      # Grafana
+      - containerPort: 30030
+        hostPort: 3000
+        protocol: TCP
+      # Prometheus
+      - containerPort: 30090
+        hostPort: 9090
+        protocol: TCP
+      # Jaeger UI
+      - containerPort: 30686
+        hostPort: 16686
+        protocol: TCP
+      # Flink Dashboard
+      - containerPort: 30081
+        hostPort: 8081
+        protocol: TCP
+
+  # Worker nodes for services
+  - role: worker
+    labels:
+      node-type: services
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "node-type=services"
+
+  - role: worker
+    labels:
+      node-type: services
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "node-type=services"
+
+  # Worker node for data stores
+  - role: worker
+    labels:
+      node-type: data
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "node-type=data"
+
+networking:
+  # Enable pod-to-pod networking
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/12"
+
+# Enable feature gates
+featureGates:
+  "TopologyAwareHints": true
+
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+      endpoint = ["http://kind-registry:5000"]

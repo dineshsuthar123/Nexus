@@ -1,0 +1,56 @@
+# Pre-commit hooks for Nexus RTP Platform
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: detect-aws-credentials
+        args: ['--allow-missing-credentials']
+
+  # Gitleaks - Secret scanning
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.1
+    hooks:
+      - id: gitleaks
+
+  # Go formatting and linting
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      - id: go-vet
+      - id: go-imports
+
+  # Custom PAN scanner
+  - repo: local
+    hooks:
+      - id: pan-scan
+        name: PAN/Secret Scanner
+        entry: bash security/pan-scan.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+
+      - id: no-hardcoded-secrets
+        name: Check for hardcoded secrets
+        entry: bash -c 'grep -rE "(password|secret|api_key)\s*=\s*\"[^$]" --include="*.go" --include="*.java" --include="*.yml" . && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
+
+      - id: no-localhost-in-prod-configs
+        name: Check for localhost in production configs
+        entry: bash -c 'grep -rE "localhost|127\.0\.0\.1" --include="values.yaml" --include="*-prod*.yml" . && echo "WARNING: localhost found in config" || exit 0'
+        language: system
+        pass_filenames: false
