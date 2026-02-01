@@ -1,0 +1,30 @@
+=== RUN   TestConservationOfMoney
+--- PASS: TestConservationOfMoney (0.12s)
+=== RUN   TestNonNegativeBalances
+--- PASS: TestNonNegativeBalances (0.08s)
+=== RUN   TestHashChainIntegrity
+--- PASS: TestHashChainIntegrity (0.15s)
+=== RUN   TestTemporalMonotonicity
+--- PASS: TestTemporalMonotonicity (0.09s)
+=== RUN   TestLedgerAccountConsistency
+--- PASS: TestLedgerAccountConsistency (0.11s)
+=== RUN   TestIdempotency
+--- PASS: TestIdempotency (0.05s)
+=== RUN   TestBalanceNeverNegative
+--- PASS: TestBalanceNeverNegative (0.07s)
+=== RUN   TestTransactionAtomicity
+--- PASS: TestTransactionAtomicity (0.06s)
+PASS
+ok      github.com/nexus-rtp/proofs     0.734s
+
+---
+
+To reproduce this output locally:
+
+    cd proofs
+    go test -v -count=1 ./...
+
+Expected: All 8 tests pass.
+
+If any test fails, it indicates an invariant violation.
+Report failures to: engineering@nexus-rtp.io

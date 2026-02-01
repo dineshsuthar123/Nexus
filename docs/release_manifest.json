@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-02-01T12:00:00Z",
+  "generator": "generate_whitepaper_release.sh",
+  "version": "1.0.0",
+  "files": [
+    {"path": "docs/whitepaper.md", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/executive_onepager.md", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/p0_gaps.md", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/roadmap_budget.csv", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/appendix/invariants_formal.md", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/appendix/property_tests.md", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/appendix/replay_cli.md", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/appendix/audit_bundle_example.json", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/appendix/mermaid_diagrams.md", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/appendix/example_test_output.txt", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"},
+    {"path": "docs/appendix/replay_digest_sample.txt", "sha256": "PLACEHOLDER_COMPUTE_WITH_SCRIPT"}
+  ],
+  "notes": [
+    "Run scripts/generate_whitepaper_release.sh to compute actual SHA256 hashes",
+    "Hashes will be populated automatically by the script",
+    "Verify hashes with: sha256sum -c (after extracting from this manifest)"
+  ]
+}

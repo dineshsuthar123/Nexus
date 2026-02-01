@@ -1,0 +1,128 @@
+{
+  "bundle_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "version": "1.0.0",
+  "created_at": "2026-01-31T23:59:59.999Z",
+  "period": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-01-31T23:59:59Z"
+  },
+  "metadata": {
+    "organization": "Nexus RTP Platform",
+    "environment": "production",
+    "region": "us-east-1",
+    "generated_by": "audit-bundle-signer-v1.0.0"
+  },
+  "transactions": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "idempotency_key": "client-req-001-2026-01-15",
+      "from_account": "acc-001-sender",
+      "to_account": "acc-002-receiver",
+      "amount": 1000000,
+      "currency": "USD",
+      "timestamp": "2026-01-15T10:30:00.123Z",
+      "status": "completed",
+      "hash": "a3f2c8d9e1b4f7a2c5d8e3f1a4b7c2d5e8f1a3b6c9d2e5f8a1b4c7d0e3f6a9b2",
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "metadata": {
+        "payment_type": "credit_transfer",
+        "reference": "INV-2026-001234"
+      }
+    },
+    {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "idempotency_key": "client-req-002-2026-01-15",
+      "from_account": "acc-003-sender",
+      "to_account": "acc-001-sender",
+      "amount": 500000,
+      "currency": "USD",
+      "timestamp": "2026-01-15T11:45:30.456Z",
+      "status": "completed",
+      "hash": "b4c7d0e3f6a9b2c5e8f1a4d7c0e3f6a9b2c5e8f1a4d7c0e3f6a9b2c5e8f1a4d7",
+      "prev_hash": "a3f2c8d9e1b4f7a2c5d8e3f1a4b7c2d5e8f1a3b6c9d2e5f8a1b4c7d0e3f6a9b2",
+      "metadata": {
+        "payment_type": "credit_transfer",
+        "reference": "INV-2026-001235"
+      }
+    }
+  ],
+  "transaction_count": 2,
+  "total_volume": {
+    "USD": 1500000
+  },
+  "merkle_root": "c5d8e1f4a7b0c3d6e9f2a5b8c1d4e7f0a3b6c9d2e5f8a1b4c7d0e3f6a9b2c5e8",
+  "balance_proofs": {
+    "acc-001-sender": {
+      "opening_balance": 10000000,
+      "closing_balance": 9500000,
+      "credits": 500000,
+      "debits": 1000000,
+      "transaction_count": 2,
+      "proof_hash": "d6e9f2a5b8c1d4e7f0a3b6c9d2e5f8a1b4c7d0e3f6a9b2c5e8f1a4d7c0e3f6a9"
+    },
+    "acc-002-receiver": {
+      "opening_balance": 5000000,
+      "closing_balance": 6000000,
+      "credits": 1000000,
+      "debits": 0,
+      "transaction_count": 1,
+      "proof_hash": "e7f0a3b6c9d2e5f8a1b4c7d0e3f6a9b2c5e8f1a4d7c0e3f6a9b2c5e8f1a4d7c0"
+    },
+    "acc-003-sender": {
+      "opening_balance": 8000000,
+      "closing_balance": 7500000,
+      "credits": 0,
+      "debits": 500000,
+      "transaction_count": 1,
+      "proof_hash": "f8a1b4c7d0e3f6a9b2c5e8f1a4d7c0e3f6a9b2c5e8f1a4d7c0e3f6a9b2c5e8f1"
+    }
+  },
+  "invariant_results": {
+    "I1_conservation": {
+      "verified": true,
+      "total_before": 23000000,
+      "total_after": 23000000,
+      "delta": 0
+    },
+    "I2_non_negative": {
+      "verified": true,
+      "accounts_checked": 3,
+      "violations": 0
+    },
+    "I3_hash_chain": {
+      "verified": true,
+      "entries_checked": 2,
+      "chain_intact": true
+    },
+    "I4_temporal": {
+      "verified": true,
+      "entries_checked": 2,
+      "ordering_valid": true
+    },
+    "I5_consistency": {
+      "verified": true,
+      "accounts_reconciled": 3,
+      "discrepancies": 0
+    }
+  },
+  "signature": {
+    "algorithm": "Ed25519",
+    "public_key": "MCowBQYDK2VwAyEAGb9F2CMlxjm3N8ABE4C9iH5sZv8VpCKP0Qf9p+K8vZI=",
+    "signature": "PLACEHOLDER_SIGNATURE_IN_PRODUCTION_USE_VAULT_TRANSIT_OR_HSM_FOR_SIGNING_THIS_IS_A_BASE64_ENCODED_ED25519_SIGNATURE_OF_THE_CANONICAL_BUNDLE",
+    "signed_at": "2026-01-31T23:59:59.999Z",
+    "signer_id": "audit-bundle-signer-prod-001",
+    "key_version": 1
+  },
+  "chain": {
+    "previous_bundle_id": "e36ab09a-47bb-3261-9456-1d13a1b2c478",
+    "previous_bundle_hash": "a9b2c5e8f1a4d7c0e3f6a9b2c5e8f1a4d7c0e3f6a9b2c5e8f1a4d7c0e3f6a9b2",
+    "sequence_number": 31,
+    "chain_start": "2025-07-01T00:00:00Z"
+  },
+  "notes": [
+    "In production, the signature field must be computed using Vault Transit or HSM.",
+    "The public_key field contains a sample Ed25519 public key in SPKI format.",
+    "This bundle represents 2 transactions for demonstration purposes.",
+    "Schema: audit/audit_bundle_schema.json (commit 0236779)"
+  ]
+}

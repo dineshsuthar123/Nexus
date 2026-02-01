@@ -1,0 +1,335 @@
+# Nexus RTP Load Testing Framework
+# k6 Configuration for regulator-grade performance validation
+
+# ==============================================================================
+# LOAD PROFILES
+# ==============================================================================
+
+profiles:
+  # Baseline: Normal day operations
+  baseline:
+    description: "Average weekday transaction volume"
+    vus: 100
+    duration: "30m"
+    target_tps: 1000
+    ramp_up: "2m"
+    scenarios:
+      - payment_transfer: 60%
+      - balance_inquiry: 25%
+      - fx_conversion: 10%
+      - reversal: 5%
+
+  # Peak: Black Friday / Month-end payroll
+  peak:
+    description: "Peak load - 10x baseline"
+    vus: 1000
+    duration: "1h"
+    target_tps: 10000
+    ramp_up: "5m"
+    scenarios:
+      - payment_transfer: 70%
+      - balance_inquiry: 20%
+      - fx_conversion: 8%
+      - reversal: 2%
+
+  # Stress: Find breaking point
+  stress:
+    description: "Stress test to find system limits"
+    stages:
+      - duration: "5m"
+        target: 100
+      - duration: "10m"
+        target: 500
+      - duration: "10m"
+        target: 1000
+      - duration: "10m"
+        target: 2000
+      - duration: "10m"
+        target: 5000
+      - duration: "5m"
+        target: 100  # Recovery
+    target_tps: "dynamic"
+
+  # Soak: 24-hour endurance
+  soak:
+    description: "Long-running stability test"
+    vus: 200
+    duration: "24h"
+    target_tps: 2000
+    check_intervals: "1h"
+    alert_thresholds:
+      p99_latency_increase: "10%"
+      error_rate_increase: "0.1%"
+      memory_increase: "20%"
+
+  # Spike: Flash sale / Breaking news
+  spike:
+    description: "Sudden traffic spike simulation"
+    stages:
+      - duration: "5m"
+        target: 100
+      - duration: "1m"
+        target: 5000  # Instant spike
+      - duration: "5m"
+        target: 5000  # Hold
+      - duration: "1m"
+        target: 100   # Instant drop
+      - duration: "5m"
+        target: 100
+
+# ==============================================================================
+# SLO TARGETS
+# ==============================================================================
+
+slo_targets:
+  latency:
+    p50: "10ms"
+    p95: "50ms"
+    p99: "100ms"
+    p999: "500ms"
+  
+  availability:
+    target: "99.99%"
+    error_budget_monthly: "4.32m"  # 4 minutes 19 seconds
+  
+  throughput:
+    sustained: "10000 TPS"
+    burst: "50000 TPS"
+    burst_duration: "60s"
+  
+  durability:
+    target: "99.999999999%"  # 11 nines
+    data_loss_tolerance: "0 transactions"
+
+# ==============================================================================
+# SCENARIOS
+# ==============================================================================
+
+scenarios:
+  payment_transfer:
+    description: "Standard account-to-account transfer"
+    weight: 60
+    steps:
+      - name: "create_payment"
+        method: "POST"
+        endpoint: "/api/v1/payments"
+        payload:
+          source_account: "{{ .source_account }}"
+          destination_account: "{{ .dest_account }}"
+          amount: "{{ .amount }}"
+          currency: "{{ .currency }}"
+          idempotency_key: "{{ .uuid }}"
+        expected_status: [201, 202]
+        timeout: "5s"
+      - name: "verify_completion"
+        method: "GET"
+        endpoint: "/api/v1/payments/{{ .payment_id }}/status"
+        expected_status: [200]
+        expected_body:
+          status: "COMPLETED"
+        max_retries: 3
+        retry_interval: "100ms"
+
+  balance_inquiry:
+    description: "Account balance check"
+    weight: 25
+    steps:
+      - name: "get_balance"
+        method: "GET"
+        endpoint: "/api/v1/accounts/{{ .account_id }}/balance"
+        expected_status: [200]
+        timeout: "2s"
+        cache_check: true
+
+  fx_conversion:
+    description: "Foreign exchange conversion"
+    weight: 10
+    steps:
+      - name: "get_quote"
+        method: "POST"
+        endpoint: "/api/v1/fx/quote"
+        payload:
+          source_currency: "{{ .source_currency }}"
+          target_currency: "{{ .target_currency }}"
+          amount: "{{ .amount }}"
+        expected_status: [200]
+        timeout: "1s"
+      - name: "execute_conversion"
+        method: "POST"
+        endpoint: "/api/v1/fx/convert"
+        payload:
+          quote_id: "{{ .quote_id }}"
+          idempotency_key: "{{ .uuid }}"
+        expected_status: [201]
+        timeout: "5s"
+
+  reversal:
+    description: "Payment reversal"
+    weight: 5
+    steps:
+      - name: "request_reversal"
+        method: "POST"
+        endpoint: "/api/v1/payments/{{ .payment_id }}/reverse"
+        payload:
+          reason: "{{ .reversal_reason }}"
+          idempotency_key: "{{ .uuid }}"
+        expected_status: [201, 202]
+        timeout: "5s"
+
+# ==============================================================================
+# TEST DATA
+# ==============================================================================
+
+test_data:
+  accounts:
+    pool_size: 100000
+    distribution:
+      high_volume: 1%      # >1000 tx/day
+      medium_volume: 9%    # 100-1000 tx/day
+      low_volume: 90%      # <100 tx/day
+    currencies:
+      - USD: 40%
+      - EUR: 25%
+      - GBP: 15%
+      - JPY: 10%
+      - CNY: 5%
+      - OTHER: 5%
+
+  amounts:
+    distribution: "pareto"  # 80/20 rule
+    min: 1                  # $0.01
+    max: 10000000          # $100,000.00
+    median: 15000          # $150.00
+
+  fx_pairs:
+    - USD/EUR
+    - USD/GBP
+    - EUR/GBP
+    - USD/JPY
+    - EUR/JPY
+
+# ==============================================================================
+# INFRASTRUCTURE
+# ==============================================================================
+
+infrastructure:
+  load_generators:
+    type: "k6"
+    instances: 10
+    regions:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+      - ap-southeast-1
+    
+  target:
+    api_gateway: "https://api.nexus-rtp.internal"
+    direct_service: "https://payment-service.nexus-rtp.internal:8443"
+
+  monitoring:
+    prometheus: "http://prometheus.nexus-rtp.internal:9090"
+    grafana: "http://grafana.nexus-rtp.internal:3000"
+    dashboard_id: "nexus-load-test"
+
+# ==============================================================================
+# THRESHOLDS
+# ==============================================================================
+
+thresholds:
+  # Request-level
+  http_req_duration:
+    - "p(50)<10"
+    - "p(95)<50"
+    - "p(99)<100"
+    - "max<1000"
+  
+  http_req_failed:
+    - "rate<0.001"  # <0.1% error rate
+  
+  # Scenario-level
+  payment_transfer_duration:
+    - "p(99)<200"
+  
+  balance_inquiry_duration:
+    - "p(99)<50"
+  
+  fx_conversion_duration:
+    - "p(99)<300"
+
+  # System-level
+  iteration_duration:
+    - "p(95)<1000"
+
+  # Custom metrics
+  payments_completed:
+    - "rate>0.999"  # 99.9% completion rate
+  
+  invariant_violations:
+    - "count==0"    # Zero tolerance
+
+# ==============================================================================
+# CHAOS ENGINEERING
+# ==============================================================================
+
+chaos:
+  enabled: true
+  experiments:
+    - name: "pod_failure"
+      target: "payment-service"
+      type: "pod-kill"
+      percentage: 30
+      interval: "10m"
+      duration: "30s"
+    
+    - name: "network_latency"
+      target: "cockroach"
+      type: "network-delay"
+      latency: "100ms"
+      jitter: "50ms"
+      duration: "5m"
+    
+    - name: "cpu_pressure"
+      target: "fraud-detection"
+      type: "cpu-stress"
+      load: 80
+      duration: "10m"
+    
+    - name: "kafka_partition_loss"
+      target: "kafka"
+      type: "partition-loss"
+      partitions: [0, 1]
+      duration: "2m"
+
+# ==============================================================================
+# REPORTING
+# ==============================================================================
+
+reporting:
+  formats:
+    - json
+    - html
+    - pdf
+  
+  storage:
+    type: "s3"
+    bucket: "nexus-load-test-results"
+    prefix: "{{ .timestamp }}/{{ .profile }}"
+  
+  notifications:
+    slack:
+      channel: "#platform-performance"
+      on_failure: true
+      on_success: true
+    
+    pagerduty:
+      service_key: "{{ .env.PAGERDUTY_KEY }}"
+      on_failure: true
+      severity: "warning"
+
+  artifacts:
+    - summary.json
+    - detailed_metrics.json
+    - latency_histogram.png
+    - throughput_over_time.png
+    - error_breakdown.json
+    - system_resources.json

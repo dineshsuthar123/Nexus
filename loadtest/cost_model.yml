@@ -1,0 +1,429 @@
+# Nexus RTP Total Cost of Ownership (TCO) Model
+# All costs in USD per month unless specified
+
+# ==============================================================================
+# INFRASTRUCTURE SIZING
+# ==============================================================================
+
+sizing:
+  tps_targets:
+    baseline: 1000      # Normal operations
+    peak: 10000        # Peak load (10x)
+    burst: 50000       # Short burst capacity
+    
+  transaction_volume:
+    daily: 86_400_000   # 1000 TPS × 86400 seconds
+    monthly: 2_592_000_000
+    annual: 31_536_000_000
+    
+  data_growth:
+    transaction_size_bytes: 2048      # Average transaction record
+    daily_data_gb: 168.75             # 86.4M × 2KB
+    monthly_data_gb: 5062.5           # 2.5B × 2KB
+    retention_months: 84              # 7 years regulatory
+    total_storage_tb: 425             # 7 years accumulated
+
+# ==============================================================================
+# COMPUTE COSTS
+# ==============================================================================
+
+compute:
+  kubernetes:
+    # Control plane
+    eks_cluster:
+      count: 3                        # Multi-region
+      cost_per_cluster: 144           # $0.20/hr
+      monthly: 432
+      
+    # Worker nodes - Production
+    nodes_payment_service:
+      instance_type: "c6i.2xlarge"
+      count: 6
+      on_demand_hourly: 0.34
+      reserved_1yr_hourly: 0.21
+      spot_hourly: 0.12
+      strategy: "70% reserved, 20% on-demand, 10% spot"
+      monthly_blended: 1094
+      
+    nodes_fraud_detection:
+      instance_type: "c6i.4xlarge"
+      count: 4
+      on_demand_hourly: 0.68
+      reserved_1yr_hourly: 0.42
+      monthly_blended: 1464
+      
+    nodes_reconciliation:
+      instance_type: "m6i.xlarge"
+      count: 3
+      on_demand_hourly: 0.192
+      reserved_1yr_hourly: 0.12
+      monthly_blended: 312
+      
+    nodes_general:
+      instance_type: "m6i.2xlarge"
+      count: 4
+      monthly_blended: 832
+      
+    total_compute_monthly: 4134
+    
+  # Auto-scaling headroom
+  scaling_headroom:
+    percentage: 30
+    additional_monthly: 1240
+    
+  compute_total_monthly: 5374
+
+# ==============================================================================
+# DATABASE COSTS
+# ==============================================================================
+
+database:
+  cockroachdb:
+    deployment: "Dedicated (self-managed on EC2)"
+    
+    # Primary cluster
+    primary_nodes:
+      instance_type: "i3.2xlarge"     # NVMe SSD for IOPS
+      count: 5                        # 5-node for HA
+      on_demand_hourly: 0.624
+      reserved_1yr_hourly: 0.39
+      monthly_blended: 1404
+      
+    # DR cluster
+    dr_nodes:
+      instance_type: "i3.xlarge"
+      count: 3
+      monthly_blended: 421
+      
+    # Storage
+    ebs_storage:
+      type: "io2"
+      size_gb: 2000
+      iops: 64000
+      cost_per_gb: 0.125
+      cost_per_iops: 0.065
+      monthly: 4410
+      
+    # Backup storage
+    backup_s3:
+      monthly_gb: 5000
+      cost_per_gb: 0.023
+      monthly: 115
+      
+    cockroach_total: 6350
+    
+  redis:
+    deployment: "ElastiCache"
+    node_type: "r6g.xlarge"
+    nodes: 6                          # 3 primary + 3 replica
+    monthly_per_node: 219
+    monthly_total: 1314
+    
+  database_total_monthly: 7664
+
+# ==============================================================================
+# MESSAGE QUEUE COSTS
+# ==============================================================================
+
+messaging:
+  kafka:
+    deployment: "MSK (Managed Kafka)"
+    
+    brokers:
+      instance_type: "kafka.m5.2xlarge"
+      count: 6                        # 3 AZs × 2 brokers
+      monthly_per_broker: 489
+      monthly_total: 2934
+      
+    storage:
+      gb_per_broker: 1000
+      retention_hours: 168            # 7 days
+      cost_per_gb: 0.10
+      monthly_total: 600
+      
+    data_transfer:
+      monthly_gb: 50000
+      cross_az_per_gb: 0.01
+      monthly: 500
+      
+    kafka_total: 4034
+
+# ==============================================================================
+# NETWORKING COSTS
+# ==============================================================================
+
+networking:
+  load_balancers:
+    nlb:
+      count: 3                        # Multi-region
+      hourly: 0.0225
+      monthly_fixed: 48.6
+      lcu_hourly: 0.006
+      estimated_lcu: 100
+      monthly_total: 480
+      
+    alb:
+      count: 2
+      monthly_total: 216
+      
+  data_transfer:
+    outbound:
+      monthly_gb: 100000
+      first_10tb: 0.09
+      next_40tb: 0.085
+      over_50tb: 0.07
+      monthly: 7850
+      
+    cross_region:
+      monthly_gb: 20000
+      per_gb: 0.02
+      monthly: 400
+      
+    vpc_endpoints:
+      count: 10
+      hourly: 0.01
+      monthly: 72
+      
+  networking_total_monthly: 9018
+
+# ==============================================================================
+# SECURITY & COMPLIANCE
+# ==============================================================================
+
+security:
+  hashicorp_vault:
+    deployment: "Self-managed HA"
+    nodes: 3
+    instance_type: "m5.large"
+    monthly_compute: 187
+    
+  waf:
+    aws_waf:
+      web_acl: 5
+      rules: 50
+      requests_million: 100
+      monthly: 345
+      
+  kms:
+    keys: 20
+    requests_million: 10
+    monthly: 50
+    
+  certificates:
+    acm: 0                            # Free with AWS
+    external_ca: 500                  # Annual / 12
+    
+  security_scanning:
+    container_scanning: 200
+    sast_sca: 500
+    
+  security_total_monthly: 1782
+
+# ==============================================================================
+# OBSERVABILITY
+# ==============================================================================
+
+observability:
+  prometheus:
+    deployment: "Amazon Managed Prometheus"
+    metrics_ingested_million: 500
+    cost_per_10k: 0.90
+    monthly: 450
+    
+  grafana:
+    deployment: "Amazon Managed Grafana"
+    editors: 5
+    viewers: 50
+    monthly: 500
+    
+  logging:
+    cloudwatch_logs:
+      ingestion_gb: 1000
+      storage_gb: 5000
+      per_gb_ingest: 0.50
+      per_gb_storage: 0.03
+      monthly: 650
+      
+  tracing:
+    x_ray:
+      traces_million: 100
+      per_million: 5
+      monthly: 500
+      
+  alerting:
+    pagerduty: 500
+    
+  observability_total_monthly: 2600
+
+# ==============================================================================
+# DISASTER RECOVERY
+# ==============================================================================
+
+disaster_recovery:
+  cross_region_replication:
+    s3: 200
+    database: 500
+    
+  dr_environment:
+    warm_standby:
+      percentage_of_prod: 30
+      monthly: 4000                   # Reduced capacity
+      
+  backup_storage:
+    s3_glacier:
+      monthly_tb: 100
+      per_tb: 4
+      monthly: 400
+      
+  dr_total_monthly: 5100
+
+# ==============================================================================
+# THIRD-PARTY SERVICES
+# ==============================================================================
+
+third_party:
+  fraud_detection_ml:
+    model_inference:
+      sagemaker_endpoint: 1200
+      
+  fx_rate_feeds:
+    bloomberg: 3000                   # Estimated
+    refinitiv: 2500                   # Backup
+    
+  kyc_aml:
+    provider_api: 5000                # Per transaction volume
+    
+  third_party_total_monthly: 11700
+
+# ==============================================================================
+# PERSONNEL (OPTIONAL - FOR COMPLETE TCO)
+# ==============================================================================
+
+personnel:
+  enabled: true                       # Set false to exclude from TCO
+  
+  engineering:
+    senior_engineers: 4
+    avg_salary: 180000
+    fully_loaded_multiplier: 1.3
+    monthly: 78000
+    
+  sre:
+    engineers: 2
+    avg_salary: 160000
+    fully_loaded_multiplier: 1.3
+    monthly: 34667
+    
+  security:
+    engineers: 1
+    avg_salary: 170000
+    monthly: 18417
+    
+  oncall:
+    stipend_per_person: 500
+    people_in_rotation: 6
+    monthly: 3000
+    
+  personnel_total_monthly: 134084
+
+# ==============================================================================
+# COST SUMMARY
+# ==============================================================================
+
+summary:
+  infrastructure:
+    compute: 5374
+    database: 7664
+    messaging: 4034
+    networking: 9018
+    security: 1782
+    observability: 2600
+    disaster_recovery: 5100
+    third_party: 11700
+    subtotal: 47272
+    
+  personnel:
+    total: 134084
+    
+  totals:
+    infrastructure_only:
+      monthly: 47272
+      annual: 567264
+      
+    with_personnel:
+      monthly: 181356
+      annual: 2176272
+      
+  per_transaction:
+    # Based on 2.5B transactions/month
+    infrastructure_only: 0.0000189      # $0.0189 per 1000 tx
+    with_personnel: 0.0000725           # $0.0725 per 1000 tx
+    
+  comparison:
+    stripe_per_transaction: 0.029       # 2.9% + $0.30
+    visa_per_transaction: 0.0015        # Interchange only
+    nexus_per_transaction: 0.0000189    # Infrastructure only
+    
+    # For $100 transaction
+    stripe_fee: 3.20
+    visa_fee: 0.15
+    nexus_infrastructure_cost: 0.002
+
+# ==============================================================================
+# COST OPTIMIZATION OPPORTUNITIES
+# ==============================================================================
+
+optimization:
+  reserved_instances:
+    current_coverage: 70
+    target_coverage: 90
+    potential_savings_monthly: 2500
+    
+  spot_instances:
+    eligible_workloads:
+      - batch_reconciliation
+      - load_testing
+      - dev_environments
+    potential_savings_monthly: 1000
+    
+  storage_tiering:
+    glacier_migration:
+      eligible_gb: 200000
+      savings_per_gb: 0.02
+      potential_savings_monthly: 4000
+      
+  right_sizing:
+    overprovisioned_instances: 8
+    potential_savings_monthly: 800
+    
+  total_optimization_potential: 8300
+  optimized_infrastructure_monthly: 38972
+
+# ==============================================================================
+# SCALING PROJECTIONS
+# ==============================================================================
+
+scaling:
+  # Cost scales sub-linearly due to economies of scale
+  projections:
+    - tps: 1000
+      monthly_cost: 47272
+      cost_per_tx: 0.0000189
+      
+    - tps: 5000
+      monthly_cost: 82000              # 1.7x cost for 5x volume
+      cost_per_tx: 0.0000127
+      
+    - tps: 10000
+      monthly_cost: 120000             # 2.5x cost for 10x volume
+      cost_per_tx: 0.0000093
+      
+    - tps: 50000
+      monthly_cost: 350000             # 7.4x cost for 50x volume
+      cost_per_tx: 0.0000054
+      
+  notes:
+    - "Database costs scale with IOPS, not linearly with TPS"
+    - "Kafka costs scale with retention, not throughput"
+    - "Reserved instance discounts improve at higher scale"
+    - "Engineering costs relatively fixed up to 50,000 TPS"
