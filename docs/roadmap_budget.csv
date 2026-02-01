@@ -1,0 +1,32 @@
+phase,weeks,cost_usd,category,personnel_notes
+Q1: Core Hardening,1-8,515000,Total,
+HSM Integration,1-4,75000,Infrastructure,"2 engineers × 4 weeks, CloudHSM setup"
+Distributed Tracing,3-5,45000,Engineering,"1 engineer × 3 weeks, OpenTelemetry + Jaeger"
+Rate Limiting,5-6,30000,Engineering,"1 engineer × 2 weeks, Redis-based"
+API Documentation,7-8,30000,Engineering,"1 engineer × 2 weeks, OpenAPI spec"
+Personnel Q1,1-8,335000,Personnel,"8 FTE × 2 months"
+Q2: Security Maturity,9-16,615000,Total,
+PCI-DSS Gap Assessment,9-12,75000,Compliance,"1 engineer + QSA engagement"
+Penetration Testing,10-14,100000,Security,"External vendor (NCC/Bishop Fox)"
+Chaos Engineering,13-15,45000,Engineering,"1 engineer × 3 weeks, LitmusChaos"
+SOC 2 Type I Prep,14-16,60000,Compliance,"2 engineers × 4 weeks + auditor"
+Personnel Q2,9-16,335000,Personnel,"8 FTE × 2 months"
+Q3: Scale & Ops,17-28,570000,Total,
+Multi-Region Setup,17-22,200000,Infrastructure,"CockroachDB enterprise, 3 regions"
+Kafka MirrorMaker2,20-22,35000,Infrastructure,"Cross-region replication"
+Global Load Balancing,23-24,25000,Infrastructure,"Cloudflare enterprise"
+Load Testing at Scale,25-26,40000,Engineering,"2 engineers × 2 weeks, k6 cluster"
+Disaster Recovery,27-28,30000,Engineering,"DR drills and documentation"
+Personnel Q3,17-28,240000,Personnel,"6 FTE × 3 months (some ramp-down)"
+Q4: Certification,29-40,640000,Total,
+PCI-DSS Certification,29-36,100000,Compliance,"QSA assessment and remediation"
+SOC 2 Type II,33-40,75000,Compliance,"6-month observation + audit"
+FedNow Prep,29-40,125000,Engineering,"3 engineers, Federal Reserve certification"
+Personnel Q4,29-40,340000,Personnel,"8 FTE × 3 months"
+Summary,,,,
+Total Personnel,1-40,1600000,Personnel,"8 FTE average across 10 months"
+Total Infrastructure,1-40,325000,Infrastructure,"Multi-region, HSM, Kafka"
+Total HSM,1-40,75000,Security,"CloudHSM cluster"
+Total Security Testing,1-40,150000,Security,"Pen testing, chaos engineering"
+Total Compliance,1-40,190000,Compliance,"PCI, SOC 2, FedNow"
+Grand Total,1-40,2340000,All Categories,
