@@ -3,9 +3,11 @@ package db
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -56,9 +58,13 @@ func (p *Pool) RetryTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 			return nil
 		}
 
-		// Check for CockroachDB retry error (40001)
-		if pgErr, ok := err.(*pgxpool.Pool); ok {
-			_ = pgErr // Retry on serialization failure
+		// Check for CockroachDB retry error (40001 - serialization failure)
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "40001" {
+			time.Sleep(time.Duration(i*100) * time.Millisecond)
+			continue
+		}
+		// Also check for string-based retry hint
+		if strings.Contains(err.Error(), "retry transaction") {
 			time.Sleep(time.Duration(i*100) * time.Millisecond)
 			continue
 		}

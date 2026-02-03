@@ -113,3 +113,17 @@ redis-data/
 
 # Build artifacts
 artifacts/
+
+# Next.js
+.next/
+**/.next/
+out/
+**/out/
+
+# Playwright
+playwright-report/
+test-results/
+.auth/
+
+# Storybook
+storybook-static/

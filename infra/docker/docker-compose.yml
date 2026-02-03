@@ -419,7 +419,7 @@ services:
     hostname: watchman
     ports:
       - "8084:8084"
-      - "9094:9094"
+      - "19094:9094"
     environment:
       LOG_FORMAT: json
       HTTP_BIND_ADDRESS: ":8084"

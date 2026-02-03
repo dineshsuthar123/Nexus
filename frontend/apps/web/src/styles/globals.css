@@ -1,0 +1,79 @@
+@import '@nexus/ui/styles.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App-specific global styles */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50;
+  }
+}
+
+@layer components {
+  /* Dashboard layout */
+  .dashboard-container {
+    @apply min-h-screen;
+  }
+
+  .dashboard-sidebar {
+    @apply fixed inset-y-0 left-0 z-50 w-64 transform border-r border-neutral-200 bg-white transition-transform duration-200 ease-in-out dark:border-neutral-800 dark:bg-neutral-900;
+  }
+
+  .dashboard-main {
+    @apply ml-0 transition-all duration-200 ease-in-out lg:ml-64;
+  }
+
+  /* Page header */
+  .page-header {
+    @apply mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-3xl;
+  }
+
+  .page-description {
+    @apply mt-1 text-sm text-neutral-500 dark:text-neutral-400;
+  }
+
+  /* Stats grid */
+  .stats-grid {
+    @apply grid gap-4 sm:grid-cols-2 lg:grid-cols-4;
+  }
+}
+
+@layer utilities {
+  /* Custom scrollbar for the app */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.neutral.300') transparent;
+  }
+
+  .dark .custom-scrollbar {
+    scrollbar-color: theme('colors.neutral.600') transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: theme('colors.neutral.300');
+    border-radius: 4px;
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: theme('colors.neutral.600');
+  }
+}

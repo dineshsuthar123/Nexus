@@ -1,0 +1,73 @@
+# Push and PR Instructions
+
+If you need to apply this patch and push manually, follow these steps:
+
+## 1. Apply the Patch
+
+```bash
+cd /path/to/fintechP
+
+# Create the branch if it doesn't exist
+git checkout phase1/ledger-proofs
+git checkout -b phase7/whitepaper
+
+# Apply the patch
+git am < phase7_whitepaper.patch
+
+# Or apply without commits:
+git apply phase7_whitepaper.patch
+```
+
+## 2. Push the Branch
+
+```bash
+git push -u origin phase7/whitepaper
+```
+
+## 3. Create Draft Pull Request
+
+Visit: https://github.com/dineshsuthar123/Nexus/pull/new/phase7/whitepaper
+
+Or use GitHub CLI:
+
+```bash
+gh pr create \
+    --draft \
+    --title "phase7: whitepaper + deliverables (Phase 7A)" \
+    --body-file docs/PR_DESCRIPTION.md \
+    --base phase1/ledger-proofs \
+    --head phase7/whitepaper
+```
+
+## 4. Add Reviewers
+
+```bash
+gh pr edit --add-reviewer @tech-lead,@security-lead,@product-lead
+```
+
+## Files in Patch
+
+1. `docs/whitepaper.md` - Main whitepaper
+2. `docs/executive_onepager.md` - One-page summary
+3. `docs/appendix/invariants_formal.md` - Formal math
+4. `docs/appendix/property_tests.md` - Test documentation
+5. `docs/appendix/example_test_output.txt` - Expected output
+6. `docs/appendix/replay_cli.md` - CLI documentation
+7. `docs/appendix/audit_bundle_example.json` - Sample bundle
+8. `docs/appendix/replay_digest_sample.txt` - Digest sample
+9. `docs/appendix/mermaid_diagrams.md` - Diagrams
+10. `docs/roadmap_budget.csv` - Budget breakdown
+11. `docs/p0_gaps.md` - Production gaps
+12. `scripts/generate_whitepaper_release.sh` - Release script
+13. `docs/release_manifest.json` - File manifest
+14. `docs/acceptance_criteria.json` - Verification criteria
+15. `docs/PR_DESCRIPTION.md` - PR body
+
+## Verify Patch Integrity
+
+```bash
+sha256sum phase7_whitepaper.patch
+```
+
+---
+Generated: 2026-02-01
