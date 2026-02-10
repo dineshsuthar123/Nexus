@@ -1,0 +1,13 @@
+{
+  "name": "Nexus RTP",
+  "short_name": "Nexus",
+  "description": "Enterprise-grade real-time payments infrastructure",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071226",
+  "theme_color": "#0F1724",
+  "icons": [
+    { "src": "/favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/favicon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

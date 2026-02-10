@@ -30,8 +30,10 @@ export const metadata: Metadata = {
     follow: false,
   },
   icons: {
-    icon: '/favicon.ico',
-    apple: '/apple-touch-icon.png',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/favicon.svg',
   },
   manifest: '/manifest.json',
 };
