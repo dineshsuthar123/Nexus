@@ -86,6 +86,49 @@ export {
   useInvalidateAuditBundles,
 } from './use-audit';
 
+// Notification hooks
+export {
+  notificationKeys,
+  useNotificationList,
+  useNotificationPreferences,
+  useCreateNotification,
+  useMarkNotificationRead,
+  useMarkAllNotificationsRead,
+  useUpdateNotificationPreferences,
+  useInvalidateNotifications,
+} from './use-notifications';
+
+// Notification types (re-export for convenience)
+export type {
+  Notification as NotificationItem,
+  PaginatedNotifications,
+  NotificationPreference,
+  CreateNotificationRequest,
+  UpdatePreferenceRequest,
+} from './use-notifications';
+
+// User & Settings hooks
+export {
+  userKeys,
+  useUserProfile,
+  useUpdateProfile,
+  useChangePassword,
+  useAPIKeys,
+  useCreateAPIKey,
+  useRevokeAPIKey,
+  useInvalidateUserData,
+} from './use-user';
+
+// User types (re-export for convenience)
+export type {
+  UserProfile,
+  UpdateProfileRequest,
+  ChangePasswordRequest,
+  APIKey,
+  CreateAPIKeyRequest,
+  CreateAPIKeyResponse,
+} from './use-user';
+
 // WebSocket hooks (re-export from websocket module)
 export {
   useAccountUpdates,

@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -99,9 +100,9 @@ func InitTracer(jaegerEndpoint, serviceName string) (func(context.Context) error
 // GinLogger returns a Gin middleware that logs requests with zap.
 func GinLogger(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		start := gin.TimeFunc()
+		start := time.Now()
 		c.Next()
-		duration := gin.TimeFunc().Sub(start)
+		duration := time.Since(start)
 
 		statusStr := string(rune(c.Writer.Status()/100) + '0')
 		httpRequestsTotal.WithLabelValues(c.Request.Method, c.FullPath(), statusStr).Inc()

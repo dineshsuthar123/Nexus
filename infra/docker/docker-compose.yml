@@ -664,6 +664,35 @@ services:
       - cockroachdb-1
 
   # ============================================================================
+  # Notification Service - Notification management & delivery
+  # ============================================================================
+  notification-service:
+    build:
+      context: ../../services/notification-service
+      dockerfile: Dockerfile
+    container_name: nexus-notification-service
+    hostname: notification-service
+    profiles:
+      - services
+    ports:
+      - "8092:8080"
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka-1:29092
+      KAFKA_TOPIC: nexus.notifications
+      SMTP_ENABLED: "false"
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+      - redis
+      - kafka-1
+
+  # ============================================================================
   # Kong Route Init - Configures API gateway routes
   # ============================================================================
   kong-init:
@@ -682,6 +711,7 @@ services:
         # Auth service
         curl -s -X PUT http://kong:8001/services/auth-service -d name=auth-service -d url=http://auth-service:8080
         curl -s -X PUT http://kong:8001/services/auth-service/routes/auth-routes -d "name=auth-routes" -d "paths[]=/api/v1/auth" -d "strip_path=false"
+        curl -s -X PUT http://kong:8001/services/auth-service/routes/user-routes -d "name=user-routes" -d "paths[]=/api/v1/users" -d "strip_path=false"
 
         # Payment service
         curl -s -X PUT http://kong:8001/services/payment-service -d name=payment-service -d url=http://payment-service:8080
@@ -704,6 +734,10 @@ services:
         # Audit service
         curl -s -X PUT http://kong:8001/services/audit-service -d name=audit-service -d url=http://audit-service:8080
         curl -s -X PUT http://kong:8001/services/audit-service/routes/audit-routes -d "name=audit-routes" -d "paths[]=/api/v1/audit" -d "strip_path=false"
+
+        # Notification service
+        curl -s -X PUT http://kong:8001/services/notification-service -d name=notification-service -d url=http://notification-service:8080
+        curl -s -X PUT http://kong:8001/services/notification-service/routes/notification-routes -d "name=notification-routes" -d "paths[]=/api/v1/notifications" -d "strip_path=false"
 
         # WebSocket gateway
         curl -s -X PUT http://kong:8001/services/ws-gateway -d name=ws-gateway -d url=http://ws-gateway:8080
@@ -730,6 +764,7 @@ services:
       - reconciliation-service
       - analytics-service
       - audit-service
+      - notification-service
       - ws-gateway
 
   # ============================================================================

@@ -114,6 +114,33 @@ func (r *UserRepository) UpdateMFAEnabled(ctx context.Context, userID uuid.UUID,
 	return err
 }
 
+// UpdateProfile updates user profile fields (firstName, lastName, organization).
+func (r *UserRepository) UpdateProfile(ctx context.Context, userID uuid.UUID, firstName, lastName, organization string) (*models.User, error) {
+	now := time.Now().UTC()
+	query := `UPDATE users SET first_name = $1, last_name = $2, organization = $3, updated_at = $4 WHERE id = $5
+	           RETURNING id, email, password_hash, first_name, last_name, organization, role, email_verified, mfa_enabled, status, created_at, updated_at, last_login_at`
+	user := &models.User{}
+	err := r.pool.QueryRow(ctx, query, firstName, lastName, organization, now, userID).Scan(
+		&user.ID, &user.Email, &user.PasswordHash, &user.FirstName, &user.LastName,
+		&user.Organization, &user.Role, &user.EmailVerified, &user.MFAEnabled,
+		&user.Status, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update profile: %w", err)
+	}
+	return user, nil
+}
+
+// GetPasswordHash retrieves just the password hash for a user (for password change verification).
+func (r *UserRepository) GetPasswordHash(ctx context.Context, userID uuid.UUID) (string, error) {
+	var hash string
+	err := r.pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE id = $1`, userID).Scan(&hash)
+	if err != nil {
+		return "", fmt.Errorf("failed to get password hash: %w", err)
+	}
+	return hash, nil
+}
+
 // --- Refresh Token Repository ---
 
 // RefreshTokenRepository manages refresh tokens.
@@ -337,4 +364,89 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// --- API Key Repository ---
+
+// APIKeyRepository manages API key records.
+type APIKeyRepository struct {
+	pool *Pool
+}
+
+// NewAPIKeyRepository creates a new APIKeyRepository.
+func NewAPIKeyRepository(pool *Pool) *APIKeyRepository {
+	return &APIKeyRepository{pool: pool}
+}
+
+// Create inserts a new API key.
+func (r *APIKeyRepository) Create(ctx context.Context, key *models.APIKey) error {
+	query := `
+		INSERT INTO api_keys (id, user_id, name, key_prefix, key_hash, permissions, expires_at, revoked, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+	_, err := r.pool.Exec(ctx, query,
+		key.ID, key.UserID, key.Name, key.KeyPrefix, key.KeyHash,
+		key.Permissions, key.ExpiresAt, key.Revoked, key.CreatedAt,
+	)
+	return err
+}
+
+// ListByUserID returns all non-revoked API keys for a user.
+func (r *APIKeyRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]models.APIKey, error) {
+	query := `
+		SELECT id, user_id, name, key_prefix, key_hash, permissions, expires_at, last_used_at, revoked, created_at
+		FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC
+	`
+	rows, err := r.pool.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []models.APIKey
+	for rows.Next() {
+		var k models.APIKey
+		if err := rows.Scan(&k.ID, &k.UserID, &k.Name, &k.KeyPrefix, &k.KeyHash, &k.Permissions, &k.ExpiresAt, &k.LastUsedAt, &k.Revoked, &k.CreatedAt); err != nil {
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	if keys == nil {
+		keys = []models.APIKey{}
+	}
+	return keys, nil
+}
+
+// GetByID retrieves an API key by ID.
+func (r *APIKeyRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.APIKey, error) {
+	query := `
+		SELECT id, user_id, name, key_prefix, key_hash, permissions, expires_at, last_used_at, revoked, created_at
+		FROM api_keys WHERE id = $1
+	`
+	k := &models.APIKey{}
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&k.ID, &k.UserID, &k.Name, &k.KeyPrefix, &k.KeyHash, &k.Permissions, &k.ExpiresAt, &k.LastUsedAt, &k.Revoked, &k.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return k, nil
+}
+
+// Revoke soft-deletes an API key.
+func (r *APIKeyRepository) Revoke(ctx context.Context, id, userID uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE api_keys SET revoked = true WHERE id = $1 AND user_id = $2 AND revoked = false`,
+		id, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

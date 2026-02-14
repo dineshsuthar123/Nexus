@@ -27,6 +27,8 @@ var (
 	ErrMFANotEnabled      = errors.New("MFA is not enabled")
 	ErrInvalidToken       = errors.New("invalid or expired token")
 	ErrTokenRevoked       = errors.New("token has been revoked")
+	ErrWrongPassword      = errors.New("current password is incorrect")
+	ErrAPIKeyNotFound     = errors.New("API key not found")
 )
 
 // AuthService handles authentication business logic.
@@ -37,6 +39,7 @@ type AuthService struct {
 	mfaRepo          *db.MFARepository
 	auditRepo        *db.AuditLogRepository
 	resetRepo        *db.PasswordResetRepository
+	apiKeyRepo       *db.APIKeyRepository
 	tokenService     *auth.TokenService
 	mfaService       *auth.MFAService
 }
@@ -49,6 +52,7 @@ func NewAuthService(
 	mfaRepo *db.MFARepository,
 	auditRepo *db.AuditLogRepository,
 	resetRepo *db.PasswordResetRepository,
+	apiKeyRepo *db.APIKeyRepository,
 	tokenService *auth.TokenService,
 	mfaService *auth.MFAService,
 ) *AuthService {
@@ -59,6 +63,7 @@ func NewAuthService(
 		mfaRepo:          mfaRepo,
 		auditRepo:        auditRepo,
 		resetRepo:        resetRepo,
+		apiKeyRepo:       apiKeyRepo,
 		tokenService:     tokenService,
 		mfaService:       mfaService,
 	}
@@ -111,9 +116,9 @@ type PasswordResetReq struct {
 }
 
 type MFASetupResponse struct {
-	Secret         string   `json:"secret"`
-	ProvisioningURI string  `json:"provisioningUri"`
-	BackupCodes    []string `json:"backupCodes"`
+	Secret          string   `json:"secret"`
+	ProvisioningURI string   `json:"provisioningUri"`
+	BackupCodes     []string `json:"backupCodes"`
 }
 
 type UserResponse struct {
@@ -552,4 +557,164 @@ func (s *AuthService) logAudit(ctx context.Context, userID uuid.UUID, action, ip
 func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
+}
+
+// ─── User Profile & Settings ─────────────────────────────────────────
+
+// UpdateProfileRequest holds the fields for profile update.
+type UpdateProfileRequest struct {
+	FirstName    string `json:"firstName"`
+	LastName     string `json:"lastName"`
+	Organization string `json:"organization"`
+}
+
+// ChangePasswordRequest holds current + new password.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword" binding:"required"`
+	NewPassword     string `json:"newPassword" binding:"required,min=8"`
+}
+
+// CreateAPIKeyRequest holds the fields for creating an API key.
+type CreateAPIKeyRequest struct {
+	Name        string   `json:"name" binding:"required"`
+	Permissions []string `json:"permissions"`
+	ExpiresIn   int      `json:"expiresIn"` // optional: days until expiry
+}
+
+// CreateAPIKeyResponse returns the plaintext key (shown only once).
+type CreateAPIKeyResponse struct {
+	ID          uuid.UUID  `json:"id"`
+	Name        string     `json:"name"`
+	Key         string     `json:"key"`
+	KeyPrefix   string     `json:"keyPrefix"`
+	Permissions []string   `json:"permissions"`
+	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+}
+
+// GetProfile returns the user's profile.
+func (s *AuthService) GetProfile(ctx context.Context, userID uuid.UUID) (*UserResponse, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get profile: %w", err)
+	}
+	return toUserResponse(user), nil
+}
+
+// UpdateProfile updates the user's profile fields.
+func (s *AuthService) UpdateProfile(ctx context.Context, userID uuid.UUID, req *UpdateProfileRequest) (*UserResponse, error) {
+	// Get current user to merge unchanged fields
+	current, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user for update: %w", err)
+	}
+
+	firstName := req.FirstName
+	if firstName == "" {
+		firstName = current.FirstName
+	}
+	lastName := req.LastName
+	if lastName == "" {
+		lastName = current.LastName
+	}
+	org := req.Organization
+	if org == "" {
+		org = current.Organization
+	}
+
+	updated, err := s.userRepo.UpdateProfile(ctx, userID, firstName, lastName, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update profile: %w", err)
+	}
+
+	s.logAudit(ctx, userID, "profile_updated", "", "", "Profile updated", true)
+	return toUserResponse(updated), nil
+}
+
+// ChangePassword verifies the old password and updates to the new one.
+func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, req *ChangePasswordRequest) error {
+	currentHash, err := s.userRepo.GetPasswordHash(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get current password: %w", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(req.CurrentPassword)); err != nil {
+		return ErrWrongPassword
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash new password: %w", err)
+	}
+
+	if err := s.userRepo.UpdatePassword(ctx, userID, string(newHash)); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	s.logAudit(ctx, userID, "password_changed", "", "", "Password changed", true)
+	return nil
+}
+
+// ListAPIKeys returns all API keys for a user.
+func (s *AuthService) ListAPIKeys(ctx context.Context, userID uuid.UUID) ([]models.APIKey, error) {
+	return s.apiKeyRepo.ListByUserID(ctx, userID)
+}
+
+// CreateAPIKey generates a new API key and returns the plaintext (shown once).
+func (s *AuthService) CreateAPIKey(ctx context.Context, userID uuid.UUID, req *CreateAPIKeyRequest) (*CreateAPIKeyResponse, error) {
+	// Generate a random key
+	rawKey := fmt.Sprintf("nxk_%s", uuid.New().String())
+	keyHash := hashToken(rawKey)
+	keyPrefix := rawKey[:12]
+
+	if req.Permissions == nil {
+		req.Permissions = []string{"read"}
+	}
+
+	var expiresAt *time.Time
+	if req.ExpiresIn > 0 {
+		t := time.Now().UTC().Add(time.Duration(req.ExpiresIn) * 24 * time.Hour)
+		expiresAt = &t
+	}
+
+	apiKey := &models.APIKey{
+		ID:          uuid.New(),
+		UserID:      userID,
+		Name:        req.Name,
+		KeyPrefix:   keyPrefix,
+		KeyHash:     keyHash,
+		Permissions: req.Permissions,
+		ExpiresAt:   expiresAt,
+		Revoked:     false,
+		CreatedAt:   time.Now().UTC(),
+	}
+
+	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
+		return nil, fmt.Errorf("failed to create API key: %w", err)
+	}
+
+	s.logAudit(ctx, userID, "api_key_created", "", "", fmt.Sprintf("API key '%s' created", req.Name), true)
+
+	return &CreateAPIKeyResponse{
+		ID:          apiKey.ID,
+		Name:        apiKey.Name,
+		Key:         rawKey,
+		KeyPrefix:   keyPrefix,
+		Permissions: req.Permissions,
+		ExpiresAt:   expiresAt,
+		CreatedAt:   apiKey.CreatedAt,
+	}, nil
+}
+
+// RevokeAPIKey revokes an API key.
+func (s *AuthService) RevokeAPIKey(ctx context.Context, userID, keyID uuid.UUID) error {
+	if err := s.apiKeyRepo.Revoke(ctx, keyID, userID); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return ErrAPIKeyNotFound
+		}
+		return fmt.Errorf("failed to revoke API key: %w", err)
+	}
+
+	s.logAudit(ctx, userID, "api_key_revoked", "", "", fmt.Sprintf("API key %s revoked", keyID), true)
+	return nil
 }

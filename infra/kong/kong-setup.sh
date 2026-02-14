@@ -76,6 +76,7 @@ register_service "account-service"        "account-service"        8080
 register_service "reconciliation-service" "reconciliation-service" 8080
 register_service "analytics-service"      "analytics-service"      8080
 register_service "audit-service"          "audit-service"          8080
+register_service "notification-service"   "notification-service"   8080
 register_service "ws-gateway"             "ws-gateway"             8080
 
 # ───────────────────────────────────────────
@@ -86,6 +87,9 @@ echo "Registering routes..."
 
 # Auth routes (public + protected handled internally by auth-service)
 register_route "auth-service"  "auth-routes"   "/api/v1/auth"
+
+# User/Settings routes (served by auth-service, JWT-protected)
+register_route "auth-service"  "user-routes"   "/api/v1/users"
 
 # Payment + ISO 20022 message routes
 register_route "payment-service"  "payment-routes"  "/api/v1/payments"
@@ -103,6 +107,9 @@ register_route "analytics-service"  "analytics-routes"  "/api/v1/analytics"
 
 # Audit routes
 register_route "audit-service"  "audit-routes"  "/api/v1/audit"
+
+# Notification routes
+register_route "notification-service"  "notification-routes"  "/api/v1/notifications"
 
 # WebSocket route
 register_route "ws-gateway"  "ws-route"  "/ws"

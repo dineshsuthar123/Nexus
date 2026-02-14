@@ -11,19 +11,19 @@ import (
 )
 
 type Config struct {
-	Port            string
-	KafkaBrokers    []string
-	KafkaTopics     []string
-	KafkaGroupID    string
-	JWTPublicKey    *rsa.PublicKey
+	Port             string
+	KafkaBrokers     []string
+	KafkaTopics      []string
+	KafkaGroupID     string
+	JWTPublicKey     *rsa.PublicKey
 	JWTPublicKeyPath string
-	PingInterval    int // seconds
-	PongTimeout     int // seconds
-	MaxMessageSize  int64
-	WriteBufferSize int
-	ReadBufferSize  int
-	AllowedOrigins  []string
-	LogLevel        string
+	PingInterval     int // seconds
+	PongTimeout      int // seconds
+	MaxMessageSize   int64
+	WriteBufferSize  int
+	ReadBufferSize   int
+	AllowedOrigins   []string
+	LogLevel         string
 }
 
 func Load() (*Config, error) {
@@ -53,19 +53,19 @@ func Load() (*Config, error) {
 	origins := splitCSV(viper.GetString("ALLOWED_ORIGINS"))
 
 	return &Config{
-		Port:            viper.GetString("PORT"),
-		KafkaBrokers:    brokers,
-		KafkaTopics:     topics,
-		KafkaGroupID:    viper.GetString("KAFKA_GROUP_ID"),
-		JWTPublicKey:    pubKey,
+		Port:             viper.GetString("PORT"),
+		KafkaBrokers:     brokers,
+		KafkaTopics:      topics,
+		KafkaGroupID:     viper.GetString("KAFKA_GROUP_ID"),
+		JWTPublicKey:     pubKey,
 		JWTPublicKeyPath: pubKeyPath,
-		PingInterval:    viper.GetInt("WS_PING_INTERVAL"),
-		PongTimeout:     viper.GetInt("WS_PONG_TIMEOUT"),
-		MaxMessageSize:  viper.GetInt64("WS_MAX_MESSAGE_SIZE"),
-		WriteBufferSize: viper.GetInt("WS_WRITE_BUFFER_SIZE"),
-		ReadBufferSize:  viper.GetInt("WS_READ_BUFFER_SIZE"),
-		AllowedOrigins:  origins,
-		LogLevel:        viper.GetString("LOG_LEVEL"),
+		PingInterval:     viper.GetInt("WS_PING_INTERVAL"),
+		PongTimeout:      viper.GetInt("WS_PONG_TIMEOUT"),
+		MaxMessageSize:   viper.GetInt64("WS_MAX_MESSAGE_SIZE"),
+		WriteBufferSize:  viper.GetInt("WS_WRITE_BUFFER_SIZE"),
+		ReadBufferSize:   viper.GetInt("WS_READ_BUFFER_SIZE"),
+		AllowedOrigins:   origins,
+		LogLevel:         viper.GetString("LOG_LEVEL"),
 	}, nil
 }
 

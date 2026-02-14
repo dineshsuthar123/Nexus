@@ -73,11 +73,12 @@ func main() {
 	mfaRepo := db.NewMFARepository(dbPool)
 	auditRepo := db.NewAuditLogRepository(dbPool)
 	resetRepo := db.NewPasswordResetRepository(dbPool)
+	apiKeyRepo := db.NewAPIKeyRepository(dbPool)
 
 	// Initialize auth service
 	authService := service.NewAuthService(
 		logger, userRepo, refreshTokenRepo, mfaRepo,
-		auditRepo, resetRepo, tokenService, mfaService,
+		auditRepo, resetRepo, apiKeyRepo, tokenService, mfaService,
 	)
 
 	// Setup Gin router
@@ -110,6 +111,10 @@ func main() {
 
 	// Register auth API routes
 	api.RegisterRoutes(router, authService, tokenService, logger)
+
+	// Register user/settings API routes (uses same handler for JWT middleware)
+	h := api.NewHandler(authService, tokenService, logger)
+	api.RegisterUserRoutes(router, h)
 
 	// Start server
 	srv := &http.Server{

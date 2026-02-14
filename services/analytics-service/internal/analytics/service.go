@@ -10,17 +10,17 @@ import (
 
 // Summary represents overall platform analytics.
 type Summary struct {
-	TotalTransactions    int64   `json:"total_transactions"`
-	TotalVolume          float64 `json:"total_volume"`
-	TotalAccounts        int64   `json:"total_accounts"`
-	ActiveAccounts       int64   `json:"active_accounts"`
-	AvgTransactionValue  float64 `json:"avg_transaction_value"`
-	SuccessRate          float64 `json:"success_rate"`
-	PendingTransactions  int64   `json:"pending_transactions"`
-	FailedTransactions   int64   `json:"failed_transactions"`
-	TotalSettled         float64 `json:"total_settled"`
-	Last24hTransactions  int64   `json:"last_24h_transactions"`
-	Last24hVolume        float64 `json:"last_24h_volume"`
+	TotalTransactions   int64   `json:"total_transactions"`
+	TotalVolume         float64 `json:"total_volume"`
+	TotalAccounts       int64   `json:"total_accounts"`
+	ActiveAccounts      int64   `json:"active_accounts"`
+	AvgTransactionValue float64 `json:"avg_transaction_value"`
+	SuccessRate         float64 `json:"success_rate"`
+	PendingTransactions int64   `json:"pending_transactions"`
+	FailedTransactions  int64   `json:"failed_transactions"`
+	TotalSettled        float64 `json:"total_settled"`
+	Last24hTransactions int64   `json:"last_24h_transactions"`
+	Last24hVolume       float64 `json:"last_24h_volume"`
 }
 
 // VolumePoint represents a data point in the volume time series.

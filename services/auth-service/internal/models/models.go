@@ -25,12 +25,12 @@ type User struct {
 
 // UserMFA holds TOTP MFA configuration for a user.
 type UserMFA struct {
-	ID            uuid.UUID `json:"id"`
-	UserID        uuid.UUID `json:"userId"`
-	TOTPSecret    string    `json:"-"` // encrypted at rest
-	BackupCodes   []string  `json:"-"` // hashed
-	Verified      bool      `json:"verified"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"userId"`
+	TOTPSecret  string    `json:"-"` // encrypted at rest
+	BackupCodes []string  `json:"-"` // hashed
+	Verified    bool      `json:"verified"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // RefreshToken represents a stored refresh token for token rotation.
@@ -74,4 +74,18 @@ type EmailVerificationToken struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 	Used      bool      `json:"used"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+// APIKey represents a user-generated API key for programmatic access.
+type APIKey struct {
+	ID          uuid.UUID  `json:"id"`
+	UserID      uuid.UUID  `json:"userId"`
+	Name        string     `json:"name"`
+	KeyPrefix   string     `json:"keyPrefix"`   // first 8 chars for display
+	KeyHash     string     `json:"-"`            // SHA-256 hash of full key
+	Permissions []string   `json:"permissions"`
+	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
+	LastUsedAt  *time.Time `json:"lastUsedAt,omitempty"`
+	Revoked     bool       `json:"revoked"`
+	CreatedAt   time.Time  `json:"createdAt"`
 }

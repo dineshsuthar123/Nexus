@@ -81,7 +81,7 @@ func (c *Client) IsSubscribed(msgType, resourceID string) bool {
 
 // Hub manages all connected clients and broadcasts messages.
 type Hub struct {
-	clients    map[string]*Client // clientID -> client
+	clients    map[string]*Client         // clientID -> client
 	userIndex  map[string]map[string]bool // userID -> set of clientIDs
 	register   chan *Client
 	unregister chan *Client

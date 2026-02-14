@@ -316,8 +316,8 @@ func (h *Handler) Ready(c *gin.Context) {
 // Status returns connection statistics.
 func (h *Handler) Status(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"service":       "ws-gateway",
-		"clients":       h.hub.ClientCount(),
-		"unique_users":  h.hub.UserCount(),
+		"service":      "ws-gateway",
+		"clients":      h.hub.ClientCount(),
+		"unique_users": h.hub.UserCount(),
 	})
 }

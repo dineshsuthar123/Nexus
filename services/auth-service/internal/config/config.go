@@ -36,8 +36,8 @@ type JWTConfig struct {
 
 // MFAConfig holds MFA (TOTP) configuration.
 type MFAConfig struct {
-	Issuer         string `mapstructure:"ISSUER"`
-	EncryptionKey  string `mapstructure:"ENCRYPTION_KEY"`
+	Issuer        string `mapstructure:"ISSUER"`
+	EncryptionKey string `mapstructure:"ENCRYPTION_KEY"`
 }
 
 // Load reads configuration from environment variables with sensible defaults.

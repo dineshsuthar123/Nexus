@@ -21,6 +21,8 @@ export * from './components/Breadcrumb';
 export * from './components/Command';
 export * from './components/Alert';
 export * from './components/DataGrid';
+export * from './components/Dialog';
+export * from './components/DataTable';
 
 // Financial/Fintech-specific components
 export * from './components/Currency';

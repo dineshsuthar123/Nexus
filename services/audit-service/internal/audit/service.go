@@ -76,7 +76,7 @@ type Evidence struct {
 type Summary struct {
 	TotalAccounts      int               `json:"total_accounts"`
 	TotalTransactions  int               `json:"total_transactions"`
-	TotalVolume        map[string]Amount  `json:"total_volume"`
+	TotalVolume        map[string]Amount `json:"total_volume"`
 	CurrenciesInvolved []string          `json:"currencies_involved"`
 }
 
@@ -303,13 +303,13 @@ func (s *Service) VerifyBundle(ctx context.Context, bundleID string) (*Verificat
 }
 
 type VerificationResult struct {
-	BundleID          string   `json:"bundle_id"`
-	Valid             bool     `json:"valid"`
-	EvidenceHashValid bool     `json:"evidence_hash_valid"`
-	SignatureValid    bool     `json:"signature_valid"`
-	Message           string   `json:"message,omitempty"`
-	Errors            []string `json:"errors,omitempty"`
-	Timestamp         time.Time`json:"timestamp"`
+	BundleID          string    `json:"bundle_id"`
+	Valid             bool      `json:"valid"`
+	EvidenceHashValid bool      `json:"evidence_hash_valid"`
+	SignatureValid    bool      `json:"signature_valid"`
+	Message           string    `json:"message,omitempty"`
+	Errors            []string  `json:"errors,omitempty"`
+	Timestamp         time.Time `json:"timestamp"`
 }
 
 // GenerateBundle creates a new audit bundle from live data.
