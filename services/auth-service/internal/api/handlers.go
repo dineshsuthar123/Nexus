@@ -39,6 +39,7 @@ func RegisterRoutes(router *gin.Engine, authSvc *service.AuthService, tokenSvc *
 		v1.POST("/login", h.Login)
 		v1.POST("/refresh", h.RefreshToken)
 		v1.POST("/request-password-reset", h.RequestPasswordReset)
+		v1.POST("/forgot-password", h.RequestPasswordReset) // Frontend alias
 		v1.POST("/reset-password", h.ResetPassword)
 		v1.POST("/verify-email", h.VerifyEmail)
 		v1.POST("/mfa/verify", h.VerifyMFA)

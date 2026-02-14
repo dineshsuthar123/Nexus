@@ -51,6 +51,7 @@ repos:
 
       - id: no-localhost-in-prod-configs
         name: Check for localhost in production configs
-        entry: bash -c 'grep -rE "localhost|127\.0\.0\.1" --include="values.yaml" --include="*-prod*.yml" . && echo "WARNING: localhost found in config" || exit 0'
+        entry: >
+          bash -c 'grep -rE "localhost|127\.0\.0\.1" --include="values.yaml" --include="*-prod*.yml" . && echo "WARNING localhost found in config" || exit 0'
         language: system
         pass_filenames: false
