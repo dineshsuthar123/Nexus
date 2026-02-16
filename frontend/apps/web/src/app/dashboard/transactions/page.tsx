@@ -1,3 +1,5 @@
+'use client';
+
 import { Suspense } from 'react';
 import {
   Card,
@@ -25,10 +27,6 @@ import {
   type TransactionRowProps,
 } from '@nexus/ui';
 import { Search, Filter, Download, Plus, Calendar } from 'lucide-react';
-
-export const metadata = {
-  title: 'Transactions',
-};
 
 export default function TransactionsPage() {
   return (

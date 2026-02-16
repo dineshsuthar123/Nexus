@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Test Utilities
- * 
+ *
  * Common test utilities and wrappers for React Testing Library.
  */
 
@@ -123,12 +123,16 @@ export const mockUser = {
   permissions: ['payments:read', 'payments:write', 'accounts:read'],
 };
 
-export const mockPaginatedResponse = <T>(items: T[], total?: number) => ({
-  items,
-  total: total ?? items.length,
-  page: 1,
-  pageSize: 20,
-  totalPages: Math.ceil((total ?? items.length) / 20),
+export const mockPaginatedResponse = <T,>(items: T[], total?: number) => ({
+  data: items,
+  pagination: {
+    page: 1,
+    pageSize: 20,
+    totalItems: total ?? items.length,
+    totalPages: Math.ceil((total ?? items.length) / 20),
+    hasNext: false,
+    hasPrevious: false,
+  },
 });
 
 // =============================================================================
@@ -145,7 +149,8 @@ export const waitForLoadingToFinish = () =>
 export const createMockFn = <T extends (...args: any[]) => any>(
   implementation?: T
 ) => {
-  return vi.fn(implementation);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return vi.fn(implementation as any);
 };
 
 // =============================================================================

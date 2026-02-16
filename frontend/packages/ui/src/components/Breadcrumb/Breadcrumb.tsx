@@ -32,7 +32,7 @@ Breadcrumb.displayName = 'Breadcrumb';
 
 const BreadcrumbList = React.forwardRef<
   HTMLOListElement,
-  React.OListHTMLAttributes<HTMLOListElement>
+  React.OlHTMLAttributes<HTMLOListElement>
 >(({ className, ...props }, ref) => (
   <ol
     ref={ref}

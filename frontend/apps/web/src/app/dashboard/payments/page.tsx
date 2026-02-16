@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Payments List Page
- * 
+ *
  * Full-featured payments list with:
  * - Data table with sorting and pagination
  * - Search and filters
@@ -13,17 +13,17 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
   CardTitle,
   Button,
   Input,
   Badge,
   CurrencyDisplay,
 } from '@nexus/ui';
-import { 
+import {
   Plus,
   Search,
   Filter,
@@ -42,7 +42,7 @@ import {
 
 import { usePayments, useInvalidatePayments } from '@/lib/hooks';
 import { usePaymentUpdates } from '@/lib/websocket';
-import type { Payment, PaymentStatus, PaymentFilters } from '@/lib/api/types';
+import type { Payment, PaymentStatus, PaymentType, PaymentFilters } from '@/lib/api/types';
 
 // =============================================================================
 // Types
@@ -56,36 +56,46 @@ type SortOrder = 'asc' | 'desc';
 // =============================================================================
 
 function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
-  const config: Record<PaymentStatus, { label: string; variant: 'default' | 'success' | 'warning' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
-    PENDING: { 
-      label: 'Pending', 
-      variant: 'warning', 
-      icon: <Clock className="h-3 w-3" /> 
+  const config: Record<PaymentStatus, { label: string; variant: 'default' | 'success' | 'warning' | 'danger' | 'outline'; icon: React.ReactNode }> = {
+    PENDING: {
+      label: 'Pending',
+      variant: 'warning',
+      icon: <Clock className="h-3 w-3" />
     },
-    PROCESSING: { 
-      label: 'Processing', 
-      variant: 'default', 
-      icon: <RefreshCw className="h-3 w-3 animate-spin" /> 
+    PROCESSING: {
+      label: 'Processing',
+      variant: 'default',
+      icon: <RefreshCw className="h-3 w-3 animate-spin" />
     },
-    SETTLED: { 
-      label: 'Settled', 
-      variant: 'success', 
-      icon: <CheckCircle2 className="h-3 w-3" /> 
+    SETTLED: {
+      label: 'Settled',
+      variant: 'success',
+      icon: <CheckCircle2 className="h-3 w-3" />
     },
-    FAILED: { 
-      label: 'Failed', 
-      variant: 'destructive', 
-      icon: <XCircle className="h-3 w-3" /> 
+    FAILED: {
+      label: 'Failed',
+      variant: 'danger',
+      icon: <XCircle className="h-3 w-3" />
     },
-    RETURNED: { 
-      label: 'Returned', 
-      variant: 'outline', 
-      icon: <AlertCircle className="h-3 w-3" /> 
+    RETURNED: {
+      label: 'Returned',
+      variant: 'outline',
+      icon: <AlertCircle className="h-3 w-3" />
     },
-    CANCELLED: { 
-      label: 'Cancelled', 
-      variant: 'outline', 
-      icon: <XCircle className="h-3 w-3" /> 
+    CANCELLED: {
+      label: 'Cancelled',
+      variant: 'outline',
+      icon: <XCircle className="h-3 w-3" />
+    },
+    REJECTED: {
+      label: 'Rejected',
+      variant: 'danger',
+      icon: <XCircle className="h-3 w-3" />
+    },
+    COMPLETED: {
+      label: 'Completed',
+      variant: 'success',
+      icon: <CheckCircle2 className="h-3 w-3" />
     },
   };
 
@@ -154,7 +164,7 @@ export default function PaymentsPage() {
     router.push(`/dashboard/payments/${uetr}`);
   };
 
-  const totalPages = data?.totalPages || 1;
+  const totalPages = data?.pagination?.totalPages || 1;
   const payments = data?.data || [];
 
   return (
@@ -231,7 +241,7 @@ export default function PaymentsPage() {
                   onChange={(e) => {
                     setFilters((prev) => ({
                       ...prev,
-                      status: e.target.value ? [e.target.value] : undefined,
+                      status: e.target.value ? [e.target.value as PaymentStatus] : undefined,
                     }));
                     setPage(1);
                   }}
@@ -254,7 +264,7 @@ export default function PaymentsPage() {
                   onChange={(e) => {
                     setFilters((prev) => ({
                       ...prev,
-                      type: e.target.value ? [e.target.value] : undefined,
+                      type: e.target.value ? [e.target.value as PaymentType] : undefined,
                     }));
                     setPage(1);
                   }}
@@ -386,8 +396,8 @@ export default function PaymentsPage() {
                 </thead>
                 <tbody className="divide-y">
                   {payments.map((payment) => (
-                    <tr 
-                      key={payment.uetr} 
+                    <tr
+                      key={payment.uetr}
                       className="hover:bg-muted/30 cursor-pointer transition-colors"
                       onClick={() => handleViewPayment(payment.uetr)}
                     >
@@ -420,8 +430,8 @@ export default function PaymentsPage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <CurrencyDisplay
-                          amount={payment.amount.value}
-                          currency={payment.amount.currency}
+                          amount={payment.amount}
+                          currency={payment.currency}
                           size="sm"
                         />
                       </td>
@@ -452,7 +462,7 @@ export default function PaymentsPage() {
             <div className="flex items-center justify-between border-t px-4 py-3">
               <p className="text-sm text-muted-foreground">
                 Showing {(page - 1) * pageSize + 1} to{' '}
-                {Math.min(page * pageSize, data?.total || 0)} of {data?.total || 0} payments
+                {Math.min(page * pageSize, data?.pagination?.totalItems || 0)} of {data?.pagination?.totalItems || 0} payments
               </p>
               <div className="flex items-center gap-2">
                 <Button

@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Create Payment Page
- * 
+ *
  * Payment creation form with:
  * - Multi-step wizard
  * - IBAN/BIC validation
@@ -16,10 +16,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
   CardTitle,
   CardDescription,
   Button,
@@ -27,7 +27,7 @@ import {
   Badge,
   CurrencyDisplay,
 } from '@nexus/ui';
-import { 
+import {
   ArrowLeft,
   ArrowRight,
   Loader2,
@@ -44,6 +44,7 @@ import {
 
 import { useCreatePayment } from '@/lib/hooks';
 import { createPaymentSchema, type CreatePaymentFormData } from '@/lib/validations/schemas';
+import type { Currency } from '@/lib/api/types';
 
 // =============================================================================
 // Types
@@ -62,32 +63,32 @@ const STEPS: { id: Step; title: string; icon: React.ReactNode }[] = [
 // Payment Type Selector
 // =============================================================================
 
-function PaymentTypeSelector({ 
-  value, 
+function PaymentTypeSelector({
+  value,
   onChange,
   disabled,
-}: { 
-  value: string; 
+}: {
+  value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
   const types = [
-    { 
-      value: 'INSTANT', 
-      label: 'Instant', 
+    {
+      value: 'INSTANT',
+      label: 'Instant',
       description: 'Immediate transfer (24/7)',
       icon: <Zap className="h-5 w-5" />,
       badge: 'Fastest',
     },
-    { 
-      value: 'STANDARD', 
-      label: 'Standard', 
+    {
+      value: 'STANDARD',
+      label: 'Standard',
       description: 'Next business day',
       icon: <Clock className="h-5 w-5" />,
     },
-    { 
-      value: 'SCHEDULED', 
-      label: 'Scheduled', 
+    {
+      value: 'SCHEDULED',
+      label: 'Scheduled',
       description: 'Choose a future date',
       icon: <Calendar className="h-5 w-5" />,
     },
@@ -103,16 +104,16 @@ function PaymentTypeSelector({
           onClick={() => onChange(type.value)}
           className={`
             relative flex flex-col items-center p-4 rounded-lg border-2 transition-all
-            ${value === type.value 
-              ? 'border-primary bg-primary/5' 
+            ${value === type.value
+              ? 'border-primary bg-primary/5'
               : 'border-border hover:border-primary/50'
             }
             ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
           `}
         >
           {type.badge && (
-            <Badge 
-              variant="default" 
+            <Badge
+              variant="default"
               className="absolute -top-2 -right-2 text-xs"
             >
               {type.badge}
@@ -150,10 +151,10 @@ function StepProgress({ currentStep }: { currentStep: Step }) {
               <div
                 className={`
                   flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors
-                  ${isCompleted 
-                    ? 'border-primary bg-primary text-primary-foreground' 
-                    : isCurrent 
-                      ? 'border-primary text-primary' 
+                  ${isCompleted
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : isCurrent
+                      ? 'border-primary text-primary'
                       : 'border-muted text-muted-foreground'
                   }
                 `}
@@ -189,7 +190,7 @@ function StepProgress({ currentStep }: { currentStep: Step }) {
 export default function CreatePaymentPage() {
   const router = useRouter();
   const createPayment = useCreatePayment();
-  
+
   const [currentStep, setCurrentStep] = useState<Step>('debtor');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -258,10 +259,8 @@ export default function CreatePaymentPage() {
 
     try {
       const payment = await createPayment.mutateAsync({
-        amount: {
-          value: data.amount,
-          currency: data.currency,
-        },
+        amount: data.amount,
+        currency: data.currency as Currency,
         debtorName: data.debtorName,
         debtorAccount: data.debtorAccount,
         debtorBic: data.debtorBic,
@@ -513,7 +512,6 @@ export default function CreatePaymentPage() {
                     currency={currency}
                     size="xl"
                     showSign
-                    positive
                   />
                   <Badge className="mt-2">{paymentType}</Badge>
                 </div>
@@ -576,8 +574,8 @@ export default function CreatePaymentPage() {
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               ) : (
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={isSubmitting || createPayment.isPending}
                 >
                   {(isSubmitting || createPayment.isPending) ? (

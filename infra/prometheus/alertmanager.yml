@@ -1,0 +1,167 @@
+# Alertmanager Configuration — Nexus RTP Platform
+# Routes SLO alerts to PagerDuty, Slack, and email based on severity
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Inhibition rules: suppress lower-severity alerts when higher severity fires
+inhibit_rules:
+  # If payment outage (P0), suppress latency warnings
+  - source_matchers:
+      - alertname="SLO_PaymentSuccessRateLow"
+    target_matchers:
+      - slo="latency"
+    equal: ['team']
+
+  # If Kafka critical lag, suppress warning lag
+  - source_matchers:
+      - alertname="SLO_KafkaConsumerLagCritical"
+    target_matchers:
+      - alertname="SLO_KafkaConsumerLagHigh"
+    equal: ['topic']
+
+  # If DB connection pool saturated, suppress query latency
+  - source_matchers:
+      - alertname="SLO_DatabaseConnectionPoolSaturated"
+    target_matchers:
+      - alertname="SLO_DatabaseLatencyHigh"
+
+route:
+  receiver: 'default-slack'
+  group_by: ['alertname', 'team', 'slo']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    # P0: Critical — PagerDuty immediate + Slack
+    - matchers:
+        - severity="critical"
+      receiver: 'pagerduty-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true  # Also send to Slack
+
+    - matchers:
+        - severity="critical"
+      receiver: 'slack-critical'
+      group_wait: 10s
+
+    # P1: High — PagerDuty (low urgency) + Slack
+    - matchers:
+        - severity="warning"
+        - slo=~"availability|error_budget"
+      receiver: 'pagerduty-warning'
+      repeat_interval: 2h
+      continue: true
+
+    # Error budget alerts
+    - matchers:
+        - alertname="SLO_ErrorBudgetExhausted"
+      receiver: 'pagerduty-warning'
+      repeat_interval: 6h
+      continue: true
+
+    - matchers:
+        - alertname="SLO_ErrorBudgetExhausted"
+      receiver: 'slack-error-budget'
+
+    # P2: Warning — Slack only
+    - matchers:
+        - severity="warning"
+      receiver: 'slack-warnings'
+      repeat_interval: 4h
+
+    # Vault alerts — always P0
+    - matchers:
+        - alertname=~"Vault.*"
+        - severity="critical"
+      receiver: 'pagerduty-critical'
+      group_wait: 0s
+      repeat_interval: 30m
+
+    # Security alerts — dedicated channel
+    - matchers:
+        - team="security"
+      receiver: 'slack-security'
+      repeat_interval: 2h
+
+receivers:
+  - name: 'default-slack'
+    slack_configs:
+      - channel: '#alerts-info'
+        send_resolved: true
+        title: '{{ template "slack.title" . }}'
+        text: '{{ template "slack.text" . }}'
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_CRITICAL_KEY}'
+        severity: 'critical'
+        description: '{{ template "pagerduty.description" . }}'
+        details:
+          firing: '{{ template "pagerduty.firing" . }}'
+          runbook: '{{ (index .Alerts 0).Annotations.runbook_url }}'
+          dashboard: 'https://grafana.nexus.internal/d/nexus-slo'
+
+  - name: 'pagerduty-warning'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_WARNING_KEY}'
+        severity: 'warning'
+        description: '{{ template "pagerduty.description" . }}'
+        details:
+          firing: '{{ template "pagerduty.firing" . }}'
+          runbook: '{{ (index .Alerts 0).Annotations.runbook_url }}'
+
+  - name: 'slack-critical'
+    slack_configs:
+      - channel: '#alerts-critical'
+        send_resolved: true
+        title: ':rotating_light: P0 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Team:* {{ .GroupLabels.team }}
+          *SLO:* {{ .GroupLabels.slo }}
+          {{ range .Alerts }}
+          *Description:* {{ .Annotations.description }}
+          *Runbook:* {{ .Annotations.runbook_url }}
+          {{ end }}
+        color: '#FF0000'
+
+  - name: 'slack-warnings'
+    slack_configs:
+      - channel: '#alerts-platform'
+        send_resolved: true
+        title: ':warning: {{ .GroupLabels.alertname }}'
+        text: |
+          *SLO:* {{ .GroupLabels.slo }}
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ end }}
+        color: '#FFA500'
+
+  - name: 'slack-error-budget'
+    slack_configs:
+      - channel: '#slo-error-budget'
+        send_resolved: true
+        title: ':chart_with_downwards_trend: Error Budget Alert'
+        text: |
+          {{ range .Alerts }}
+          {{ .Annotations.description }}
+          *Action required:* Review error budget policy in RUNBOOKS/SLO_ERROR_BUDGET.md
+          {{ end }}
+        color: '#FF4500'
+
+  - name: 'slack-security'
+    slack_configs:
+      - channel: '#security-alerts'
+        send_resolved: true
+        title: ':lock: Security Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        color: '#8B0000'

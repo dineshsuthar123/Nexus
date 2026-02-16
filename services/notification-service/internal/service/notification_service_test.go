@@ -14,11 +14,11 @@ import (
 // ── Mock implementations ────────────────────────────────────────────
 
 type mockNotifRepo struct {
-	createFn    func(ctx context.Context, n *models.Notification) error
-	getByIDFn   func(ctx context.Context, id string) (*models.Notification, error)
-	listFn      func(ctx context.Context, userID string, readFilter *bool, notifType *string, page, pageSize int) (*models.PaginatedNotifications, error)
-	markReadFn  func(ctx context.Context, id, userID string) error
-	markAllFn   func(ctx context.Context, userID string) (int64, error)
+	createFn   func(ctx context.Context, n *models.Notification) error
+	getByIDFn  func(ctx context.Context, id string) (*models.Notification, error)
+	listFn     func(ctx context.Context, userID string, readFilter *bool, notifType *string, page, pageSize int) (*models.PaginatedNotifications, error)
+	markReadFn func(ctx context.Context, id, userID string) error
+	markAllFn  func(ctx context.Context, userID string) (int64, error)
 }
 
 func (m *mockNotifRepo) Create(ctx context.Context, n *models.Notification) error {

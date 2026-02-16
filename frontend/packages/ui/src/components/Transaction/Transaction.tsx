@@ -1,16 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
-import { 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  RefreshCw, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  AlertCircle,
-  MoreHorizontal
+import {
+  ArrowUpRight,
+  ArrowDownLeft,
+  RefreshCw,
+  Clock,
 } from 'lucide-react';
 import { cn, formatCurrency, formatRelativeTime } from '../../lib/utils';
 import { Badge, StatusBadge, type StatusType } from '../Badge';
@@ -19,21 +14,21 @@ import { Badge, StatusBadge, type StatusType } from '../Badge';
  * Transaction Status
  * -------------------------------------------------------------------------- */
 
-export type TransactionStatus = 
-  | 'pending' 
-  | 'processing' 
-  | 'completed' 
-  | 'failed' 
-  | 'cancelled' 
+export type TransactionStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
   | 'refunded'
   | 'on_hold';
 
-export type TransactionType = 
-  | 'credit' 
-  | 'debit' 
-  | 'transfer' 
-  | 'refund' 
-  | 'fee' 
+export type TransactionType =
+  | 'credit'
+  | 'debit'
+  | 'transfer'
+  | 'refund'
+  | 'fee'
   | 'interest'
   | 'adjustment';
 
@@ -113,11 +108,12 @@ const TransactionRow = React.forwardRef<HTMLDivElement, TransactionRowProps>(
   ) => {
     const TypeIcon = transactionTypeIcons[type];
     const isCredit = type === 'credit' || type === 'refund' || type === 'interest';
-    const displayAmount = isCredit ? Math.abs(amount) : -Math.abs(amount);
+    // _displayAmount available for custom formatting
+    void (isCredit ? Math.abs(amount) : -Math.abs(amount));
     const statusConfig = transactionStatusMap[status];
 
-    const formattedTime = typeof timestamp === 'string' 
-      ? timestamp 
+    const formattedTime = typeof timestamp === 'string'
+      ? timestamp
       : formatRelativeTime(timestamp);
 
     return (
@@ -144,8 +140,8 @@ const TransactionRow = React.forwardRef<HTMLDivElement, TransactionRowProps>(
         <div
           className={cn(
             'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-            isCredit 
-              ? 'bg-success-100 text-success-600 dark:bg-success-900 dark:text-success-400' 
+            isCredit
+              ? 'bg-success-100 text-success-600 dark:bg-success-900 dark:text-success-400'
               : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
           )}
         >

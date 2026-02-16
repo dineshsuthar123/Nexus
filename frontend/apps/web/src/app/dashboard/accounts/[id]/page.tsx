@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Account Detail Page
- * 
+ *
  * Displays comprehensive account details including:
  * - Account summary and balance
  * - Transaction history
@@ -13,10 +13,10 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
   CardTitle,
   CardDescription,
   Button,
@@ -30,7 +30,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@nexus/ui';
-import { 
+import {
   ArrowLeft,
   Building2,
   Wallet,
@@ -311,8 +311,8 @@ export default function AccountDetailPage() {
               <Download className="mr-2 h-4 w-4" />
               Statement
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               asChild
             >
@@ -352,7 +352,7 @@ export default function AccountDetailPage() {
           </CardHeader>
           <CardContent>
             <CurrencyDisplay
-              amount={balance?.available || account.availableBalance || 0}
+              amount={balance?.availableBalance || account.availableBalance || 0}
               currency={account.currency}
               size="lg"
             />
@@ -368,7 +368,7 @@ export default function AccountDetailPage() {
           </CardHeader>
           <CardContent>
             <CurrencyDisplay
-              amount={balance?.pending || account.pendingBalance || 0}
+              amount={balance?.pendingBalance || account.pendingBalance || 0}
               currency={account.currency}
               size="lg"
             />
@@ -385,7 +385,7 @@ export default function AccountDetailPage() {
           </CardHeader>
           <CardContent>
             <CurrencyDisplay
-              amount={balance?.reserved || 0}
+              amount={(balance as any)?.reserved || 0}
               currency={account.currency}
               size="lg"
             />
@@ -535,7 +535,7 @@ export default function AccountDetailPage() {
               {account.status === 'SUSPENDED' ? 'Activate Account' : 'Suspend Account'}
             </DialogTitle>
             <DialogDescription>
-              {account.status === 'SUSPENDED' 
+              {account.status === 'SUSPENDED'
                 ? 'This will restore the account to active status and allow transactions.'
                 : 'This will temporarily disable all transactions on this account.'}
             </DialogDescription>
@@ -552,7 +552,7 @@ export default function AccountDetailPage() {
             <Button variant="outline" onClick={() => setShowSuspendDialog(false)}>
               Cancel
             </Button>
-            <Button 
+            <Button
               variant={account.status === 'SUSPENDED' ? 'secondary' : 'danger'}
               onClick={handleSuspend}
               disabled={updateStatus.isPending}

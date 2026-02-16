@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - NextAuth.js Configuration
- * 
+ *
  * Authentication setup with:
  * - Credentials provider (email/password)
  * - JWT strategy with refresh token rotation
@@ -28,20 +28,20 @@ declare module 'next-auth' {
     error?: string;
   }
 
-  interface User extends NextAuthUser {
+  interface User {
     id: string;
     email: string;
     firstName: string;
     lastName: string;
     role: string;
     permissions: string[];
-    accessToken: string;
-    refreshToken: string;
-    accessTokenExpires: number;
     mfaEnabled: boolean;
     emailVerified: boolean;
     avatar?: string;
     organization?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    accessTokenExpires?: number;
   }
 }
 
@@ -188,14 +188,14 @@ export const authOptions: AuthOptions = {
             firstName: loginResponse.user.firstName,
             lastName: loginResponse.user.lastName,
             role: loginResponse.user.role,
-            permissions: loginResponse.user.permissions,
+            permissions: loginResponse.user.permissions || [],
             accessToken: loginResponse.accessToken,
             refreshToken: loginResponse.refreshToken,
             accessTokenExpires: Date.now() + loginResponse.expiresIn * 1000,
             mfaEnabled: loginResponse.user.mfaEnabled,
             emailVerified: loginResponse.user.emailVerified,
             avatar: loginResponse.user.avatar,
-            organization: loginResponse.user.organization,
+            organization: loginResponse.user.organizationName,
           };
         } catch (error) {
           console.error('[NextAuth] Login error:', error);
@@ -258,8 +258,6 @@ export const authOptions: AuthOptions = {
         emailVerified: token.emailVerified,
         avatar: token.avatar,
         organization: token.organization,
-        createdAt: '',
-        updatedAt: '',
       };
       session.accessToken = token.accessToken;
       session.refreshToken = token.refreshToken;

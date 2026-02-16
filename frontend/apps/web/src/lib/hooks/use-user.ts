@@ -70,7 +70,7 @@ export function useUserProfile() {
   return useQuery({
     queryKey: userKeys.profile(),
     queryFn: async (): Promise<UserProfile> => {
-      const res = await apiClient.get(USER_ENDPOINTS.PROFILE);
+      const res = await apiClient.get<{ user: UserProfile }>(USER_ENDPOINTS.PROFILE);
       return res.data.user;
     },
     staleTime: 5 * 60 * 1000,
@@ -82,7 +82,7 @@ export function useUpdateProfile() {
 
   return useMutation({
     mutationFn: async (data: UpdateProfileRequest): Promise<UserProfile> => {
-      const res = await apiClient.put(USER_ENDPOINTS.UPDATE_PROFILE, data);
+      const res = await apiClient.put<{ user: UserProfile }>(USER_ENDPOINTS.UPDATE_PROFILE, data);
       return res.data.user;
     },
     onSuccess: (updatedUser) => {
@@ -94,7 +94,7 @@ export function useUpdateProfile() {
 export function useChangePassword() {
   return useMutation({
     mutationFn: async (data: ChangePasswordRequest): Promise<{ message: string }> => {
-      const res = await apiClient.post(USER_ENDPOINTS.CHANGE_PASSWORD, data);
+      const res = await apiClient.post<{ message: string }>(USER_ENDPOINTS.CHANGE_PASSWORD, data);
       return res.data;
     },
   });
@@ -106,7 +106,7 @@ export function useAPIKeys() {
   return useQuery({
     queryKey: userKeys.apiKeys(),
     queryFn: async (): Promise<APIKey[]> => {
-      const res = await apiClient.get(USER_ENDPOINTS.API_KEYS);
+      const res = await apiClient.get<{ apiKeys: APIKey[] }>(USER_ENDPOINTS.API_KEYS);
       return res.data.apiKeys;
     },
   });
@@ -117,7 +117,7 @@ export function useCreateAPIKey() {
 
   return useMutation({
     mutationFn: async (data: CreateAPIKeyRequest): Promise<CreateAPIKeyResponse> => {
-      const res = await apiClient.post(USER_ENDPOINTS.CREATE_API_KEY, data);
+      const res = await apiClient.post<CreateAPIKeyResponse>(USER_ENDPOINTS.CREATE_API_KEY, data);
       return res.data;
     },
     onSuccess: () => {
@@ -131,7 +131,7 @@ export function useRevokeAPIKey() {
 
   return useMutation({
     mutationFn: async (keyId: string): Promise<{ message: string }> => {
-      const res = await apiClient.delete(USER_ENDPOINTS.REVOKE_API_KEY(keyId));
+      const res = await apiClient.delete<{ message: string }>(USER_ENDPOINTS.REVOKE_API_KEY(keyId));
       return res.data;
     },
     onSuccess: () => {

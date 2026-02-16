@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Payment Detail Page
- * 
+ *
  * Displays comprehensive payment details including:
  * - Payment summary and status
  * - Debtor/Creditor information
@@ -14,10 +14,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
   CardTitle,
   CardDescription,
   Button,
@@ -31,7 +31,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@nexus/ui';
-import { 
+import {
   ArrowLeft,
   CheckCircle2,
   Clock,
@@ -55,11 +55,11 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
-import { 
-  usePayment, 
-  useSettlePayment, 
-  useReturnPayment, 
-  useCancelPayment 
+import {
+  usePayment,
+  useSettlePayment,
+  useReturnPayment,
+  useCancelPayment
 } from '@/lib/hooks';
 import { PaymentStatus, PaymentType } from '@/lib/api/types';
 
@@ -69,45 +69,57 @@ import { PaymentStatus, PaymentType } from '@/lib/api/types';
 
 const STATUS_CONFIG: Record<PaymentStatus, {
   label: string;
-  color: 'warning' | 'success' | 'destructive' | 'default' | 'secondary';
+  color: 'warning' | 'success' | 'danger' | 'default' | 'secondary';
   icon: React.ReactNode;
   description: string;
 }> = {
-  PENDING: { 
-    label: 'Pending', 
+  PENDING: {
+    label: 'Pending',
     color: 'warning',
     icon: <Clock className="h-4 w-4" />,
     description: 'Payment is awaiting processing',
   },
-  PROCESSING: { 
-    label: 'Processing', 
+  PROCESSING: {
+    label: 'Processing',
     color: 'secondary',
     icon: <Loader2 className="h-4 w-4 animate-spin" />,
     description: 'Payment is being processed',
   },
-  SETTLED: { 
-    label: 'Settled', 
+  SETTLED: {
+    label: 'Settled',
     color: 'success',
     icon: <CheckCircle2 className="h-4 w-4" />,
     description: 'Payment completed successfully',
   },
-  FAILED: { 
-    label: 'Failed', 
-    color: 'destructive',
+  FAILED: {
+    label: 'Failed',
+    color: 'danger',
     icon: <XCircle className="h-4 w-4" />,
     description: 'Payment failed to process',
   },
-  RETURNED: { 
-    label: 'Returned', 
+  RETURNED: {
+    label: 'Returned',
     color: 'secondary',
     icon: <RotateCcw className="h-4 w-4" />,
     description: 'Payment was returned',
   },
-  CANCELLED: { 
-    label: 'Cancelled', 
+  CANCELLED: {
+    label: 'Cancelled',
     color: 'default',
     icon: <Ban className="h-4 w-4" />,
     description: 'Payment was cancelled',
+  },
+  REJECTED: {
+    label: 'Rejected',
+    color: 'danger',
+    icon: <XCircle className="h-4 w-4" />,
+    description: 'Payment was rejected',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    color: 'success',
+    icon: <CheckCircle2 className="h-4 w-4" />,
+    description: 'Payment completed',
   },
 };
 
@@ -160,15 +172,15 @@ function StatusTimeline({ payment }: { payment: any }) {
   if (payment.status === 'RETURNED') {
     events.push({
       status: 'returned',
-      timestamp: payment.returnedAt || payment.updatedAt,
-      description: `Payment returned: ${payment.returnReason || 'No reason provided'}`,
+      timestamp: payment.updatedAt,
+      description: `Payment returned: ${payment.failureReason || 'No reason provided'}`,
     });
   }
 
   if (payment.status === 'CANCELLED') {
     events.push({
       status: 'cancelled',
-      timestamp: payment.cancelledAt || payment.updatedAt,
+      timestamp: payment.updatedAt,
       description: 'Payment cancelled',
     });
   }
@@ -188,7 +200,7 @@ function StatusTimeline({ payment }: { payment: any }) {
           <div className="flex flex-col items-center">
             <div className={`
               flex h-8 w-8 items-center justify-center rounded-full border-2
-              ${event.status === 'settled' ? 'bg-success text-success-foreground border-success' : 
+              ${event.status === 'settled' ? 'bg-success text-success-foreground border-success' :
                 event.status === 'failed' ? 'bg-destructive text-destructive-foreground border-destructive' :
                 'border-primary bg-primary/10'}
             `}>
@@ -392,7 +404,8 @@ export default function PaymentDetailPage() {
   }
 
   const statusConfig = STATUS_CONFIG[payment.status];
-  const typeConfig = TYPE_CONFIG[payment.type];
+  const paymentType = ((payment as unknown as Record<string, unknown>).type as PaymentType) || 'STANDARD';
+  const typeConfig = TYPE_CONFIG[paymentType];
   const canSettle = payment.status === 'PENDING' || payment.status === 'PROCESSING';
   const canReturn = payment.status === 'SETTLED';
   const canCancel = payment.status === 'PENDING';
@@ -444,8 +457,8 @@ export default function PaymentDetailPage() {
               </Button>
             )}
             {canReturn && (
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => setShowReturnDialog(true)}
               >
@@ -454,8 +467,8 @@ export default function PaymentDetailPage() {
               </Button>
             )}
             {canCancel && (
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="danger"
                 size="sm"
                 onClick={() => setShowCancelDialog(true)}
               >
@@ -476,8 +489,8 @@ export default function PaymentDetailPage() {
           </CardHeader>
           <CardContent>
             <CurrencyDisplay
-              amount={payment.amount.value}
-              currency={payment.amount.currency}
+              amount={payment.amount}
+              currency={payment.currency}
               size="lg"
             />
             <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
@@ -494,12 +507,9 @@ export default function PaymentDetailPage() {
             <CardTitle className="text-base">Sender</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="font-medium">{payment.debtorName}</p>
+            <p className="font-medium">{payment.fromAccountName || 'N/A'}</p>
             <p className="text-sm text-muted-foreground font-mono">
-              {payment.debtorAccount}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              BIC: {payment.debtorBic}
+              {payment.fromAccountId}
             </p>
           </CardContent>
         </Card>
@@ -511,12 +521,9 @@ export default function PaymentDetailPage() {
             <CardTitle className="text-base">Recipient</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="font-medium">{payment.creditorName}</p>
+            <p className="font-medium">{payment.toAccountName || 'N/A'}</p>
             <p className="text-sm text-muted-foreground font-mono">
-              {payment.creditorAccount}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              BIC: {payment.creditorBic}
+              {payment.toAccountId}
             </p>
           </CardContent>
         </Card>
@@ -538,10 +545,10 @@ export default function PaymentDetailPage() {
                   <CopyButton text={payment.uetr} />
                 </dd>
               </div>
-              {payment.endToEndId && (
+              {payment.reference && (
                 <div className="flex justify-between">
-                  <dt className="text-sm text-muted-foreground">End-to-End ID</dt>
-                  <dd className="text-sm font-mono">{payment.endToEndId}</dd>
+                  <dt className="text-sm text-muted-foreground">Reference</dt>
+                  <dd className="text-sm font-mono">{payment.reference}</dd>
                 </div>
               )}
               <div className="flex justify-between">
@@ -556,10 +563,10 @@ export default function PaymentDetailPage() {
                   {new Date(payment.updatedAt).toLocaleString()}
                 </dd>
               </div>
-              {payment.remittanceInfo && (
+              {payment.description && (
                 <div className="flex justify-between">
-                  <dt className="text-sm text-muted-foreground">Reference</dt>
-                  <dd className="text-sm">{payment.remittanceInfo}</dd>
+                  <dt className="text-sm text-muted-foreground">Description</dt>
+                  <dd className="text-sm">{payment.description}</dd>
                 </div>
               )}
             </dl>
@@ -592,7 +599,7 @@ export default function PaymentDetailPage() {
         </Card>
       )}
 
-      {(payment.status === 'RETURNED' && payment.returnReason) && (
+      {(payment.status === 'RETURNED' && payment.failureReason) && (
         <Card className="mt-6 border-warning">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -601,7 +608,7 @@ export default function PaymentDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm">{payment.returnReason}</p>
+            <p className="text-sm">{payment.failureReason}</p>
           </CardContent>
         </Card>
       )}
@@ -620,8 +627,8 @@ export default function PaymentDetailPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Amount</p>
                 <CurrencyDisplay
-                  amount={payment.amount.value}
-                  currency={payment.amount.currency}
+                  amount={payment.amount}
+                  currency={payment.currency}
                   size="lg"
                 />
               </div>
@@ -631,7 +638,7 @@ export default function PaymentDetailPage() {
             <Button variant="outline" onClick={() => setShowSettleDialog(false)}>
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleSettle}
               disabled={settlePayment.isPending}
             >
@@ -673,7 +680,7 @@ export default function PaymentDetailPage() {
             <Button variant="outline" onClick={() => setShowReturnDialog(false)}>
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleReturn}
               disabled={returnPayment.isPending || !returnReason.trim()}
             >
@@ -714,8 +721,8 @@ export default function PaymentDetailPage() {
             <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
               Keep Payment
             </Button>
-            <Button 
-              variant="destructive"
+            <Button
+              variant="danger"
               onClick={handleCancel}
               disabled={cancelPayment.isPending}
             >

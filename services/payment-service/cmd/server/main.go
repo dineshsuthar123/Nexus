@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	idempotency "github.com/nexus-rtp/idempotency"
 	"github.com/nexus-rtp/payment-service/internal/api"
 	"github.com/nexus-rtp/payment-service/internal/config"
 	"github.com/nexus-rtp/payment-service/internal/db"
@@ -18,6 +19,7 @@ import (
 	"github.com/nexus-rtp/payment-service/internal/observability"
 	"github.com/nexus-rtp/payment-service/internal/sanctions"
 	"github.com/nexus-rtp/payment-service/internal/service"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -80,6 +82,22 @@ func main() {
 		kafkaProducer,
 	)
 
+	// Initialize Redis client for idempotency
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		logger.Fatal("Failed to parse Redis URL", zap.Error(err))
+	}
+	rdb := redis.NewClient(redisOpts)
+	if pingErr := rdb.Ping(context.Background()).Err(); pingErr != nil {
+		logger.Warn("Redis not available — idempotency disabled", zap.Error(pingErr))
+		rdb = nil
+	} else {
+		logger.Info("Connected to Redis for idempotency")
+	}
+	if rdb != nil {
+		defer rdb.Close()
+	}
+
 	// Initialize Gin router
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -89,6 +107,15 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(observability.GinLogger(logger))
 	router.Use(observability.TracingMiddleware())
+
+	// Idempotency middleware — applied to all POST routes
+	if rdb != nil {
+		idempCfg := idempotency.DefaultConfig("payment-service", logger)
+		if cfg.IdempotencyTTL > 0 {
+			idempCfg.TTL = time.Duration(cfg.IdempotencyTTL) * time.Second
+		}
+		router.Use(idempotency.Middleware(rdb, idempCfg))
+	}
 
 	// Register API routes
 	api.RegisterRoutes(router, paymentService, logger)

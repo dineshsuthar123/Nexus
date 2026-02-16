@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - WebSocket React Hooks
- * 
+ *
  * Custom hooks for WebSocket integration with React components.
  */
 
@@ -71,13 +71,13 @@ export function useWebSocket() {
 
     const unsubAccount = wsClient.onAccount((data) => {
       // Invalidate account queries
-      queryClient.invalidateQueries({ queryKey: accountKeys.detail(data.id) });
+      queryClient.invalidateQueries({ queryKey: accountKeys.detail(data.id || data.accountId) });
       queryClient.invalidateQueries({ queryKey: accountKeys.lists() });
     });
 
     const unsubReconciliation = wsClient.onReconciliation((data) => {
       // Invalidate reconciliation queries
-      queryClient.invalidateQueries({ queryKey: reconciliationKeys.cycle(data.id) });
+      queryClient.invalidateQueries({ queryKey: reconciliationKeys.cycle(data.cycleId) });
       queryClient.invalidateQueries({ queryKey: reconciliationKeys.cycles() });
     });
 
@@ -189,7 +189,7 @@ export function useReconciliationUpdates(
     }
 
     const unsubscribe = wsClient.onReconciliation((data) => {
-      if (!options?.cycleId || data.id === options.cycleId) {
+      if (!options?.cycleId || data.cycleId === options.cycleId) {
         callbackRef.current(data);
       }
     });

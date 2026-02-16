@@ -66,10 +66,10 @@ type NotificationPreference struct {
 
 // PaginatedNotifications wraps a page of notifications with metadata.
 type PaginatedNotifications struct {
-	Items      []Notification `json:"items"`
-	Total      int            `json:"total"`
-	Page       int            `json:"page"`
-	PageSize   int            `json:"pageSize"`
-	TotalPages int            `json:"totalPages"`
-	UnreadCount int           `json:"unreadCount"`
+	Items       []Notification `json:"items"`
+	Total       int            `json:"total"`
+	Page        int            `json:"page"`
+	PageSize    int            `json:"pageSize"`
+	TotalPages  int            `json:"totalPages"`
+	UnreadCount int            `json:"unreadCount"`
 }

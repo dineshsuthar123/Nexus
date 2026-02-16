@@ -1,0 +1,129 @@
+{{/*
+Canary Deployment Template
+Deploys a canary version of a service alongside the stable version.
+Traffic splitting is managed via Ingress annotations or service mesh.
+*/}}
+{{- if .Values.canary.enabled }}
+{{- $services := list "payment-service" "account-service" "auth-service" }}
+{{- range $svc := $services }}
+{{- $svcValues := index $.Values (camelcase $svc | untitle) }}
+{{- if $svcValues }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus-platform.fullname" $ }}-{{ $svc }}-canary
+  labels:
+    {{- include "nexus-platform.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $svc }}
+    track: canary
+  annotations:
+    nexus-rtp.io/canary: "true"
+    nexus-rtp.io/canary-weight: {{ $.Values.canary.weight | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nexus-platform.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $svc }}
+      track: canary
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "nexus-platform.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $svc }}
+        track: canary
+    spec:
+      serviceAccountName: {{ include "nexus-platform.fullname" $ }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: {{ $svc }}
+          image: "{{ $svcValues.image.repository }}:{{ $svcValues.image.tag }}-canary"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: CANARY
+              value: "true"
+            - name: ENVIRONMENT
+              value: "staging-canary"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nexus-platform.fullname" $ }}-{{ $svc }}-canary
+  labels:
+    {{- include "nexus-platform.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $svc }}
+    track: canary
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nexus-platform.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $svc }}
+    track: canary
+{{- end }}
+{{- end }}
+---
+# Canary Ingress with traffic splitting
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "nexus-platform.fullname" . }}-canary
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: {{ .Values.canary.weight | quote }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.nexus.local
+      http:
+        paths:
+          - path: /api/v1/payments
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "nexus-platform.fullname" . }}-payment-service-canary
+                port:
+                  number: 8080
+          - path: /api/v1/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "nexus-platform.fullname" . }}-auth-service-canary
+                port:
+                  number: 8080
+{{- end }}

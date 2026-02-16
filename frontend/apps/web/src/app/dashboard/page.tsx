@@ -1,22 +1,21 @@
 'use client';
 
 import { Suspense } from 'react';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
   CardTitle,
   CurrencyDisplay,
-  PercentageDisplay,
   TransactionRow,
   Button,
 } from '@nexus/ui';
-import { 
+import {
   MetricCard,
   MetricCardSkeleton,
   SystemStatusBadge,
 } from '@nexus/ui';
-import { 
+import {
   Activity,
   Users,
   CreditCard,
@@ -34,7 +33,7 @@ export default function DashboardPage() {
   const { summary, performance, health, isLoading, isError, refetch } = useDashboardData({
     refetchInterval: 30000, // Refresh every 30 seconds
   });
-  
+
   const { data: recentPayments, isLoading: paymentsLoading } = usePayments({}, { page: 1, pageSize: 5 });
   const { isConnected } = useWebSocketContext();
 
@@ -50,7 +49,7 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
-        
+
         <Card className="p-8">
           <div className="flex flex-col items-center justify-center text-center">
             <AlertCircle className="h-12 w-12 text-destructive mb-4" />
@@ -112,28 +111,28 @@ export default function DashboardPage() {
               title="Total Volume"
               value={summary.data?.totalVolume ? `$${formatCompactNumber(summary.data.totalVolume)}` : '$0'}
               change={summary.data?.volumeChange || 0}
-              trend={summary.data?.volumeChange >= 0 ? 'up' : 'down'}
+              trend={(summary.data?.volumeChange ?? 0) >= 0 ? 'up' : 'down'}
               icon={<DollarSign className="h-5 w-5" />}
             />
             <MetricCard
               title="Transactions"
               value={formatCompactNumber(summary.data?.totalTransactions || 0)}
               change={summary.data?.transactionChange || 0}
-              trend={summary.data?.transactionChange >= 0 ? 'up' : 'down'}
+              trend={(summary.data?.transactionChange ?? 0) >= 0 ? 'up' : 'down'}
               icon={<Activity className="h-5 w-5" />}
             />
             <MetricCard
-              title="Active Accounts"
-              value={formatCompactNumber(summary.data?.activeAccounts || 0)}
-              change={summary.data?.accountChange || 0}
-              trend={summary.data?.accountChange >= 0 ? 'up' : 'down'}
+              title="Active Users"
+              value={formatCompactNumber(summary.data?.activeUsers || 0)}
+              change={summary.data?.userChange || 0}
+              trend={(summary.data?.userChange ?? 0) >= 0 ? 'up' : 'down'}
               icon={<Users className="h-5 w-5" />}
             />
             <MetricCard
-              title="Success Rate"
-              value={`${(summary.data?.successRate || 99.97).toFixed(2)}%`}
-              change={summary.data?.successRateChange || 0}
-              trend={summary.data?.successRateChange >= 0 ? 'up' : 'down'}
+              title="Global Reach"
+              value={`${summary.data?.globalReach || 0} countries`}
+              change={summary.data?.newCountries || 0}
+              trend={(summary.data?.newCountries ?? 0) >= 0 ? 'up' : 'down'}
               icon={<CreditCard className="h-5 w-5" />}
             />
           </>
@@ -172,13 +171,13 @@ export default function DashboardPage() {
                   <TransactionRow
                     key={payment.uetr}
                     transactionId={payment.uetr}
-                    type={payment.type === 'INSTANT' ? 'credit' : 'debit'}
+                    type={payment.amount >= 0 ? 'credit' : 'debit'}
                     status={payment.status.toLowerCase() as 'completed' | 'pending' | 'processing'}
-                    amount={payment.amount.value}
-                    description={payment.remittanceInfo || 'Payment'}
-                    category={payment.type}
+                    amount={Math.abs(payment.amount)}
+                    description={payment.description || 'Payment'}
+                    category={payment.currency}
                     timestamp={new Date(payment.createdAt)}
-                    counterparty={payment.creditorName}
+                    counterparty={payment.toAccountName || payment.toAccountId}
                     compact
                   />
                 ))
@@ -208,38 +207,38 @@ export default function DashboardPage() {
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                      API Gateway
+                      Database
                     </span>
-                    <SystemStatusBadge 
-                      status={health.data?.services?.gateway || 'active'} 
-                      size="sm" 
+                    <SystemStatusBadge
+                      status={health.data?.checks?.database?.status === 'healthy' ? 'active' : 'error'}
+                      size="sm"
                     />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                      Payment Engine
+                      Kafka
                     </span>
-                    <SystemStatusBadge 
-                      status={health.data?.services?.payment || 'active'} 
-                      size="sm" 
+                    <SystemStatusBadge
+                      status={health.data?.checks?.kafka?.status === 'healthy' ? 'active' : 'error'}
+                      size="sm"
                     />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                      Audit Service
+                      Redis
                     </span>
-                    <SystemStatusBadge 
-                      status={health.data?.services?.audit || 'active'} 
-                      size="sm" 
+                    <SystemStatusBadge
+                      status={health.data?.checks?.redis?.status === 'healthy' ? 'active' : 'error'}
+                      size="sm"
                     />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                      Reconciliation
+                      Overall
                     </span>
-                    <SystemStatusBadge 
-                      status={health.data?.services?.reconciliation || 'processing'} 
-                      size="sm" 
+                    <SystemStatusBadge
+                      status={health.data?.status === 'healthy' ? 'active' : 'error'}
+                      size="sm"
                     />
                   </div>
                 </>
@@ -267,21 +266,21 @@ export default function DashboardPage() {
                   ))}
                 </div>
               ) : (
-                (summary.data?.topRecipients || []).map((recipient, index) => (
-                  <div key={recipient.name} className="flex items-center gap-3">
+                (summary.data?.topCategories || []).map((category, index) => (
+                  <div key={category.name} className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-sm font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
                       {index + 1}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                        {recipient.name}
+                        {category.name}
                       </p>
                       <p className="text-xs text-neutral-500">
-                        {recipient.transactions} transactions
+                        {category.percentage.toFixed(1)}%
                       </p>
                     </div>
                     <CurrencyDisplay
-                      amount={recipient.volume}
+                      amount={category.volume}
                       compact
                       size="sm"
                     />
@@ -303,13 +302,11 @@ export default function DashboardPage() {
             <div className="space-y-2">
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">
-                  {performance.data?.avgLatencyMs || 47}ms
+                  {performance.data?.averageLatency || 47}ms
                 </span>
-                <PercentageDisplay 
-                  value={performance.data?.latencyChange || -12} 
-                  size="sm" 
-                  invertColor 
-                />
+                <span className="text-sm text-neutral-500">
+                  p99: {performance.data?.p99Latency || 120}ms
+                </span>
               </div>
               <p className="text-sm text-neutral-500">Average end-to-end latency</p>
             </div>
@@ -324,13 +321,9 @@ export default function DashboardPage() {
             <div className="space-y-2">
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">
-                  {formatCompactNumber(performance.data?.peakTps || 12400)}
+                  {formatCompactNumber(performance.data?.throughput || 12400)}
                 </span>
                 <span className="text-sm text-neutral-500">/sec</span>
-                <PercentageDisplay 
-                  value={performance.data?.tpsChange || 8.3} 
-                  size="sm" 
-                />
               </div>
               <p className="text-sm text-neutral-500">Peak transactions per second</p>
             </div>
@@ -347,11 +340,9 @@ export default function DashboardPage() {
                 <span className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">
                   {(performance.data?.errorRate || 0.03).toFixed(2)}%
                 </span>
-                <PercentageDisplay 
-                  value={performance.data?.errorRateChange || -0.01} 
-                  size="sm" 
-                  invertColor 
-                />
+                <span className="text-sm text-neutral-500">
+                  Uptime: {(performance.data?.uptimePercentage || 99.99).toFixed(2)}%
+                </span>
               </div>
               <p className="text-sm text-neutral-500">Failed transactions today</p>
             </div>

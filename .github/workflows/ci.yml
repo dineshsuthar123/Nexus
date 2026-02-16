@@ -5,6 +5,12 @@ on:
     branches: [main, squeeze/*]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_chaos:
+        description: 'Run chaos experiments after smoke tests'
+        required: false
+        default: 'true'
 
 env:
   GO_VERSION: '1.21'
@@ -19,16 +25,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      
+
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
-      
+
       - name: Run gofmt check
         run: |
           for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022 tests/chaos tests/e2e; do
@@ -39,7 +45,7 @@ jobs:
               cd -
             fi
           done
-      
+
       - name: Run go vet
         run: |
           for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022; do
@@ -51,7 +57,7 @@ jobs:
               cd -
             fi
           done
-      
+
       - name: Run golangci-lint
         run: |
           for dir in services/payment-service services/account-service services/reconciliation-service; do
@@ -68,12 +74,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      
+
       - name: Run unit tests
         run: |
           for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022; do
@@ -85,7 +91,7 @@ jobs:
               cd -
             fi
           done
-      
+
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
@@ -98,12 +104,12 @@ jobs:
     needs: [go-lint, go-test]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      
+
       - name: Build services
         run: |
           mkdir -p bin
@@ -116,7 +122,7 @@ jobs:
               cd -
             fi
           done
-      
+
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
@@ -131,14 +137,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
-      
+
       - name: Run Maven tests
         working-directory: flink-jobs/fraud-detection
         run: mvn -B test --file pom.xml || true
@@ -149,18 +155,18 @@ jobs:
     needs: java-test
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
-      
+
       - name: Build with Maven
         working-directory: flink-jobs/fraud-detection
         run: mvn -B package -DskipTests --file pom.xml
-      
+
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
@@ -176,22 +182,22 @@ jobs:
     needs: [go-build, java-build]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Build payment-service image
         run: |
           docker build -t nexus/payment-service:${{ github.sha }} -f services/payment-service/Dockerfile services/payment-service
-      
+
       - name: Build account-service image
         run: |
           docker build -t nexus/account-service:${{ github.sha }} -f services/account-service/Dockerfile services/account-service
-      
+
       - name: Build reconciliation-service image
         run: |
           docker build -t nexus/reconciliation-service:${{ github.sha }} -f services/reconciliation-service/Dockerfile services/reconciliation-service
-      
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -201,7 +207,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
-      
+
       - name: Run Trivy on account-service
         uses: aquasecurity/trivy-action@master
         with:
@@ -220,7 +226,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run PAN/Secret Scan
         run: |
           # Scan for card PANs (simple pattern)
@@ -230,7 +236,7 @@ jobs:
           else
             echo "No obvious card numbers found"
           fi
-          
+
           # Scan for private keys
           echo "Scanning for private keys..."
           if grep -rE 'BEGIN (RSA |EC |DSA )?PRIVATE KEY' . 2>/dev/null | grep -v node_modules | grep -v vendor; then
@@ -239,7 +245,7 @@ jobs:
           else
             echo "No private keys found"
           fi
-          
+
           # Scan for AWS keys
           echo "Scanning for AWS credentials..."
           if grep -rE 'AKIA[0-9A-Z]{16}' . 2>/dev/null | grep -v node_modules | grep -v vendor; then
@@ -248,40 +254,142 @@ jobs:
           else
             echo "No AWS keys found"
           fi
-      
+
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ============================================================
-  # E2E Tests (when infra is up)
+  # E2E / Smoke Tests
   # ============================================================
   e2e-test:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [go-build]
-    if: false  # Disabled by default - enable when infra is available
+    if: github.ref == 'refs/heads/staging' || startsWith(github.ref, 'refs/heads/agent/')
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      
+
       - name: Start infrastructure
         run: |
           docker-compose -f infra/docker/docker-compose.yml up -d
           sleep 30
-      
+
       - name: Run E2E tests
         run: |
           cd tests/e2e
           go mod tidy
           go test -v ./...
-      
+
       - name: Stop infrastructure
         if: always()
         run: |
           docker-compose -f infra/docker/docker-compose.yml down -v
+
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [go-build, docker-build]
+    if: github.ref == 'refs/heads/staging' || startsWith(github.ref, 'refs/heads/agent/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build and start full stack
+        run: |
+          docker-compose -f infra/docker/docker-compose.yml --profile services up --build -d
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to become healthy..."
+          for svc_port in "auth-service:8088" "payment-service:8085" "account-service:8086" "reconciliation-service:8087" "ws-gateway:8089" "analytics-service:8090" "audit-service:8091" "notification-service:8092"; do
+            svc="${svc_port%%:*}"
+            port="${svc_port##*:}"
+            echo "Checking $svc on port $port..."
+            timeout 120 bash -c "until curl -sf http://localhost:$port/health > /dev/null 2>&1; do sleep 2; done" || {
+              echo "WARN: $svc did not become healthy on port $port"
+            }
+          done
+          echo "All services checked."
+
+      - name: Run smoke tests (payment flow)
+        run: |
+          cd tests/e2e
+          go mod tidy
+          go test -v -run TestPaymentFlow -timeout 120s ./...
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          mkdir -p /tmp/smoke-logs
+          docker-compose -f infra/docker/docker-compose.yml logs --no-color > /tmp/smoke-logs/all-services.log 2>&1
+          docker ps -a > /tmp/smoke-logs/containers.txt
+
+      - name: Upload logs artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs
+          path: /tmp/smoke-logs/
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker-compose -f infra/docker/docker-compose.yml --profile services down --remove-orphans -v
+  # ============================================================
+  # Chaos Experiments - Manual trigger, staging only
+  # ============================================================
+  chaos-check:
+    name: Chaos Experiments
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    needs: [smoke-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start full stack
+        run: |
+          docker-compose -f infra/docker/docker-compose.yml --profile services up --build -d
+
+      - name: Wait for services to be healthy
+        run: |
+          for svc_port in "payment-service:8085" "account-service:8086" "notification-service:8092"; do
+            svc="${svc_port%%:*}"
+            port="${svc_port##*:}"
+            timeout 120 bash -c "until curl -sf http://localhost:$port/health > /dev/null 2>&1; do sleep 2; done" || {
+              echo "WARN: $svc did not become healthy"
+            }
+          done
+
+      - name: Run Kafka broker kill experiment
+        run: bash chaos/kill_kafka_broker.sh
+
+      - name: Run notification service kill experiment
+        run: bash chaos/kill_notification_service.sh
+
+      - name: Run DB latency injection experiment
+        run: bash chaos/db_latency.sh
+
+      - name: Upload chaos reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-reports
+          path: chaos/reports/
+          retention-days: 14
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker-compose -f infra/docker/docker-compose.yml --profile services down --remove-orphans -v

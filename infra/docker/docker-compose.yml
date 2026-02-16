@@ -1,6 +1,6 @@
 # Nexus - Global Real-Time Payment Network
 # Docker Compose for Local Development
-# 
+#
 # Usage:
 #   docker compose up -d        # Start all services
 #   docker compose logs -f      # View logs
@@ -504,6 +504,7 @@ services:
       DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
       KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
       REDIS_URL: redis://redis:6379
+      IDEMPOTENCY_TTL_SECONDS: "86400"
       WATCHMAN_URL: http://watchman:8084
       JAEGER_ENDPOINT: http://jaeger:14268/api/traces
     networks:
@@ -529,6 +530,7 @@ services:
       DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
       KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
       REDIS_URL: redis://redis:6379
+      IDEMPOTENCY_TTL_SECONDS: "86400"
       JAEGER_ENDPOINT: http://jaeger:14268/api/traces
     networks:
       - nexus-network
@@ -551,12 +553,15 @@ services:
       <<: *common-env
       DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
       KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      REDIS_URL: redis://redis:6379
+      IDEMPOTENCY_TTL_SECONDS: "86400"
       JAEGER_ENDPOINT: http://jaeger:14268/api/traces
     networks:
       - nexus-network
     depends_on:
       - cockroachdb-1
       - kafka-1
+      - redis
 
   # ============================================================================
   # Auth Service - JWT, MFA, Password Reset

@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - API Client
- * 
+ *
  * Axios-based API client with:
  * - Automatic auth header injection
  * - Token refresh on 401
@@ -39,6 +39,10 @@ interface RequestMetadata {
 }
 
 declare module 'axios' {
+  interface AxiosRequestConfig {
+    metadata?: RequestMetadata;
+    skipAuthRefresh?: boolean;
+  }
   interface InternalAxiosRequestConfig {
     metadata?: RequestMetadata;
     skipAuthRefresh?: boolean;
@@ -200,11 +204,11 @@ class ApiClient {
     try {
       // Try to refresh the token using NextAuth's session refresh
       const session = await getSession();
-      
+
       if (session?.accessToken) {
         // Token was refreshed
         const newToken = session.accessToken;
-        
+
         // Notify all waiting requests
         this.refreshSubscribers.forEach((callback) => callback(newToken));
         this.refreshSubscribers = [];
@@ -318,7 +322,8 @@ class ApiClient {
       return {
         code: 'NETWORK_ERROR',
         message: error.message || 'Network error occurred',
-        details: error.code ? { errorCode: error.code } : undefined,
+        details: error.code ? `Network error code: ${error.code}` : undefined,
+        timestamp: new Date().toISOString(),
       };
     }
 
@@ -327,8 +332,8 @@ class ApiClient {
     return {
       code: (data?.code as string) || `HTTP_${response.status}`,
       message: (data?.message as string) || this.getDefaultErrorMessage(response.status),
-      details: data?.details as Record<string, unknown>,
-      field: data?.field as string,
+      details: typeof data?.details === 'string' ? data.details : JSON.stringify(data?.details),
+      timestamp: new Date().toISOString(),
     };
   }
 
@@ -365,7 +370,7 @@ class ApiClient {
 
   private sanitizeHeaders(headers: Record<string, unknown>): Record<string, unknown> {
     const sanitized: Record<string, unknown> = {};
-    
+
     Object.entries(headers).forEach(([key, value]) => {
       if (SENSITIVE_HEADERS.includes(key.toLowerCase())) {
         sanitized[key] = '[REDACTED]';
@@ -439,7 +444,7 @@ class ApiClient {
         retryCount: 0,
         idempotencyKey: key,
       },
-    } as InternalAxiosRequestConfig);
+    });
     return { data: response.data, status: response.status };
   }
 

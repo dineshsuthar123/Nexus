@@ -35,6 +35,9 @@ type Config struct {
 
 	// Rate Limiting
 	RateLimit RateLimitConfig `mapstructure:"RATE_LIMIT"`
+
+	// Idempotency
+	IdempotencyTTL int `mapstructure:"IDEMPOTENCY_TTL_SECONDS"`
 }
 
 // LatencyBudgetConfig defines the latency budget for each stage
@@ -64,6 +67,7 @@ func Load() (*Config, error) {
 	v.SetDefault("DATABASE_URL", "postgresql://root@localhost:26257/nexus_ledger?sslmode=disable")
 	v.SetDefault("KAFKA_BROKERS", "localhost:9092")
 	v.SetDefault("REDIS_URL", "redis://localhost:6379")
+	v.SetDefault("IDEMPOTENCY_TTL_SECONDS", 86400)
 	v.SetDefault("WATCHMAN_URL", "http://localhost:8084")
 	v.SetDefault("JAEGER_ENDPOINT", "http://localhost:14268/api/traces")
 

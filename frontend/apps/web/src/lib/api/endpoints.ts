@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - API Endpoints Configuration
- * 
+ *
  * Centralized endpoint definitions for all backend API calls.
  * Endpoints are organized by service domain.
  */
@@ -44,7 +44,7 @@ export const PAYMENT_ENDPOINTS = {
   SETTLE: (uetr: string) => `/payments/${uetr}/settle`,
   RETURN: (uetr: string) => `/payments/${uetr}/return`,
   CANCEL: (uetr: string) => `/payments/${uetr}/cancel`,
-  
+
   // ISO 20022 endpoints
   PACS_008: '/messages/pacs.008',
   PACS_004: '/messages/pacs.004',
@@ -64,7 +64,7 @@ export const ACCOUNT_ENDPOINTS = {
   UPDATE_KYC: (id: string) => `/accounts/${id}/kyc`,
   GET_AUDIT: (id: string) => `/accounts/${id}/audit`,
   GET_TRANSACTIONS: (id: string) => `/accounts/${id}/transactions`,
-  
+
   // Customer accounts
   GET_BY_CUSTOMER: (customerId: string) => `/customers/${customerId}/accounts`,
 } as const;
@@ -148,7 +148,7 @@ export const SYSTEM_ENDPOINTS = {
  */
 export function buildUrl(endpoint: string, params?: Record<string, string | number>): string {
   let url = `${getBaseUrl()}${endpoint}`;
-  
+
   if (params) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -161,7 +161,7 @@ export function buildUrl(endpoint: string, params?: Record<string, string | numb
       url += `?${queryString}`;
     }
   }
-  
+
   return url;
 }
 
@@ -169,11 +169,12 @@ export function buildUrl(endpoint: string, params?: Record<string, string | numb
  * Build query string from filters and pagination
  */
 export function buildQueryParams(
-  filters?: Record<string, unknown>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filters?: Record<string, any>,
   pagination?: { page?: number; pageSize?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' }
 ): Record<string, string> {
   const params: Record<string, string> = {};
-  
+
   if (filters) {
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
@@ -187,14 +188,14 @@ export function buildQueryParams(
       }
     });
   }
-  
+
   if (pagination) {
     if (pagination.page !== undefined) params.page = String(pagination.page);
     if (pagination.pageSize !== undefined) params.pageSize = String(pagination.pageSize);
     if (pagination.sortBy) params.sortBy = pagination.sortBy;
     if (pagination.sortOrder) params.sortOrder = pagination.sortOrder;
   }
-  
+
   return params;
 }
 

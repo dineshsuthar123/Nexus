@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - API Type Definitions
- * 
+ *
  * TypeScript interfaces for all backend API responses and requests.
  * These types are derived from the backend Go services' API contracts.
  */
@@ -11,7 +11,7 @@
 
 export type Currency = 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CHF' | 'CAD' | 'AUD' | 'CNY' | 'INR';
 
-export type PaymentStatus = 
+export type PaymentStatus =
   | 'PENDING'
   | 'PROCESSING'
   | 'COMPLETED'
@@ -33,15 +33,18 @@ export type ReconciliationStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED
 
 export type DiscrepancyType = 'AMOUNT_MISMATCH' | 'MISSING_TRANSACTION' | 'DUPLICATE' | 'STATUS_MISMATCH';
 
+export type DiscrepancyResolution = 'ACCEPTED' | 'REJECTED' | 'ADJUSTED' | 'PENDING_REVIEW';
+
 // =============================================================================
 // API Response Wrappers
 // =============================================================================
 
 export interface ApiResponse<T> {
   data: T;
-  success: boolean;
+  success?: boolean;
+  status?: number;
   message?: string;
-  timestamp: string;
+  timestamp?: string;
 }
 
 export interface ApiError {
@@ -143,11 +146,14 @@ export interface User {
   emailVerified: boolean;
   createdAt: string;
   lastLoginAt?: string;
+  permissions?: string[];
 }
 
 // =============================================================================
 // Payment Types
 // =============================================================================
+
+export type PaymentType = 'INSTANT' | 'STANDARD' | 'SCHEDULED';
 
 export interface Payment {
   id: string;
@@ -155,10 +161,19 @@ export interface Payment {
   amount: number;
   currency: Currency;
   status: PaymentStatus;
+  type?: PaymentType;
   fromAccountId: string;
   fromAccountName?: string;
   toAccountId: string;
   toAccountName?: string;
+  debtorName?: string;
+  debtorAccount?: string;
+  debtorBic?: string;
+  creditorName?: string;
+  creditorAccount?: string;
+  creditorBic?: string;
+  remittanceInfo?: string;
+  endToEndId?: string;
   description?: string;
   reference?: string;
   metadata?: Record<string, string>;
@@ -173,12 +188,18 @@ export interface Payment {
 export interface CreatePaymentRequest {
   amount: number;
   currency: Currency;
-  fromAccountId: string;
-  toAccountId: string;
-  description?: string;
-  reference?: string;
-  metadata?: Record<string, string>;
-  idempotencyKey: string;
+  debtorName: string;
+  debtorAccount: string;
+  debtorBic: string;
+  creditorName: string;
+  creditorAccount: string;
+  creditorBic: string;
+  type: PaymentType;
+  remittanceInfo?: string;
+  endToEndId?: string;
+  scheduledDate?: string;
+  priority?: 'NORMAL' | 'HIGH' | 'URGENT';
+  idempotencyKey?: string;
 }
 
 export interface CreatePaymentResponse {
@@ -303,10 +324,16 @@ export interface ReconciliationCycle {
   status: ReconciliationStatus;
   startedAt: string;
   completedAt?: string;
+  startTime: string;
+  endTime?: string;
+  progress?: number;
   totalTransactions: number;
   matchedTransactions: number;
+  matchedCount?: number;
+  unmatchedCount?: number;
   discrepancyCount: number;
   matchRate: number;
+  accounts?: string[];
   auditBundleId?: string;
   runBy?: string;
 }
@@ -327,10 +354,12 @@ export interface Discrepancy {
   type: DiscrepancyType;
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   description: string;
+  accountId?: string;
   sourceTransactionId?: string;
   targetTransactionId?: string;
   expectedAmount?: number;
   actualAmount?: number;
+  difference?: number;
   currency?: Currency;
   status: 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'IGNORED';
   resolution?: string;
@@ -353,21 +382,21 @@ export interface AuditBundle {
   version: string;
   createdAt: string;
   expiresAt?: string;
-  
+
   // Bundle metadata
   bundleType: 'PAYMENT' | 'RECONCILIATION' | 'ACCOUNT_CHANGE' | 'SYSTEM';
   referenceId: string; // UETR for payments, cycleId for reconciliation
-  
+
   // Cryptographic proof
   merkleRoot: string;
   previousBundleHash?: string;
   signature: string;
   signatureAlgorithm: 'Ed25519';
   signerPublicKey: string;
-  
+
   // Audit entries
   entries: AuditEntry[];
-  
+
   // Verification
   verified?: boolean;
   verifiedAt?: string;
@@ -483,15 +512,51 @@ export interface PerformanceMetrics {
   uptimePercentage: number;
 }
 
+// DashboardSummary used by use-analytics hook
+export interface DashboardSummary {
+  totalVolume: number;
+  totalTransactions: number;
+  activeUsers: number;
+  globalReach: number;
+  volumeChange: number;
+  transactionChange: number;
+  userChange: number;
+  newCountries: number;
+  topCategories: { name: string; volume: number; percentage: number }[];
+  transactionTypes: { name: string; percentage: number; color: string }[];
+  regions: { name: string; volume: number; percentage: number }[];
+}
+
+// VolumeData used by use-analytics hook
+export interface VolumeData {
+  date: string;
+  volume: number;
+  count: number;
+}
+
+// SystemHealth used by use-analytics hook
+export interface SystemHealth {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  checks: {
+    database: { status: string; latency: number };
+    kafka: { status: string; latency: number };
+    redis: { status: string; latency: number };
+    services: { name: string; status: string; latency: number }[];
+  };
+  uptime: number;
+  version: string;
+}
+
 // =============================================================================
 // WebSocket Message Types
 // =============================================================================
 
 export interface WebSocketMessage<T = unknown> {
-  type: 'PAYMENT_UPDATE' | 'BALANCE_UPDATE' | 'ALERT' | 'SYSTEM' | 'HEARTBEAT';
+  type: string;
   id: string;
   timestamp: string;
-  payload: T;
+  payload?: T;
+  data?: T;
 }
 
 export interface PaymentUpdatePayload {
@@ -502,6 +567,7 @@ export interface PaymentUpdatePayload {
 }
 
 export interface BalanceUpdatePayload {
+  id?: string;
   accountId: string;
   previousBalance: number;
   newBalance: number;
@@ -510,12 +576,14 @@ export interface BalanceUpdatePayload {
 }
 
 export interface AlertPayload {
+  id?: string;
   alertId: string;
   severity: 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
   title: string;
   message: string;
   category: 'FRAUD' | 'COMPLIANCE' | 'SYSTEM' | 'SECURITY';
   actionRequired: boolean;
+  read?: boolean;
   relatedResourceType?: string;
   relatedResourceId?: string;
 }
@@ -526,6 +594,7 @@ export interface AlertPayload {
 
 export interface PaymentFilters {
   status?: PaymentStatus[];
+  type?: PaymentType[];
   currency?: Currency[];
   fromDate?: string;
   toDate?: string;
@@ -562,3 +631,68 @@ export type WithId<T> = T & { id: string };
 export type CreateRequest<T> = Omit<T, 'id' | 'createdAt' | 'updatedAt'>;
 
 export type UpdateRequest<T> = Partial<Omit<T, 'id' | 'createdAt'>>;
+
+// =============================================================================
+// Additional Types (re-exported from index.ts)
+// =============================================================================
+
+export type UserRole = User['role'];
+
+export interface UserSession {
+  user: User;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+}
+
+export interface UpdatePaymentStatusRequest {
+  status: PaymentStatus;
+  reason?: string;
+}
+
+export interface MoneyAmount {
+  value: number;
+  currency: Currency;
+}
+
+export type UpdateAccountRequest = Partial<Omit<Account, 'id' | 'createdAt' | 'updatedAt'>>;
+
+export type Balance = AccountBalance;
+
+export interface KycInfo {
+  status: KYCStatus;
+  verifiedAt?: string;
+  documentType?: string;
+  documentId?: string;
+  expiryDate?: string;
+}
+
+export type AuditLogEntry = AuditEntry;
+
+export type WebSocketEventType = WebSocketMessage['type'];
+
+export type PaymentUpdate = PaymentUpdatePayload;
+
+export type AccountUpdate = BalanceUpdatePayload;
+
+export interface ReconciliationUpdate {
+  cycleId: string;
+  status: ReconciliationStatus;
+  progress?: number;
+  matchRate?: number;
+  discrepancyCount?: number;
+}
+
+export type SystemNotification = AlertPayload;
+
+export interface FilterBase {
+  search?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface ReconciliationFilters extends FilterBase {
+  status?: ReconciliationStatus | ReconciliationStatus[];
+  dateFrom?: string;
+  dateTo?: string;
+}

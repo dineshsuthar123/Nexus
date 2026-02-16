@@ -1,0 +1,88 @@
+# Staging values overlay for Nexus RTP Platform
+# Usage: helm upgrade --install nexus ./helm/nexus-platform -f values.yaml -f values.staging.yaml
+
+global:
+  environment: staging
+  imageRegistry: "registry.nexus-rtp.internal"
+
+# ============================================================
+# Canary / Blue-Green Deployment Configuration
+# ============================================================
+canary:
+  enabled: false
+  weight: 5              # Initial traffic percentage (5% → 25% → 100%)
+  analysisInterval: 120  # Seconds between health checks
+  maxWeight: 100
+  stepWeight: 20         # Increment per step after initial
+  healthCheckPath: /healthz
+  # Thresholds for automatic promotion
+  promotion:
+    maxErrorRate: 0.01     # 1% — rollback if exceeded
+    maxP99LatencyMs: 1000  # 1s — rollback if exceeded
+    minSuccessRate: 0.995  # 99.5% — rollback if below
+
+blueGreen:
+  enabled: false
+  activeColor: blue       # Current production color
+  previewService: true    # Create preview service for smoke tests
+  autoPromote: false      # Require manual promotion after smoke
+  smokeTestJob: true      # Run smoke test job before promotion
+  scaleDownDelaySec: 300  # Keep old version for 5m after switch
+
+# ============================================================
+# Database Migrations
+# ============================================================
+migrations:
+  enabled: true
+  image:
+    repository: nexus/migrations
+    tag: latest
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  # Rollback migration support
+  rollback:
+    enabled: true
+    # Last known good migration version
+    targetVersion: ""
+
+# ============================================================
+# Staging-Specific Overrides
+# ============================================================
+paymentService:
+  replicaCount: 2
+  image:
+    tag: staging
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+
+accountService:
+  replicaCount: 2
+  image:
+    tag: staging
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+
+reconciliationService:
+  replicaCount: 1
+  image:
+    tag: staging
+
+# Vault integration for staging
+vault:
+  enabled: true
+  address: "http://vault.vault.svc:8200"
+  authMethod: kubernetes
+
+# Observability
+grafana:
+  adminPassword: "staging-only-password"

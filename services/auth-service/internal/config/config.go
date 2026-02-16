@@ -20,8 +20,21 @@ type Config struct {
 	RedisURL       string `mapstructure:"REDIS_URL"`
 	JaegerEndpoint string `mapstructure:"JAEGER_ENDPOINT"`
 
-	JWT JWTConfig `mapstructure:"JWT"`
-	MFA MFAConfig `mapstructure:"MFA"`
+	JWT   JWTConfig   `mapstructure:"JWT"`
+	MFA   MFAConfig   `mapstructure:"MFA"`
+	Vault VaultConfig `mapstructure:"VAULT"`
+}
+
+// VaultConfig holds Vault integration settings.
+type VaultConfig struct {
+	Enabled       bool   `mapstructure:"ENABLED"`
+	Address       string `mapstructure:"ADDRESS"`
+	Token         string `mapstructure:"TOKEN"`           // dev only
+	RoleID        string `mapstructure:"ROLE_ID"`         // production AppRole
+	SecretID      string `mapstructure:"SECRET_ID"`       // production AppRole
+	JWTKeyPath    string `mapstructure:"JWT_KEY_PATH"`    // KV v2 path to JWT keys
+	MFAKeyPath    string `mapstructure:"MFA_KEY_PATH"`    // KV v2 path to MFA encryption key
+	KeyRefreshSec int    `mapstructure:"KEY_REFRESH_SEC"` // key refresh interval in seconds
 }
 
 // JWTConfig holds JWT signing configuration.
@@ -67,6 +80,16 @@ func Load() (*Config, error) {
 	// TODO: Replace with Vault-backed secret in production
 	v.SetDefault("MFA_ENCRYPTION_KEY", "PLACEHOLDER_32_BYTE_KEY_REPLACE_")
 
+	// Vault defaults (disabled by default for local dev)
+	v.SetDefault("VAULT_ENABLED", false)
+	v.SetDefault("VAULT_ADDRESS", "http://vault:8200")
+	v.SetDefault("VAULT_TOKEN", "")
+	v.SetDefault("VAULT_ROLE_ID", "")
+	v.SetDefault("VAULT_SECRET_ID", "")
+	v.SetDefault("VAULT_JWT_KEY_PATH", "nexus/data/keys/jwt-signing")
+	v.SetDefault("VAULT_MFA_KEY_PATH", "nexus/data/keys/mfa-encryption")
+	v.SetDefault("VAULT_KEY_REFRESH_SEC", 300)
+
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
@@ -84,6 +107,16 @@ func Load() (*Config, error) {
 	cfg.JWT.PasswordResetExpiry = v.GetDuration("JWT_PASSWORD_RESET_EXPIRY")
 	cfg.MFA.Issuer = v.GetString("MFA_ISSUER")
 	cfg.MFA.EncryptionKey = v.GetString("MFA_ENCRYPTION_KEY")
+
+	// Map Vault fields
+	cfg.Vault.Enabled = v.GetBool("VAULT_ENABLED")
+	cfg.Vault.Address = v.GetString("VAULT_ADDRESS")
+	cfg.Vault.Token = v.GetString("VAULT_TOKEN")
+	cfg.Vault.RoleID = v.GetString("VAULT_ROLE_ID")
+	cfg.Vault.SecretID = v.GetString("VAULT_SECRET_ID")
+	cfg.Vault.JWTKeyPath = v.GetString("VAULT_JWT_KEY_PATH")
+	cfg.Vault.MFAKeyPath = v.GetString("VAULT_MFA_KEY_PATH")
+	cfg.Vault.KeyRefreshSec = v.GetInt("VAULT_KEY_REFRESH_SEC")
 
 	return &cfg, nil
 }

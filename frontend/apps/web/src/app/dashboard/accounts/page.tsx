@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Accounts List Page
- * 
+ *
  * Displays all accounts with:
  * - Search and filters
  * - Account type badges
@@ -27,12 +27,13 @@ import {
   AccountBalance,
   Skeleton,
   DataTable,
+  type DataTableColumn,
 } from '@nexus/ui';
-import { 
-  Search, 
-  Plus, 
-  Download, 
-  Building2, 
+import {
+  Search,
+  Plus,
+  Download,
+  Building2,
   Wallet,
   RefreshCw,
   Filter,
@@ -162,7 +163,9 @@ export default function AccountsPage() {
   const { data, isLoading, error, refetch, isFetching } = useAccounts(filters, pagination);
 
   // Real-time updates
-  useAccountUpdates();
+  useAccountUpdates(() => {
+    refetch();
+  });
 
   const hasActiveFilters = !!typeFilter || !!statusFilter || !!currencyFilter;
 
@@ -170,12 +173,12 @@ export default function AccountsPage() {
     setTypeFilter('');
     setStatusFilter('');
     setCurrencyFilter('');
-    setPagination({ ...pagination, page: 1 });
+    setPage(1);
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setPagination({ ...pagination, page: 1 });
+    setPage(1);
   };
 
   const handleSort = (column: string) => {
@@ -188,12 +191,11 @@ export default function AccountsPage() {
   };
 
   // Table columns
-  const columns = [
+  const columns: DataTableColumn<Account>[] = [
     {
-      key: 'name',
+      id: 'name',
       header: 'Account Name',
-      sortable: true,
-      render: (account: Account) => (
+      cell: (account: Account) => (
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800">
             {account.type === 'NOSTRO' ? (
@@ -219,20 +221,19 @@ export default function AccountsPage() {
       ),
     },
     {
-      key: 'type',
+      id: 'type',
       header: 'Type',
-      render: (account: Account) => <AccountTypeBadge type={account.type} />,
+      cell: (account: Account) => <AccountTypeBadge type={account.type} />,
     },
     {
-      key: 'status',
+      id: 'status',
       header: 'Status',
-      render: (account: Account) => <AccountStatusBadge status={account.status} />,
+      cell: (account: Account) => <AccountStatusBadge status={account.status} />,
     },
     {
-      key: 'balance',
+      id: 'balance',
       header: 'Balance',
-      sortable: true,
-      render: (account: Account) => (
+      cell: (account: Account) => (
         <CurrencyDisplay
           amount={account.availableBalance || 0}
           currency={account.currency}
@@ -241,29 +242,28 @@ export default function AccountsPage() {
       ),
     },
     {
-      key: 'currency',
+      id: 'currency',
       header: 'Currency',
-      render: (account: Account) => (
+      cell: (account: Account) => (
         <span className="font-mono text-sm">{account.currency}</span>
       ),
     },
     {
-      key: 'updatedAt',
+      id: 'updatedAt',
       header: 'Last Updated',
-      sortable: true,
-      render: (account: Account) => (
+      cell: (account: Account) => (
         <span className="text-sm text-muted-foreground">
           {new Date(account.updatedAt).toLocaleDateString()}
         </span>
       ),
     },
     {
-      key: 'actions',
+      id: 'actions',
       header: '',
-      render: (account: Account) => (
+      cell: (account: Account) => (
         <div className="flex justify-end gap-1">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
@@ -272,8 +272,8 @@ export default function AccountsPage() {
           >
             <Eye className="h-4 w-4" />
           </Button>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
@@ -298,7 +298,7 @@ export default function AccountsPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button 
+          <Button
             variant="outline"
             onClick={() => refetch()}
             disabled={isFetching}
@@ -322,19 +322,16 @@ export default function AccountsPage() {
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <AccountBalance
-          label="Total Assets"
-          balance={data?.summary?.totalAssets || 0}
-          change={2.4}
+          accountName="Total Assets"
+          balance={data?.data?.reduce((sum, a) => sum + a.balance, 0) || 0}
         />
         <AccountBalance
-          label="Available Balance"
-          balance={data?.summary?.availableBalance || 0}
-          change={1.2}
+          accountName="Available Balance"
+          balance={data?.data?.reduce((sum, a) => sum + a.availableBalance, 0) || 0}
         />
         <AccountBalance
-          label="Pending"
-          balance={data?.summary?.pendingBalance || 0}
-          change={-0.8}
+          accountName="Pending"
+          balance={data?.data?.reduce((sum, a) => sum + a.pendingBalance, 0) || 0}
         />
         <Card>
           <CardContent className="pt-6">
@@ -342,11 +339,11 @@ export default function AccountsPage() {
               Total Accounts
             </div>
             <div className="mt-1 text-2xl font-bold text-neutral-900 dark:text-neutral-100">
-              {data?.total || 0}
+              {data?.pagination?.totalItems || 0}
             </div>
             <div className="mt-1 flex items-center gap-2">
               <Badge variant="success" size="sm">
-                {data?.items.filter(a => a.status === 'ACTIVE').length || 0} active
+                {data?.data?.filter(a => a.status === 'ACTIVE').length || 0} active
               </Badge>
             </div>
           </CardContent>
@@ -394,7 +391,7 @@ export default function AccountsPage() {
                   value={typeFilter}
                   onChange={(e) => {
                     setTypeFilter(e.target.value as AccountType | '');
-                    setPagination({ ...pagination, page: 1 });
+                    setPage(1);
                   }}
                   className="w-40 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
@@ -411,7 +408,7 @@ export default function AccountsPage() {
                   value={statusFilter}
                   onChange={(e) => {
                     setStatusFilter(e.target.value as AccountStatus | '');
-                    setPagination({ ...pagination, page: 1 });
+                    setPage(1);
                   }}
                   className="w-40 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
@@ -428,7 +425,7 @@ export default function AccountsPage() {
                   value={currencyFilter}
                   onChange={(e) => {
                     setCurrencyFilter(e.target.value);
-                    setPagination({ ...pagination, page: 1 });
+                    setPage(1);
                   }}
                   className="w-40 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
@@ -463,13 +460,13 @@ export default function AccountsPage() {
             <Button onClick={() => refetch()}>Try Again</Button>
           </CardContent>
         </Card>
-      ) : data?.items.length === 0 ? (
+      ) : data?.data?.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No accounts found</h3>
             <p className="text-muted-foreground mb-4">
-              {hasActiveFilters 
+              {hasActiveFilters
                 ? 'Try adjusting your filters'
                 : 'Create your first account to get started'}
             </p>
@@ -488,9 +485,9 @@ export default function AccountsPage() {
           {/* Results Count */}
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <p>
-              Showing {((pagination.page - 1) * pagination.pageSize) + 1} - {' '}
-              {Math.min(pagination.page * pagination.pageSize, data?.total || 0)} of{' '}
-              {data?.total || 0} accounts
+              Showing {((page - 1) * pageSize) + 1} - {' '}
+              {Math.min(page * pageSize, data?.pagination?.totalItems || 0)} of{' '}
+              {data?.pagination?.totalItems || 0} accounts
             </p>
           </div>
 
@@ -498,28 +495,25 @@ export default function AccountsPage() {
           <Card>
             <CardContent className="p-0">
               <DataTable
-                data={data?.items || []}
+                data={data?.data || []}
                 columns={columns}
-                sortBy={sortBy}
-                sortOrder={sortOrder}
-                onSort={handleSort}
                 onRowClick={(account) => router.push(`/dashboard/accounts/${account.id}`)}
               />
             </CardContent>
           </Card>
 
           {/* Pagination */}
-          {data && data.totalPages > 1 && (
+          {data && data.pagination.totalPages > 1 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Page {pagination.page} of {data.totalPages}
+                Page {page} of {data.pagination.totalPages}
               </p>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
-                  disabled={pagination.page <= 1}
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page <= 1}
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   Previous
@@ -527,8 +521,8 @@ export default function AccountsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
-                  disabled={pagination.page >= data.totalPages}
+                  onClick={() => setPage(page + 1)}
+                  disabled={page >= data.pagination.totalPages}
                 >
                   Next
                   <ChevronRight className="h-4 w-4 ml-1" />

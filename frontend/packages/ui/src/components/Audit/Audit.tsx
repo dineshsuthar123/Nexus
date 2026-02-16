@@ -1,19 +1,16 @@
 'use client';
 
 import * as React from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
-import { 
-  Shield, 
-  ShieldCheck, 
-  ShieldAlert, 
-  FileCheck, 
-  FileWarning,
+import {
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  FileCheck,
   Hash,
   Key,
   Lock,
   Fingerprint,
   CheckCircle2,
-  AlertTriangle,
   XCircle,
   Copy,
   ExternalLink,
@@ -27,10 +24,10 @@ import { SimpleTooltip } from '../Tooltip';
  * Audit Badge - Shows verification status
  * -------------------------------------------------------------------------- */
 
-export type VerificationStatus = 
-  | 'verified' 
-  | 'pending' 
-  | 'failed' 
+export type VerificationStatus =
+  | 'verified'
+  | 'pending'
+  | 'failed'
   | 'not_verified'
   | 'expired';
 
@@ -156,13 +153,13 @@ const HashDisplay = React.forwardRef<HTMLDivElement, HashDisplayProps>(
         {...props}
       >
         <Hash className="h-3.5 w-3.5 text-neutral-500" />
-        
+
         {type && (
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
             {type}:
           </span>
         )}
-        
+
         <code className="font-mono text-xs text-neutral-700 dark:text-neutral-300">
           {truncatedHash}
         </code>

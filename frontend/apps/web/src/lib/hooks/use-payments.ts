@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - React Query Hooks for Payments
- * 
+ *
  * Custom hooks for payment operations using React Query.
  */
 
@@ -8,9 +8,9 @@ import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tansta
 import { useCallback } from 'react';
 
 import { get, postIdempotent, put, PAYMENT_ENDPOINTS, buildQueryParams } from '@/lib/api';
-import type { 
-  Payment, 
-  CreatePaymentRequest, 
+import type {
+  Payment,
+  CreatePaymentRequest,
   PaginatedResponse,
   PaymentFilters,
   Pagination,
@@ -23,7 +23,7 @@ import type {
 export const paymentKeys = {
   all: ['payments'] as const,
   lists: () => [...paymentKeys.all, 'list'] as const,
-  list: (filters: PaymentFilters, pagination?: Pagination) => 
+  list: (filters: PaymentFilters, pagination?: Pagination) =>
     [...paymentKeys.lists(), { filters, pagination }] as const,
   details: () => [...paymentKeys.all, 'detail'] as const,
   detail: (uetr: string) => [...paymentKeys.details(), uetr] as const,
@@ -74,8 +74,10 @@ export function useInfinitePayments(
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
-      if (lastPage.page < lastPage.totalPages) {
-        return lastPage.page + 1;
+      const page = lastPage.pagination?.page ?? 1;
+      const totalPages = lastPage.pagination?.totalPages ?? 1;
+      if (page < totalPages) {
+        return page + 1;
       }
       return undefined;
     },

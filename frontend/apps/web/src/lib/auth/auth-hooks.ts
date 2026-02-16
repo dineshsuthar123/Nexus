@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Auth Hooks
- * 
+ *
  * Custom hooks for authentication state and session management.
  */
 
@@ -111,7 +111,7 @@ export function useAuth() {
     (permission: string | string[]) => {
       if (!user) return false;
       const permissions = Array.isArray(permission) ? permission : [permission];
-      return permissions.some((p) => user.permissions.includes(p));
+      return permissions.some((p) => user.permissions?.includes(p));
     },
     [user]
   );
@@ -122,7 +122,7 @@ export function useAuth() {
   const hasAllPermissions = useCallback(
     (permissions: string[]) => {
       if (!user) return false;
-      return permissions.every((p) => user.permissions.includes(p));
+      return permissions.every((p) => user.permissions?.includes(p));
     },
     [user]
   );

@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Run Reconciliation Page
- * 
+ *
  * Wizard for running a new reconciliation cycle:
  * - Select accounts to reconcile
  * - Choose date range
@@ -15,10 +15,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
   CardTitle,
   CardDescription,
   Button,
@@ -27,7 +27,7 @@ import {
   Checkbox,
   Skeleton,
 } from '@nexus/ui';
-import { 
+import {
   ArrowLeft,
   ArrowRight,
   Loader2,
@@ -75,10 +75,10 @@ function StepProgress({ currentStep }: { currentStep: Step }) {
               <div
                 className={`
                   flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors
-                  ${isCompleted 
-                    ? 'border-primary bg-primary text-primary-foreground' 
-                    : isCurrent 
-                      ? 'border-primary text-primary' 
+                  ${isCompleted
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : isCurrent
+                      ? 'border-primary text-primary'
                       : 'border-muted text-muted-foreground'
                   }
                 `}
@@ -190,7 +190,7 @@ function AccountSelector({
 export default function RunReconciliationPage() {
   const router = useRouter();
   const runReconciliation = useRunReconciliation();
-  
+
   const [currentStep, setCurrentStep] = useState<Step>('accounts');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
@@ -198,8 +198,8 @@ export default function RunReconciliationPage() {
   const [autoResolve, setAutoResolve] = useState(false);
 
   // Fetch accounts
-  const { data: accountsData, isLoading: accountsLoading } = useAccounts({ status: 'ACTIVE' });
-  const accounts = accountsData?.items || [];
+  const { data: accountsData, isLoading: accountsLoading } = useAccounts({ status: ['ACTIVE'] });
+  const accounts = accountsData?.data || [];
 
   const {
     register,
@@ -209,8 +209,8 @@ export default function RunReconciliationPage() {
   } = useForm<RunReconciliationFormData>({
     resolver: zodResolver(runReconciliationSchema),
     defaultValues: {
-      startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      endDate: new Date().toISOString().split('T')[0],
+      startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      endDate: new Date(),
     },
   });
 
@@ -218,8 +218,8 @@ export default function RunReconciliationPage() {
   const endDate = watch('endDate');
 
   const toggleAccount = (id: string) => {
-    setSelectedAccountIds(prev => 
-      prev.includes(id) 
+    setSelectedAccountIds(prev =>
+      prev.includes(id)
         ? prev.filter(i => i !== id)
         : [...prev, id]
     );
@@ -235,15 +235,15 @@ export default function RunReconciliationPage() {
 
   const goToNextStep = () => {
     const currentIndex = STEPS.findIndex((s) => s.id === currentStep);
-    
+
     // Validate current step
     if (currentStep === 'accounts' && selectedAccountIds.length === 0) {
       setSubmitError('Please select at least one account');
       return;
     }
-    
+
     setSubmitError(null);
-    
+
     if (currentIndex < STEPS.length - 1) {
       setCurrentStep(STEPS[currentIndex + 1].id);
     }
@@ -267,8 +267,8 @@ export default function RunReconciliationPage() {
     try {
       const cycle = await runReconciliation.mutateAsync({
         accountIds: selectedAccountIds,
-        startDate: data.startDate,
-        endDate: data.endDate,
+        startDate: data.startDate instanceof Date ? data.startDate.toISOString().split('T')[0] : String(data.startDate),
+        endDate: data.endDate instanceof Date ? data.endDate.toISOString().split('T')[0] : String(data.endDate),
         includeSettled: includeSubAccounts,
         autoResolve: autoResolve,
       });
@@ -506,8 +506,8 @@ export default function RunReconciliationPage() {
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               ) : (
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={isSubmitting || runReconciliation.isPending}
                 >
                   {(isSubmitting || runReconciliation.isPending) ? (

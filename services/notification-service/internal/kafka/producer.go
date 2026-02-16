@@ -14,15 +14,15 @@ import (
 
 // NotificationEvent is the Kafka message payload published to ws-gateway.
 type NotificationEvent struct {
-	EventType string               `json:"eventType"`
-	ID        string               `json:"id"`
-	UserID    string               `json:"userId"`
-	Type      models.NotificationType `json:"type"`
+	EventType string                      `json:"eventType"`
+	ID        string                      `json:"id"`
+	UserID    string                      `json:"userId"`
+	Type      models.NotificationType     `json:"type"`
 	Priority  models.NotificationPriority `json:"priority"`
-	Title     string               `json:"title"`
-	Message   string               `json:"message"`
-	Channel   string               `json:"channel"`
-	Timestamp time.Time            `json:"timestamp"`
+	Title     string                      `json:"title"`
+	Message   string                      `json:"message"`
+	Channel   string                      `json:"channel"`
+	Timestamp time.Time                   `json:"timestamp"`
 }
 
 // Producer publishes notification events to Kafka.

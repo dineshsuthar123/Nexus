@@ -81,8 +81,8 @@ type APIKey struct {
 	ID          uuid.UUID  `json:"id"`
 	UserID      uuid.UUID  `json:"userId"`
 	Name        string     `json:"name"`
-	KeyPrefix   string     `json:"keyPrefix"`   // first 8 chars for display
-	KeyHash     string     `json:"-"`            // SHA-256 hash of full key
+	KeyPrefix   string     `json:"keyPrefix"` // first 8 chars for display
+	KeyHash     string     `json:"-"`         // SHA-256 hash of full key
 	Permissions []string   `json:"permissions"`
 	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
 	LastUsedAt  *time.Time `json:"lastUsedAt,omitempty"`

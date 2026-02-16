@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -22,10 +23,84 @@ import {
   AvatarFallback,
   AvatarImage,
   Badge,
+  Skeleton,
 } from '@nexus/ui';
-import { User, Shield, Bell, CreditCard, Key, Globe, Smartphone, Save } from 'lucide-react';
+import { User, Shield, Bell, CreditCard, Key, Globe, Smartphone, Save, Plus, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  useUserProfile,
+  useUpdateProfile,
+  useChangePassword,
+  useAPIKeys,
+  useCreateAPIKey,
+  useRevokeAPIKey,
+} from '@/lib/hooks/use-user';
+import {
+  useNotificationPreferences,
+  useUpdateNotificationPreferences,
+} from '@/lib/hooks/use-notifications';
 
 export default function SettingsPage() {
+  const { data: profile, isLoading: profileLoading, isError: profileError, refetch: refetchProfile } = useUserProfile();
+  const { data: apiKeys, isLoading: keysLoading } = useAPIKeys();
+  const { data: notifPrefs, isLoading: prefsLoading } = useNotificationPreferences();
+  const updateProfile = useUpdateProfile();
+  const changePassword = useChangePassword();
+  const createApiKey = useCreateAPIKey();
+  const revokeApiKey = useRevokeAPIKey();
+  const updatePrefs = useUpdateNotificationPreferences();
+
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [newKeyName, setNewKeyName] = useState('');
+  const [profileInit, setProfileInit] = useState(false);
+
+  // Initialize form values when data loads
+  if (profile && !profileInit) {
+    setFirstName(profile.firstName ?? '');
+    setLastName(profile.lastName ?? '');
+    setEmail(profile.email ?? '');
+    setProfileInit(true);
+  }
+
+  const handleSaveProfile = useCallback(() => {
+    updateProfile.mutate({
+      firstName,
+      lastName,
+    });
+  }, [firstName, lastName, updateProfile]);
+
+  const handleChangePassword = useCallback(() => {
+    if (newPassword !== confirmPassword) return;
+    changePassword.mutate({
+      currentPassword,
+      newPassword,
+    });
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  }, [currentPassword, newPassword, confirmPassword, changePassword]);
+
+  const handleCreateKey = useCallback(() => {
+    if (!newKeyName.trim()) return;
+    createApiKey.mutate({ name: newKeyName });
+    setNewKeyName('');
+  }, [newKeyName, createApiKey]);
+
+  if (profileError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <AlertCircle className="h-12 w-12 text-danger-500" />
+        <h2 className="mt-4 text-lg font-semibold">Failed to load settings</h2>
+        <Button className="mt-4" onClick={() => refetchProfile()}>
+          <RefreshCw className="mr-2 h-4 w-4" /> Retry
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -76,10 +151,16 @@ export default function SettingsPage() {
               <CardContent className="space-y-6">
                 {/* Avatar */}
                 <div className="flex items-center gap-4">
-                  <Avatar size="xl">
-                    <AvatarImage src="/avatars/user.jpg" alt="Profile" />
-                    <AvatarFallback>JD</AvatarFallback>
-                  </Avatar>
+                  {profileLoading ? (
+                    <Skeleton className="h-16 w-16 rounded-full" />
+                  ) : (
+                    <Avatar size="xl">
+                      <AvatarImage src="/avatars/user.jpg" alt="Profile" />
+                      <AvatarFallback>
+                        {(profile?.firstName?.[0] ?? '') + (profile?.lastName?.[0] ?? '')}
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
                   <div>
                     <Button variant="outline" size="sm">
                       Change photo
@@ -91,34 +172,48 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Form fields */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                      First Name
-                    </label>
-                    <Input defaultValue="John" />
+                {profileLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                      Last Name
-                    </label>
-                    <Input defaultValue="Doe" />
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                          First Name
+                        </label>
+                        <Input
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                          Last Name
+                        </label>
+                        <Input
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                        />
+                      </div>
+                    </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                    Email
-                  </label>
-                  <Input type="email" defaultValue="john@nexus-rtp.com" />
-                </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                        Email
+                      </label>
+                      <Input type="email" value={email} disabled />
+                    </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                    Role
-                  </label>
-                  <Input defaultValue="Treasury Manager" disabled />
-                </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                        Role
+                      </label>
+                      <Input defaultValue={profile?.role ?? ''} disabled />
+                    </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
@@ -138,11 +233,13 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="flex justify-end">
-                  <Button>
+                  <Button onClick={handleSaveProfile} disabled={updateProfile.isPending}>
                     <Save className="mr-2 h-4 w-4" />
-                    Save Changes
+                    {updateProfile.isPending ? 'Saving...' : 'Save Changes'}
                   </Button>
                 </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -161,22 +258,47 @@ export default function SettingsPage() {
                   <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
                     Current Password
                   </label>
-                  <Input type="password" />
+                  <Input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
                     New Password
                   </label>
-                  <Input type="password" />
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
                     Confirm New Password
                   </label>
-                  <Input type="password" />
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
                 </div>
+                {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                  <p className="text-sm text-danger-500">Passwords do not match</p>
+                )}
                 <div className="flex justify-end">
-                  <Button>Update Password</Button>
+                  <Button
+                    onClick={handleChangePassword}
+                    disabled={
+                      changePassword.isPending ||
+                      !currentPassword ||
+                      !newPassword ||
+                      newPassword !== confirmPassword
+                    }
+                  >
+                    {changePassword.isPending ? 'Updating...' : 'Update Password'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -203,7 +325,9 @@ export default function SettingsPage() {
                       </p>
                     </div>
                   </div>
-                  <Badge variant="success">Enabled</Badge>
+                  <Badge variant={profile?.mfaEnabled ? 'success' : 'warning'}>
+                    {profile?.mfaEnabled ? 'Enabled' : 'Disabled'}
+                  </Badge>
                 </div>
               </CardContent>
             </Card>
@@ -355,7 +479,7 @@ export default function SettingsPage() {
                         <h4 className="font-semibold text-neutral-900 dark:text-neutral-100">
                           Enterprise Plan
                         </h4>
-                        <Badge variant="primary">Active</Badge>
+                        <Badge variant="success">Active</Badge>
                       </div>
                       <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
                         Unlimited transactions • Priority support • Custom SLA
@@ -378,50 +502,68 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-neutral-900 dark:text-neutral-100">
-                        Production Key
-                      </p>
-                      <p className="mt-1 font-mono text-sm text-neutral-500">
-                        nxs_live_••••••••••••••••
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm">
-                        Copy
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        Regenerate
-                      </Button>
-                    </div>
+                {keysLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                    ))}
                   </div>
-                </div>
-                <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-neutral-900 dark:text-neutral-100">
-                        Test Key
-                      </p>
-                      <p className="mt-1 font-mono text-sm text-neutral-500">
-                        nxs_test_••••••••••••••••
-                      </p>
+                ) : (apiKeys ?? []).length === 0 ? (
+                  <p className="text-sm text-neutral-500">
+                    No API keys yet. Create one to get started.
+                  </p>
+                ) : (
+                  (apiKeys ?? []).map((key) => (
+                    <div
+                      key={key.id}
+                      className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-neutral-900 dark:text-neutral-100">
+                              {key.name}
+                            </p>
+                            {key.revoked && <Badge variant="danger">Revoked</Badge>}
+                          </div>
+                          <p className="mt-1 font-mono text-sm text-neutral-500">
+                            {key.keyPrefix}••••••••••••••••
+                          </p>
+                          {key.lastUsedAt && (
+                            <p className="mt-1 text-xs text-neutral-400">
+                              Last used: {new Date(key.lastUsedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {!key.revoked && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => revokeApiKey.mutate(key.id)}
+                              disabled={revokeApiKey.isPending}
+                            >
+                              <Trash2 className="mr-1 h-3 w-3" />
+                              Revoke
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm">
-                        Copy
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        Regenerate
-                      </Button>
-                    </div>
-                  </div>
+                  ))
+                )}
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Key name (e.g. Production)"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    className="max-w-xs"
+                  />
+                  <Button onClick={handleCreateKey} disabled={createApiKey.isPending || !newKeyName.trim()}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    {createApiKey.isPending ? 'Creating...' : 'Create API Key'}
+                  </Button>
                 </div>
-                <Button>
-                  <Key className="mr-2 h-4 w-4" />
-                  Create New API Key
-                </Button>
               </CardContent>
             </Card>
           </TabsContent>

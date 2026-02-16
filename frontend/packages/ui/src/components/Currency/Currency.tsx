@@ -45,7 +45,7 @@ const currencyVariants = cva(
 );
 
 export interface CurrencyDisplayProps
-  extends React.HTMLAttributes<HTMLSpanElement>,
+  extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'color'>,
     VariantProps<typeof currencyVariants> {
   /** Amount to display */
   amount: number;
@@ -112,7 +112,7 @@ const CurrencyDisplay = React.forwardRef<HTMLSpanElement, CurrencyDisplayProps>(
     return (
       <span
         ref={ref}
-        className={cn(currencyVariants({ size, weight, color: displayColor }), className)}
+        className={cn(currencyVariants({ size, weight, color: displayColor as 'default' | 'muted' | 'success' | 'danger' | null | undefined }), className)}
         {...props}
       >
         {sign && <span className="mr-0.5">{sign}</span>}
@@ -128,7 +128,7 @@ CurrencyDisplay.displayName = 'CurrencyDisplay';
  * -------------------------------------------------------------------------- */
 
 export interface PercentageDisplayProps
-  extends React.HTMLAttributes<HTMLSpanElement>,
+  extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'color'>,
     VariantProps<typeof currencyVariants> {
   /** Value as decimal (0.05 = 5%) or percentage (5) */
   value: number;
@@ -183,7 +183,7 @@ const PercentageDisplay = React.forwardRef<HTMLSpanElement, PercentageDisplayPro
       <span
         ref={ref}
         className={cn(
-          currencyVariants({ size, weight, color: displayColor }),
+          currencyVariants({ size, weight, color: displayColor as 'default' | 'muted' | 'success' | 'danger' | null | undefined }),
           'inline-flex items-center gap-1',
           className
         )}

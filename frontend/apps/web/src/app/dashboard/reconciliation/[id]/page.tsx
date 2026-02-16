@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Reconciliation Cycle Detail Page
- * 
+ *
  * Displays comprehensive cycle details including:
  * - Cycle summary and status
  * - Matched/unmatched transactions
@@ -13,10 +13,10 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
   CardTitle,
   CardDescription,
   Button,
@@ -32,7 +32,7 @@ import {
   Input,
   DataTable,
 } from '@nexus/ui';
-import { 
+import {
   ArrowLeft,
   CheckCircle2,
   Clock,
@@ -51,8 +51,8 @@ import {
   ArrowRight,
 } from 'lucide-react';
 
-import { 
-  useReconciliationCycle, 
+import {
+  useReconciliationCycle,
   useDiscrepancies,
   useResolveDiscrepancy,
   useReconciliationCyclePolling,
@@ -65,36 +65,36 @@ import type { ReconciliationStatus, Discrepancy, DiscrepancyResolution } from '@
 
 const STATUS_CONFIG: Record<ReconciliationStatus, {
   label: string;
-  color: 'success' | 'warning' | 'destructive' | 'default' | 'secondary';
+  color: 'success' | 'warning' | 'danger' | 'default' | 'secondary';
   icon: React.ReactNode;
   description: string;
 }> = {
-  PENDING: { 
-    label: 'Pending', 
+  PENDING: {
+    label: 'Pending',
     color: 'default',
     icon: <Clock className="h-4 w-4" />,
     description: 'Waiting to start',
   },
-  RUNNING: { 
-    label: 'Running', 
+  RUNNING: {
+    label: 'Running',
     color: 'warning',
     icon: <Loader2 className="h-4 w-4 animate-spin" />,
     description: 'Reconciliation in progress',
   },
-  COMPLETED: { 
-    label: 'Completed', 
+  COMPLETED: {
+    label: 'Completed',
     color: 'success',
     icon: <CheckCircle2 className="h-4 w-4" />,
     description: 'All accounts reconciled',
   },
-  FAILED: { 
-    label: 'Failed', 
-    color: 'destructive',
+  FAILED: {
+    label: 'Failed',
+    color: 'danger',
     icon: <XCircle className="h-4 w-4" />,
     description: 'Reconciliation failed',
   },
-  PARTIAL: { 
-    label: 'Partial', 
+  PARTIAL: {
+    label: 'Partial',
     color: 'secondary',
     icon: <AlertTriangle className="h-4 w-4" />,
     description: 'Partially completed with issues',
@@ -167,7 +167,7 @@ function DetailSkeleton() {
 function ProgressBar({ value }: { value: number }) {
   return (
     <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-      <div 
+      <div
         className="h-full bg-primary transition-all duration-500"
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
@@ -244,8 +244,8 @@ function ResolveDiscrepancyDialog({
                   onClick={() => setSelectedResolution(option.value)}
                   className={`
                     p-3 rounded-lg border text-left transition-all
-                    ${selectedResolution === option.value 
-                      ? 'border-primary bg-primary/5' 
+                    ${selectedResolution === option.value
+                      ? 'border-primary bg-primary/5'
                       : 'border-border hover:border-primary/50'
                     }
                   `}
@@ -311,7 +311,7 @@ export default function ReconciliationDetailPage() {
   });
 
   // Extract discrepancies from paginated response
-  const discrepancies = discrepanciesData?.items || [];
+  const discrepancies = discrepanciesData?.data || [];
 
   const [selectedDiscrepancy, setSelectedDiscrepancy] = useState<Discrepancy | null>(null);
   const [showResolveDialog, setShowResolveDialog] = useState(false);
@@ -388,23 +388,23 @@ export default function ReconciliationDetailPage() {
   // Discrepancy table columns
   const discrepancyColumns = [
     {
-      key: 'type',
+      id: 'type',
       header: 'Type',
-      render: (d: Discrepancy) => (
+      cell: (d: Discrepancy) => (
         <Badge variant="secondary">{d.type}</Badge>
       ),
     },
     {
-      key: 'accountId',
+      id: 'accountId',
       header: 'Account',
-      render: (d: Discrepancy) => (
+      cell: (d: Discrepancy) => (
         <span className="font-mono text-sm">{d.accountId}</span>
       ),
     },
     {
-      key: 'difference',
+      id: 'difference',
       header: 'Difference',
-      render: (d: Discrepancy) => (
+      cell: (d: Discrepancy) => (
         <CurrencyDisplay
           amount={d.difference || 0}
           currency={d.currency || 'EUR'}
@@ -414,9 +414,9 @@ export default function ReconciliationDetailPage() {
       ),
     },
     {
-      key: 'resolution',
+      id: 'resolution',
       header: 'Status',
-      render: (d: Discrepancy) => (
+      cell: (d: Discrepancy) => (
         d.resolution ? (
           <Badge variant={d.resolution === 'ACCEPTED' ? 'success' : 'secondary'}>
             {d.resolution}
@@ -427,9 +427,9 @@ export default function ReconciliationDetailPage() {
       ),
     },
     {
-      key: 'actions',
+      id: 'actions',
       header: '',
-      render: (d: Discrepancy) => (
+      cell: (d: Discrepancy) => (
         <Button
           variant="ghost"
           size="sm"
@@ -484,8 +484,8 @@ export default function ReconciliationDetailPage() {
               <Download className="mr-2 h-4 w-4" />
               Export Report
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => refetch()}
             >
@@ -552,7 +552,7 @@ export default function ReconciliationDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Discrepancies</CardTitle>
             <CardDescription>
-              {unresolvedCount > 0 
+              {unresolvedCount > 0
                 ? `${unresolvedCount} discrepancies need resolution`
                 : 'All discrepancies have been resolved'}
             </CardDescription>

@@ -71,6 +71,31 @@ vault kv put nexus/encryption/pan \
     aes_key='${PAN_AES_KEY:-$(openssl rand -hex 32)}' \
     hmac_key='${PAN_HMAC_KEY:-$(openssl rand -hex 32)}'
 
+# --- JWT Signing Keys (RSA-4096) ---
+echo "Generating JWT signing keys..."
+JWT_TMP=$(mktemp -d)
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 \
+    -out "${JWT_TMP}/private.pem" 2>/dev/null
+openssl pkey -in "${JWT_TMP}/private.pem" -pubout \
+    -out "${JWT_TMP}/public.pem" 2>/dev/null
+
+vault kv put nexus/keys/jwt-signing \
+    private_key=@"${JWT_TMP}/private.pem" \
+    public_key=@"${JWT_TMP}/public.pem" \
+    key_type="rsa" \
+    rotated_at="$(date -Iseconds)" \
+    rotated_by="init-vault"
+rm -rf "${JWT_TMP}"
+echo "JWT signing keys stored in Vault"
+
+# --- MFA Encryption Key ---
+echo "Generating MFA encryption key..."
+MFA_KEY=$(openssl rand -hex 16)  # 32 hex chars = 16 bytes = 128-bit AES
+vault kv put nexus/keys/mfa-encryption \
+    encryption_key="${MFA_KEY}" \
+    rotated_at="$(date -Iseconds)"
+echo "MFA encryption key stored in Vault"
+
 # Enable Transit secrets engine for encryption as a service
 echo "Enabling Transit secrets engine..."
 vault secrets enable transit 2>/dev/null || echo "Transit engine already enabled"
@@ -125,6 +150,31 @@ path "transit/decrypt/pii-data" {
 }
 EOF
 
+# Auth service policy — access JWT signing keys and MFA encryption key
+vault policy write auth-service - <<EOF
+path "nexus/data/database/*" {
+  capabilities = ["read"]
+}
+path "nexus/data/cache/*" {
+  capabilities = ["read"]
+}
+path "nexus/data/keys/jwt-signing" {
+  capabilities = ["read"]
+}
+path "nexus/data/keys/mfa-encryption" {
+  capabilities = ["read"]
+}
+path "nexus/data/services/auth-service" {
+  capabilities = ["read"]
+}
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
+EOF
+
 # Account service policy
 vault policy write account-service - <<EOF
 path "nexus/data/database/*" {
@@ -169,6 +219,13 @@ vault write auth/approle/role/payment-service \
 
 vault write auth/approle/role/account-service \
     token_policies="account-service" \
+    token_ttl=1h \
+    token_max_ttl=4h \
+    secret_id_ttl=0 \
+    secret_id_num_uses=0
+
+vault write auth/approle/role/auth-service \
+    token_policies="auth-service" \
     token_ttl=1h \
     token_max_ttl=4h \
     secret_id_ttl=0 \

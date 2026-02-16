@@ -1,0 +1,176 @@
+{{/*
+CockroachDB Backup CronJob
+Runs scheduled backups to S3-compatible storage.
+*/}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "nexus-platform.fullname" . }}-backup-full
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "0 2 * * *"  # Daily at 2am UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            {{- include "nexus-platform.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "nexus-platform.fullname" . }}
+          containers:
+            - name: backup
+              image: cockroachdb/cockroach:v23.2.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "=== Nexus RTP Full Backup ==="
+                  cockroach sql --url="$COCKROACH_URL" --execute="
+                    BACKUP DATABASE nexus
+                    INTO '$S3_BUCKET/nexus'
+                    AS OF SYSTEM TIME '-10s'
+                    WITH revision_history;
+                  "
+                  echo "=== Backup complete ==="
+              env:
+                - name: COCKROACH_URL
+                  value: {{ include "nexus-platform.databaseUrl" . | quote }}
+                - name: S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "nexus-platform.fullname" . }}-backup-config
+                      key: s3-bucket
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "nexus-platform.fullname" . }}-backup-config
+                      key: aws-access-key-id
+                      optional: true
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "nexus-platform.fullname" . }}-backup-config
+                      key: aws-secret-access-key
+                      optional: true
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: 1000m
+                  memory: 512Mi
+---
+# Daily backup verification job (runs after backup, restores small dataset)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "nexus-platform.fullname" . }}-backup-verify
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-verify
+spec:
+  schedule: "0 4 * * *"  # Daily at 4am UTC (2h after backup)
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1200
+      template:
+        metadata:
+          labels:
+            {{- include "nexus-platform.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup-verify
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "nexus-platform.fullname" . }}
+          containers:
+            - name: verify
+              image: cockroachdb/cockroach:v23.2.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "=== Nexus RTP Backup Verification ==="
+
+                  # Drop previous test restore
+                  cockroach sql --url="$COCKROACH_URL" --execute="
+                    DROP DATABASE IF EXISTS nexus_verify_test CASCADE;
+                  " || true
+
+                  # Restore latest backup
+                  echo "Restoring latest backup..."
+                  cockroach sql --url="$COCKROACH_URL" --execute="
+                    RESTORE DATABASE nexus
+                    FROM LATEST IN '$S3_BUCKET/nexus'
+                    WITH new_db_name = 'nexus_verify_test';
+                  "
+
+                  # Verify tables exist
+                  echo "Verifying schema..."
+                  TABLES=$(cockroach sql --url="$COCKROACH_URL" --format=csv --execute="
+                    SELECT count(*) FROM nexus_verify_test.information_schema.tables
+                    WHERE table_schema = 'public';
+                  " | tail -1)
+                  echo "Tables found: $TABLES"
+
+                  if [ "$TABLES" -lt 5 ]; then
+                    echo "ERROR: Expected ≥5 tables, found $TABLES"
+                    exit 1
+                  fi
+
+                  # Verify row counts
+                  echo "Verifying data..."
+                  for tbl in customer account transaction; do
+                    COUNT=$(cockroach sql --url="$COCKROACH_URL" --format=csv --execute="
+                      SELECT count(*) FROM nexus_verify_test.public.${tbl};
+                    " | tail -1)
+                    echo "  $tbl: $COUNT rows"
+                  done
+
+                  # Cleanup
+                  cockroach sql --url="$COCKROACH_URL" --execute="
+                    DROP DATABASE IF EXISTS nexus_verify_test CASCADE;
+                  "
+
+                  echo "=== Backup verification PASSED ==="
+              env:
+                - name: COCKROACH_URL
+                  value: {{ include "nexus-platform.databaseUrl" . | quote }}
+                - name: S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "nexus-platform.fullname" . }}-backup-config
+                      key: s3-bucket
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "nexus-platform.fullname" . }}-backup-config
+                      key: aws-access-key-id
+                      optional: true
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "nexus-platform.fullname" . }}-backup-config
+                      key: aws-secret-access-key
+                      optional: true
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: 1000m
+                  memory: 1Gi

@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - React Query Hooks for Accounts
- * 
+ *
  * Custom hooks for account operations using React Query.
  */
 
@@ -8,9 +8,9 @@ import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tansta
 import { useCallback } from 'react';
 
 import { get, post, put, ACCOUNT_ENDPOINTS, buildQueryParams } from '@/lib/api';
-import type { 
-  Account, 
-  CreateAccountRequest, 
+import type {
+  Account,
+  CreateAccountRequest,
   UpdateAccountRequest,
   Balance,
   PaginatedResponse,
@@ -25,7 +25,7 @@ import type {
 export const accountKeys = {
   all: ['accounts'] as const,
   lists: () => [...accountKeys.all, 'list'] as const,
-  list: (filters: AccountFilters, pagination?: Pagination) => 
+  list: (filters: AccountFilters, pagination?: Pagination) =>
     [...accountKeys.lists(), { filters, pagination }] as const,
   details: () => [...accountKeys.all, 'detail'] as const,
   detail: (id: string) => [...accountKeys.details(), id] as const,
@@ -78,8 +78,10 @@ export function useInfiniteAccounts(
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
-      if (lastPage.page < lastPage.totalPages) {
-        return lastPage.page + 1;
+      const page = lastPage.pagination?.page ?? 1;
+      const totalPages = lastPage.pagination?.totalPages ?? 1;
+      if (page < totalPages) {
+        return page + 1;
       }
       return undefined;
     },
@@ -236,8 +238,8 @@ export function useUpdateAccountKyc() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, kycData }: { 
-      id: string; 
+    mutationFn: async ({ id, kycData }: {
+      id: string;
       kycData: {
         status: 'PENDING' | 'VERIFIED' | 'REJECTED';
         verifiedAt?: string;

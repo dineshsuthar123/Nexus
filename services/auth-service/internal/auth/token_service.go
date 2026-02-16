@@ -28,16 +28,24 @@ type Claims struct {
 	Roles []string `json:"roles"`
 }
 
+// KeySource provides RSA keys for signing/verifying JWTs.
+// Implemented by both static file-based and Vault-backed providers.
+type KeySource interface {
+	GetPrivateKey() *rsa.PrivateKey
+	GetPublicKey() *rsa.PublicKey
+}
+
 // TokenService manages JWT token creation and validation.
 type TokenService struct {
 	privateKey         *rsa.PrivateKey
 	publicKey          *rsa.PublicKey
+	keySource          KeySource // optional dynamic key source (Vault)
 	accessTokenExpiry  time.Duration
 	refreshTokenExpiry time.Duration
 	issuer             string
 }
 
-// NewTokenService creates a TokenService from PEM key files.
+// NewTokenService creates a TokenService from PEM key files (dev/legacy mode).
 func NewTokenService(privateKeyPath, publicKeyPath string, accessExpiry, refreshExpiry time.Duration, issuer string) (*TokenService, error) {
 	privKey, err := loadPrivateKey(privateKeyPath)
 	if err != nil {
@@ -56,6 +64,44 @@ func NewTokenService(privateKeyPath, publicKeyPath string, accessExpiry, refresh
 		refreshTokenExpiry: refreshExpiry,
 		issuer:             issuer,
 	}, nil
+}
+
+// NewTokenServiceFromVault creates a TokenService backed by a Vault KeySource.
+// Keys are fetched from Vault at startup and refreshed automatically.
+func NewTokenServiceFromVault(ks KeySource, accessExpiry, refreshExpiry time.Duration, issuer string) (*TokenService, error) {
+	priv := ks.GetPrivateKey()
+	pub := ks.GetPublicKey()
+	if priv == nil || pub == nil {
+		return nil, fmt.Errorf("vault key source returned nil keys")
+	}
+	return &TokenService{
+		privateKey:         priv,
+		publicKey:          pub,
+		keySource:          ks,
+		accessTokenExpiry:  accessExpiry,
+		refreshTokenExpiry: refreshExpiry,
+		issuer:             issuer,
+	}, nil
+}
+
+// currentPrivateKey returns the active private key, preferring dynamic source.
+func (s *TokenService) currentPrivateKey() *rsa.PrivateKey {
+	if s.keySource != nil {
+		if k := s.keySource.GetPrivateKey(); k != nil {
+			return k
+		}
+	}
+	return s.privateKey
+}
+
+// currentPublicKey returns the active public key, preferring dynamic source.
+func (s *TokenService) currentPublicKey() *rsa.PublicKey {
+	if s.keySource != nil {
+		if k := s.keySource.GetPublicKey(); k != nil {
+			return k
+		}
+	}
+	return s.publicKey
 }
 
 // GenerateTokenPair creates a new access/refresh token pair.
@@ -77,7 +123,7 @@ func (s *TokenService) GenerateTokenPair(userID uuid.UUID, email string, roles [
 	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, accessClaims)
-	accessTokenStr, err := accessToken.SignedString(s.privateKey)
+	accessTokenStr, err := accessToken.SignedString(s.currentPrivateKey())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
 	}
@@ -98,7 +144,7 @@ func (s *TokenService) ValidateAccessToken(tokenStr string) (*Claims, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return s.publicKey, nil
+		return s.currentPublicKey(), nil
 	})
 
 	if err != nil {
@@ -120,7 +166,7 @@ func (s *TokenService) GetRefreshTokenExpiry() time.Duration {
 
 // GetPublicKey returns the RSA public key (for Kong JWT plugin or JWKS endpoint).
 func (s *TokenService) GetPublicKey() *rsa.PublicKey {
-	return s.publicKey
+	return s.currentPublicKey()
 }
 
 // --- Key Loading Helpers ---

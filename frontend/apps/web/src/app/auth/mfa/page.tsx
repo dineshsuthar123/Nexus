@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - MFA Verification Page
- * 
+ *
  * Multi-factor authentication with:
  * - OTP code input
  * - Backup code support
@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useState, useRef, useEffect, type KeyboardEvent, type ClipboardEvent } from 'react';
+import { useState, useRef, useEffect, Suspense, type KeyboardEvent, type ClipboardEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, AlertCircle, Shield, ArrowLeft, KeyRound } from 'lucide-react';
@@ -31,13 +31,13 @@ interface OtpInputProps {
   autoFocus?: boolean;
 }
 
-function OtpInput({ 
-  length, 
-  value, 
-  onChange, 
-  disabled, 
+function OtpInput({
+  length,
+  value,
+  onChange,
+  disabled,
   error,
-  autoFocus = true 
+  autoFocus = true
 }: OtpInputProps) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -50,7 +50,7 @@ function OtpInput({
   const handleChange = (index: number, inputValue: string) => {
     // Only allow digits
     const digit = inputValue.replace(/\D/g, '').slice(-1);
-    
+
     const newValue = value.split('');
     newValue[index] = digit;
     const updatedValue = newValue.join('').slice(0, length);
@@ -79,7 +79,7 @@ function OtpInput({
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
     onChange(pastedData);
-    
+
     // Focus the appropriate input after paste
     const focusIndex = Math.min(pastedData.length, length - 1);
     inputRefs.current[focusIndex]?.focus();
@@ -120,13 +120,21 @@ function OtpInput({
 // =============================================================================
 
 export default function MfaPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+      <MfaPageContent />
+    </Suspense>
+  );
+}
+
+function MfaPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
   const email = searchParams.get('email') || '';
-  
+
   const { login } = useAuth();
-  
+
   const [otp, setOtp] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [backupCode, setBackupCode] = useState('');
@@ -142,7 +150,7 @@ export default function MfaPage() {
 
   const handleSubmit = async () => {
     const code = useBackupCode ? backupCode : otp;
-    
+
     if (!code || (useBackupCode ? code.length < 8 : code.length < 6)) {
       setError('Please enter a valid code');
       return;
@@ -161,7 +169,7 @@ export default function MfaPage() {
       }
 
       const { email: storedEmail, password } = JSON.parse(storedCredentials);
-      
+
       const result = await login(storedEmail, password, code);
 
       if (result.success) {
@@ -195,7 +203,7 @@ export default function MfaPage() {
           {useBackupCode ? 'Enter backup code' : 'Two-factor authentication'}
         </h1>
         <p className="text-muted-foreground">
-          {useBackupCode 
+          {useBackupCode
             ? 'Enter one of your backup codes to sign in'
             : 'Enter the 6-digit code from your authenticator app'}
         </p>
@@ -203,7 +211,7 @@ export default function MfaPage() {
 
       {/* Error Alert */}
       {error && (
-        <div 
+        <div
           className="mb-6 flex items-start gap-3 rounded-lg bg-destructive/10 p-4 text-destructive"
           role="alert"
           aria-live="polite"
@@ -224,7 +232,7 @@ export default function MfaPage() {
               disabled={isSubmitting}
               error={!!error}
             />
-            
+
             <Button
               type="button"
               onClick={handleSubmit}
@@ -245,8 +253,8 @@ export default function MfaPage() {
           /* Backup Code Input */
           <div className="space-y-4">
             <div>
-              <label 
-                htmlFor="backupCode" 
+              <label
+                htmlFor="backupCode"
                 className="block text-sm font-medium text-foreground mb-2"
               >
                 Backup code
@@ -268,7 +276,7 @@ export default function MfaPage() {
                 aria-describedby={error ? 'backup-error' : undefined}
               />
             </div>
-            
+
             <Button
               type="button"
               onClick={handleSubmit}
@@ -300,8 +308,8 @@ export default function MfaPage() {
             className="text-sm text-primary hover:underline"
             disabled={isSubmitting}
           >
-            {useBackupCode 
-              ? 'Use authenticator app instead' 
+            {useBackupCode
+              ? 'Use authenticator app instead'
               : "Can't access your authenticator? Use a backup code"}
           </button>
         </div>

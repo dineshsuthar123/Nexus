@@ -29,6 +29,11 @@ export * from './components/Currency';
 export * from './components/Transaction';
 export * from './components/Audit';
 export * from './components/Dashboard';
+export * from './components/PaymentTimeline';
+export * from './components/PaymentWizard';
+export * from './components/NotificationCenter';
+export * from './components/ApiKeyManager';
+export * from './components/ChartWrapper';
 
 // Utilities
 export * from './lib/utils';

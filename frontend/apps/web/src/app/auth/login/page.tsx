@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Login Page
- * 
+ *
  * Secure login page with:
  * - Email/password authentication
  * - Form validation with Zod
@@ -12,7 +12,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -28,12 +28,20 @@ import { loginSchema, type LoginFormData } from '@/lib/validations/schemas';
 // =============================================================================
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
-  
+
   const { login } = useAuth();
-  
+
   const [showPassword, setShowPassword] = useState(false);
   const [showMfaInput, setShowMfaInput] = useState(false);
   const [mfaCode, setMfaCode] = useState('');
@@ -105,7 +113,7 @@ export default function LoginPage() {
           Welcome back
         </h1>
         <p className="text-muted-foreground">
-          {showMfaInput 
+          {showMfaInput
             ? 'Enter your verification code to continue'
             : 'Sign in to access your account'}
         </p>
@@ -113,7 +121,7 @@ export default function LoginPage() {
 
       {/* Error Alert */}
       {error && (
-        <div 
+        <div
           className="mb-6 flex items-start gap-3 rounded-lg bg-destructive/10 p-4 text-destructive"
           role="alert"
           aria-live="polite"
@@ -128,8 +136,8 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           {/* Email Field */}
           <div className="space-y-2">
-            <label 
-              htmlFor="email" 
+            <label
+              htmlFor="email"
               className="block text-sm font-medium text-foreground"
             >
               Email address
@@ -155,8 +163,8 @@ export default function LoginPage() {
           {/* Password Field */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label 
-                htmlFor="password" 
+              <label
+                htmlFor="password"
                 className="block text-sm font-medium text-foreground"
               >
                 Password
@@ -209,8 +217,8 @@ export default function LoginPage() {
               className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
               {...register('rememberMe')}
             />
-            <label 
-              htmlFor="rememberMe" 
+            <label
+              htmlFor="rememberMe"
               className="text-sm text-muted-foreground"
             >
               Remember me for 30 days
@@ -241,10 +249,10 @@ export default function LoginPage() {
               <Shield className="h-8 w-8 text-primary" aria-hidden="true" />
             </div>
           </div>
-          
+
           <div className="space-y-2">
-            <label 
-              htmlFor="mfaCode" 
+            <label
+              htmlFor="mfaCode"
               className="block text-sm font-medium text-foreground"
             >
               Verification Code

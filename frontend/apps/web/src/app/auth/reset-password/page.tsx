@@ -1,12 +1,12 @@
 /**
  * Nexus RTP Platform - Reset Password Page
- * 
+ *
  * Password reset with token validation and strong password requirements.
  */
 
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -18,10 +18,18 @@ import { resetPasswordSchema, type ResetPasswordFormData } from '@/lib/validatio
 import { post, AUTH_ENDPOINTS } from '@/lib/api';
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+      <ResetPasswordPageContent />
+    </Suspense>
+  );
+}
+
+function ResetPasswordPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,7 +61,7 @@ export default function ResetPasswordPage() {
             Invalid reset link
           </h1>
           <p className="text-muted-foreground">
-            This password reset link is invalid or has expired. 
+            This password reset link is invalid or has expired.
             Please request a new one.
           </p>
         </div>
@@ -100,7 +108,7 @@ export default function ResetPasswordPage() {
             Password reset successful
           </h1>
           <p className="text-muted-foreground">
-            Your password has been reset successfully. 
+            Your password has been reset successfully.
             You can now sign in with your new password.
           </p>
         </div>
@@ -130,7 +138,7 @@ export default function ResetPasswordPage() {
 
       {/* Error Alert */}
       {error && (
-        <div 
+        <div
           className="mb-6 flex items-start gap-3 rounded-lg bg-destructive/10 p-4 text-destructive"
           role="alert"
           aria-live="polite"
@@ -146,8 +154,8 @@ export default function ResetPasswordPage() {
 
         {/* Password Field */}
         <div className="space-y-2">
-          <label 
-            htmlFor="password" 
+          <label
+            htmlFor="password"
             className="block text-sm font-medium text-foreground"
           >
             New password
@@ -186,8 +194,8 @@ export default function ResetPasswordPage() {
 
         {/* Confirm Password Field */}
         <div className="space-y-2">
-          <label 
-            htmlFor="confirmPassword" 
+          <label
+            htmlFor="confirmPassword"
             className="block text-sm font-medium text-foreground"
           >
             Confirm new password
