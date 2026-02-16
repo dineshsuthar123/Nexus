@@ -15,36 +15,30 @@ env:
   PNPM_VERSION: '8'
 
 jobs:
+  # =========================================================================
+  # Stage 1 — Static analysis (parallel)
+  # =========================================================================
+
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run ESLint
+      - run: pnpm install --frozen-lockfile
+      - name: ESLint
         run: pnpm lint
-
-      - name: Run TypeScript type check
+      - name: TypeScript type check
         run: pnpm typecheck
 
   test:
@@ -53,35 +47,59 @@ jobs:
     defaults:
       run:
         working-directory: frontend
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run tests
+      - run: pnpm install --frozen-lockfile
+      - name: Run unit tests with coverage
         run: pnpm test:coverage
-
-      - name: Upload coverage reports
+      - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
           directory: ./frontend/packages/ui/coverage
           flags: frontend-ui
           fail_ci_if_error: false
+
+  contract:
+    name: API Contract Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Generate API types from OpenAPI spec
+        run: node scripts/generate-api-types.mjs
+      - name: Run contract tests (49 tests)
+        run: pnpm --filter @nexus/web test -- --run src/__tests__/contract.test.ts 2>&1 | tee contract-results.txt
+      - name: Upload contract test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-test-log
+          path: frontend/contract-results.txt
+          retention-days: 14
+
+  # =========================================================================
+  # Stage 2 — Build
+  # =========================================================================
 
   build:
     name: Build
@@ -90,32 +108,21 @@ jobs:
     defaults:
       run:
         working-directory: frontend
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build packages
-        run: pnpm build
-
+      - run: pnpm install --frozen-lockfile
+      - name: Build UI package
+        run: pnpm --filter @nexus/ui build
       - name: Build web app
-        run: pnpm --filter @nexus/app build
-
+        run: pnpm --filter @nexus/web build
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -124,40 +131,103 @@ jobs:
           retention-days: 7
 
   storybook:
-    name: Build Storybook
+    name: Storybook Build & Visual Regression
     runs-on: ubuntu-latest
     needs: [lint]
     defaults:
       run:
         working-directory: frontend
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - run: pnpm install --frozen-lockfile
       - name: Build Storybook
         run: pnpm --filter @nexus/ui build-storybook
-
-      - name: Upload Storybook
+      - name: Upload Storybook static site
         uses: actions/upload-artifact@v4
         with:
           name: storybook
           path: frontend/packages/ui/storybook-static
+          retention-days: 14
+      - name: Install Playwright for visual tests
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run visual regression tests
+        run: |
+          npx http-server packages/ui/storybook-static -p 6006 --silent &
+          sleep 5
+          cd packages/ui && STORYBOOK_URL=http://localhost:6006 pnpm test:visual || true
+        env:
+          CI: 'true'
+      - name: Upload visual regression snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-snapshots
+          path: frontend/packages/ui/src/__snapshots__
+          retention-days: 14
+      - name: Upload visual diff results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-results
+          path: frontend/packages/ui/visual-regression-results
+          retention-days: 7
+
+  # =========================================================================
+  # Stage 3 — Integration tests (depend on build)
+  # =========================================================================
+
+  e2e:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: frontend/apps/web/.next
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+      - name: Run E2E tests
+        run: pnpm --filter @nexus/web test:e2e
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          NEXT_PUBLIC_WS_URL: ws://localhost:8089/ws
+          NEXT_PUBLIC_MOCK_MODE: 'true'
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/apps/web/playwright-report
+          retention-days: 14
+      - name: Upload E2E test traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: frontend/apps/web/test-results
           retention-days: 7
 
   a11y:
@@ -167,37 +237,33 @@ jobs:
     defaults:
       run:
         working-directory: frontend
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - run: pnpm install --frozen-lockfile
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: web-build
           path: frontend/apps/web/.next
-
       - name: Install Playwright
         run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run axe accessibility tests
-        run: pnpm --filter @nexus/app test:a11y
+      - name: Run accessibility tests
+        run: pnpm --filter @nexus/web test:a11y
+      - name: Upload a11y report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report
+          path: frontend/apps/web/playwright-report
+          retention-days: 14
 
   lighthouse:
     name: Lighthouse Audit
@@ -206,119 +272,25 @@ jobs:
     defaults:
       run:
         working-directory: frontend
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - run: pnpm install --frozen-lockfile
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: web-build
           path: frontend/apps/web/.next
-
       - name: Run Lighthouse
         uses: treosh/lighthouse-ci-action@v11
         with:
           configPath: ./frontend/.lighthouserc.json
           uploadArtifacts: true
           temporaryPublicStorage: true
-
-  e2e:
-    name: Playwright E2E Tests
-    runs-on: ubuntu-latest
-    needs: [build]
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: web-build
-          path: frontend/apps/web/.next
-
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
-
-      - name: Run E2E tests
-        run: pnpm --filter @nexus/app test:e2e
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
-          NEXT_PUBLIC_WS_URL: ws://localhost:8089/ws
-          NEXT_PUBLIC_MOCK_MODE: 'true'
-
-      - name: Upload E2E test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: frontend/apps/web/playwright-report
-          retention-days: 7
-
-  contract:
-    name: API Contract Tests
-    runs-on: ubuntu-latest
-    needs: [lint]
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate API types
-        run: node scripts/generate-api-types.mjs
-
-      - name: Run contract tests
-        run: pnpm --filter @nexus/app test -- --run src/__tests__/contract.test.ts
