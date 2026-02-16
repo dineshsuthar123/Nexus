@@ -8,9 +8,9 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
 import { Eye, EyeOff, Loader2, AlertCircle, Check, X } from 'lucide-react';
 
-import { Button } from '../../Button';
-import { Input } from '../../Input';
-import { Card } from '../../Card';
+import { Button } from '../Button';
+import { Input } from '../Input';
+import { Card } from '../Card';
 
 // =============================================================================
 // Password Strength Indicator
