@@ -1,14 +1,14 @@
 /**
  * Nexus RTP Platform - Mock Backend Server
- * 
+ *
  * A lightweight Express server for frontend development when the
  * real backend is not available.
- * 
+ *
  * Usage:
  *   cd frontend/dev-mock
  *   npm install express cors
  *   node server.js
- * 
+ *
  * Or from root:
  *   node frontend/dev-mock/server.js
  */
@@ -40,7 +40,6 @@ const MOCK_USERS = {
   'dev@nexusrtp.com': {
     id: 'usr_mock_001',
     email: 'dev@nexusrtp.com',
-    password: 'password123',
     firstName: 'Dev',
     lastName: 'User',
     role: 'admin',
@@ -53,7 +52,6 @@ const MOCK_USERS = {
   'test@nexusrtp.com': {
     id: 'usr_mock_002',
     email: 'test@nexusrtp.com',
-    password: 'test123',
     firstName: 'Test',
     lastName: 'User',
     role: 'user',
@@ -109,7 +107,11 @@ app.post('/api/v1/auth/login', (req, res) => {
   }
 
   const user = MOCK_USERS[email];
-  if (!user || user.password !== password) {
+  if (!user) {
+    return res.status(401).json({ message: 'Invalid email or password' });
+  }
+  // Mock server: accept any non-empty password for development
+  if (!password) {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
@@ -313,7 +315,7 @@ app.listen(PORT, () => {
 ║                                                              ║
 ║  Test credentials:                                           ║
 ║    Email:    dev@nexusrtp.com                                ║
-║    Password: password123                                     ║
+║    Password: (any non-empty value)                           ║
 ║                                                              ║
 ║  Endpoints:                                                  ║
 ║    POST /api/v1/auth/login                                   ║

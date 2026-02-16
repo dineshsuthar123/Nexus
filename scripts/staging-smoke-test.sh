@@ -127,12 +127,12 @@ check "Auth flow: register + login" bash -c "
   REG=\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
     -X POST '$API_URL/api/v1/auth/register' \
     -H 'Content-Type: application/json' \
-    -d '{\"email\":\"smoke-\${TIMESTAMP}@test.internal\",\"password\":\"SmokeTest123!\",\"name\":\"Smoke Test\"}')
+    -d '{\"email\":\"smoke-\${TIMESTAMP}@test.internal\",\"password\":\"'\"\${SMOKE_TEST_PASSWORD:-__MOCK_PASSWORD__}\"'\",\"name\":\"Smoke Test\"}')
   # Login
   LOGIN=\$(curl -sS --max-time 10 \
     -X POST '$API_URL/api/v1/auth/login' \
     -H 'Content-Type: application/json' \
-    -d '{\"email\":\"smoke-\${TIMESTAMP}@test.internal\",\"password\":\"SmokeTest123!\"}')
+    -d '{\"email\":\"smoke-\${TIMESTAMP}@test.internal\",\"password\":\"'\"\${SMOKE_TEST_PASSWORD:-__MOCK_PASSWORD__}\"'\"}')
   echo \"\$LOGIN\" | jq -e '.token' > /dev/null 2>&1 || echo \"\$LOGIN\" | jq -e '.accessToken' > /dev/null 2>&1
 "
 
@@ -140,7 +140,7 @@ check "Payment creation (dry run)" bash -c "
   TOKEN=\$(curl -sS --max-time 10 \
     -X POST '$API_URL/api/v1/auth/login' \
     -H 'Content-Type: application/json' \
-    -d '{\"email\":\"smoke-test@system.internal\",\"password\":\"SystemTest123!\"}' | jq -r '.token // .accessToken // empty')
+    -d '{\"email\":\"smoke-test@system.internal\",\"password\":\"'"${SMOKE_TEST_PASSWORD:-__MOCK_PASSWORD__}"'\"}' | jq -r '.token // .accessToken // empty')
   if [ -n \"\$TOKEN\" ]; then
     STATUS=\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
       -X POST '$API_URL/api/v1/payments' \

@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Auth Test Fixtures
- * 
+ *
  * Shared fixtures and utilities for authentication E2E tests.
  */
 
@@ -11,16 +11,19 @@ import path from 'path';
 export const STORAGE_STATE_PATH = path.join(__dirname, '../.auth/user.json');
 
 // Test user credentials
+// E2E test credentials — NOT real secrets; values come from env or use mock placeholders
+const E2E_TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || '__MOCK_PASSWORD__';
+
 export const TEST_USER = {
   email: 'test@nexusrtp.com',
-  password: 'TestPassword123!',
+  password: E2E_TEST_PASSWORD,
   firstName: 'Test',
   lastName: 'User',
 };
 
 export const ADMIN_USER = {
   email: 'admin@nexusrtp.com',
-  password: 'AdminPassword123!',
+  password: E2E_TEST_PASSWORD,
   firstName: 'Admin',
   lastName: 'User',
 };
