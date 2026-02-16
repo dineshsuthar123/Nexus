@@ -1,0 +1,287 @@
+# Production values overlay for Nexus RTP Platform
+# Usage: helm upgrade --install nexus ./infra/helm/nexus-platform \
+#   -f values.yaml -f values.production.yaml \
+#   --namespace nexus-production --wait --timeout 10m
+#
+# CAUTION: This file targets live production traffic. All changes require
+#          approval from @cto, @infra, @security, @product via Release PR.
+
+global:
+  environment: production
+  imageRegistry: "registry.nexus-rtp.internal"
+
+# ============================================================
+# Canary Configuration (production gates — tighter than staging)
+# ============================================================
+canary:
+  enabled: false          # Enable with --set canary.enabled=true
+  weight: 5               # Initial traffic percentage
+  analysisInterval: 60    # 60s between health checks (tighter than staging 120s)
+  maxWeight: 100
+  stepWeight: 20
+  healthCheckPath: /healthz
+  promotion:
+    maxErrorRate: 0.003    # 0.3% — tighter than staging 1%
+    maxP99LatencyMs: 500   # 500ms — tighter than staging 1s
+    minSuccessRate: 0.999  # 99.9% — tighter than staging 99.5%
+
+# ============================================================
+# Database Migrations
+# ============================================================
+migrations:
+  enabled: true
+  image:
+    repository: nexus/migrations
+    tag: latest
+  backoffLimit: 2          # Fewer retries in production
+  activeDeadlineSeconds: 180
+  rollback:
+    enabled: true
+    targetVersion: ""
+
+# ============================================================
+# Production Service Configuration
+# ============================================================
+paymentService:
+  replicaCount: 3
+  image:
+    tag: ""               # Set by deploy pipeline: --set paymentService.image.tag=v1.x.x
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 60   # Scale earlier in production
+    targetMemoryUtilizationPercentage: 70
+  env:
+    DATABASE_URL: ""       # Injected via Vault
+    KAFKA_BROKERS: ""      # Injected via Vault
+    REDIS_URL: ""          # Injected via Vault
+    WATCHMAN_URL: "http://watchman:8084"
+    JAEGER_ENDPOINT: "http://jaeger:14268/api/traces"
+
+accountService:
+  replicaCount: 3
+  image:
+    tag: ""
+  resources:
+    requests:
+      cpu: 400m
+      memory: 512Mi
+    limits:
+      cpu: 1500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 60
+
+reconciliationService:
+  replicaCount: 2
+  image:
+    tag: ""
+  resources:
+    requests:
+      cpu: 400m
+      memory: 512Mi
+    limits:
+      cpu: 1500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 65
+    targetMemoryUtilizationPercentage: 75
+
+# ============================================================
+# Frontend (Production)
+# ============================================================
+frontend:
+  enabled: true
+  replicaCount: 3
+  image:
+    tag: ""               # Set by deploy pipeline
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 60
+    targetMemoryUtilizationPercentage: 75
+  env:
+    NEXT_PUBLIC_API_URL: "https://api.nexus-rtp.internal"
+    NEXT_PUBLIC_WS_URL: "wss://ws.nexus-rtp.internal/ws"
+    NEXT_PUBLIC_MOCK_MODE: "false"
+    NEXT_PUBLIC_ENABLE_REALTIME: "true"
+    NEXTAUTH_URL: "https://app.nexus-rtp.internal"
+    NEXTAUTH_SECRET: ""   # Injected via Vault or --set
+
+# ============================================================
+# Production Ingress — TLS required
+# ============================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-production"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: app.nexus-rtp.internal
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+          port: 3000
+    - host: api.nexus-rtp.internal
+      paths:
+        - path: /
+          pathType: Prefix
+          service: kong
+          port: 8000
+    - host: grafana.nexus-rtp.internal
+      paths:
+        - path: /
+          pathType: Prefix
+          service: grafana
+          port: 3000
+
+# ============================================================
+# Production Data Stores
+# ============================================================
+cockroachdb:
+  statefulset:
+    replicas: 3
+  conf:
+    single-node: false
+    cluster-organization: "nexus-rtp"
+  storage:
+    persistentVolume:
+      size: 100Gi           # Production-grade storage
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+kafka:
+  replicaCount: 3
+  persistence:
+    size: 100Gi
+  zookeeper:
+    replicaCount: 3
+    persistence:
+      size: 20Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 4Gi
+
+redis:
+  architecture: replication
+  auth:
+    enabled: true
+    password: ""           # Injected via Vault
+  master:
+    persistence:
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+  replica:
+    replicaCount: 2
+    persistence:
+      size: 10Gi
+
+# ============================================================
+# Production Monitoring
+# ============================================================
+prometheus:
+  enabled: true
+  alertmanager:
+    enabled: true
+  server:
+    persistentVolume:
+      size: 100Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    retention: "30d"
+
+grafana:
+  enabled: true
+  adminPassword: ""        # Injected via Vault
+  persistence:
+    size: 10Gi
+
+jaeger:
+  enabled: true
+  allInOne:
+    enabled: false         # Use distributed mode in production
+  collector:
+    replicas: 2
+  query:
+    enabled: true
+  storage:
+    type: elasticsearch    # Persistent storage in production
+
+# ============================================================
+# Fraud Detection (Production)
+# ============================================================
+fraudDetection:
+  enabled: true
+  jobManager:
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 4000m
+        memory: 4Gi
+  taskManager:
+    replicas: 4             # More parallelism for production load
+    resources:
+      requests:
+        cpu: 2000m
+        memory: 4Gi
+      limits:
+        cpu: 8000m
+        memory: 8Gi
+
+# Watchman — HA in production
+watchman:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 8
+
+# Vault integration
+vault:
+  enabled: true
+  address: "https://vault.nexus-rtp.internal:8200"
+  authMethod: kubernetes
+  tlsEnabled: true
