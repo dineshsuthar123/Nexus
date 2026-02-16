@@ -29,6 +29,12 @@ module.exports = {
   rules: {
     // React 17+ JSX transform — no need to import React
     'react/react-in-jsx-scope': 'off',
+    // Using TypeScript for prop validation instead of prop-types
+    'react/prop-types': 'off',
+    // Allow unescaped entities in JSX (common in stories/docs)
+    'react/no-unescaped-entities': 'off',
+    // Allow custom HTML attributes (e.g., cmdk-input-wrapper)
+    'react/no-unknown-property': 'off',
     // Allow prop spreading for UI components
     'react/jsx-props-no-spreading': 'off',
     // Allow default exports for barrel files
@@ -41,5 +47,14 @@ module.exports = {
     // Allow explicit any in test helpers and type utilities
     '@typescript-eslint/no-explicit-any': 'warn',
   },
+  overrides: [
+    {
+      // Relax hooks rules for Storybook render functions
+      files: ['**/*.stories.{ts,tsx}'],
+      rules: {
+        'react-hooks/rules-of-hooks': 'off',
+      },
+    },
+  ],
   ignorePatterns: ['dist/', 'node_modules/', 'storybook-static/', '*.config.*'],
 };
