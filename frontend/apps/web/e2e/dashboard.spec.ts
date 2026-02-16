@@ -1,29 +1,35 @@
 /**
  * Dashboard E2E Tests
  *
- * Tests the main dashboard page and its widgets.
+ * Tests the main dashboard page:
+ * - Layout and navigation
+ * - Metrics cards
+ * - Sidebar links
+ * - Responsiveness
  */
 
 import { test, expect } from '@playwright/test';
+import { setupApiMocks } from './fixtures/api-mocks';
 
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to dashboard (assumes logged-in state from setup)
+    await setupApiMocks(page);
     await page.goto('/dashboard');
   });
 
-  test('should display dashboard with metrics cards', async ({ page }) => {
-    // Wait for the page to load
+  test('should display dashboard heading', async ({ page }) => {
     await expect(page).toHaveTitle(/Dashboard|Nexus/i);
-
-    // Check for key dashboard elements
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
   });
 
-  test('should show payment summary metrics', async ({ page }) => {
-    // Check for metrics cards or loading skeletons
+  test('should show main content area', async ({ page }) => {
     const mainContent = page.locator('main');
     await expect(mainContent).toBeVisible();
+  });
+
+  test('should have navigation sidebar', async ({ page }) => {
+    const nav = page.getByRole('navigation').first();
+    await expect(nav).toBeVisible();
   });
 
   test('should navigate to payments page', async ({ page }) => {
@@ -66,10 +72,22 @@ test.describe('Dashboard', () => {
     }
   });
 
+  test('should navigate to settings page', async ({ page }) => {
+    const settingsLink = page.getByRole('link', { name: /settings/i }).first();
+    if (await settingsLink.isVisible()) {
+      await settingsLink.click();
+      await expect(page).toHaveURL(/\/dashboard\/settings/);
+    }
+  });
+
+  test('should be responsive on tablet viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    const mainContent = page.locator('main');
+    await expect(mainContent).toBeVisible();
+  });
+
   test('should be responsive on mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/dashboard');
-
     const mainContent = page.locator('main');
     await expect(mainContent).toBeVisible();
   });
