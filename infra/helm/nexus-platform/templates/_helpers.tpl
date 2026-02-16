@@ -70,6 +70,13 @@ Reconciliation Service name
 {{- end }}
 
 {{/*
+Frontend name
+*/}}
+{{- define "nexus-platform.frontend.fullname" -}}
+{{- printf "%s-frontend" (include "nexus-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Database URL
 */}}
 {{- define "nexus-platform.databaseUrl" -}}

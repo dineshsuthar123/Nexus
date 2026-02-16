@@ -330,6 +330,46 @@ jaeger:
     enabled: true
 
 # ============================================================
+# Frontend (Next.js)
+# ============================================================
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 85
+
+  env:
+    NEXT_PUBLIC_API_URL: "http://kong:8000"
+    NEXT_PUBLIC_WS_URL: "ws://ws-gateway:8089/ws"
+    NEXT_PUBLIC_MOCK_MODE: "false"
+    NEXT_PUBLIC_ENABLE_REALTIME: "true"
+    NEXTAUTH_URL: ""
+    NEXTAUTH_SECRET: ""
+
+  nodeSelector: {}
+
+# ============================================================
 # Ingress
 # ============================================================
 ingress:
@@ -338,6 +378,12 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
   hosts:
+    - host: app.nexus.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+          port: 3000
     - host: api.nexus.local
       paths:
         - path: /
