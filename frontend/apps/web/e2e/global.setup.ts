@@ -12,22 +12,11 @@ import { STORAGE_STATE_PATH } from './fixtures/auth';
  * Creates authenticated session storage for use in tests.
  */
 setup('create authenticated session', async ({ page }) => {
-  // Navigate to login page
-  await page.goto('/auth/login');
+  // Navigate to login page and wait for DOM to be ready
+  await page.goto('/auth/login', { waitUntil: 'domcontentloaded' });
   
-  // Wait for the page to be ready
-  await page.waitForLoadState('networkidle');
-  
-  // This setup can be used to:
-  // 1. Create a test user via API
-  // 2. Login and save the session
-  // 3. Set up any required test data
-  
-  // For now, we'll just verify the login page loads
-  // In a real scenario, you would log in with test credentials
-  
-  // Check that the login form is visible
-  const loginForm = page.getByRole('heading', { name: /sign in|welcome/i });
+  // Wait for the login heading to appear (proves page rendered)
+  await page.getByRole('heading', { name: /sign in|welcome/i }).waitFor({ state: 'visible', timeout: 15000 });
   
   // If login page exists, we're ready for tests
   // In production, you'd authenticate and save session state:
