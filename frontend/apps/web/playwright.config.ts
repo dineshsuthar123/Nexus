@@ -7,11 +7,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
+ * Set environment variables for E2E test mode.
+ * These ensure the Next.js dev server starts without auth issues.
  */
-// import dotenv from 'dotenv';
-// dotenv.config({ path: path.resolve(__dirname, '.env') });
+process.env.NEXT_PUBLIC_MOCK_MODE = 'true';
+process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || 'e2e-test-secret-not-a-real-secret-value-32chars';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -66,6 +67,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
       },
+      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
 
@@ -74,6 +76,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Firefox'],
       },
+      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
 
@@ -82,6 +85,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Safari'],
       },
+      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
 
@@ -91,6 +95,7 @@ export default defineConfig({
       use: {
         ...devices['Pixel 5'],
       },
+      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
     {
@@ -98,6 +103,7 @@ export default defineConfig({
       use: {
         ...devices['iPhone 12'],
       },
+      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
 
@@ -114,9 +120,14 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npm run dev',
+    command: 'npx next dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
+    env: {
+      NEXT_PUBLIC_MOCK_MODE: 'true',
+      NEXTAUTH_URL: 'http://localhost:3000',
+      NEXTAUTH_SECRET: 'e2e-test-secret-not-a-real-secret-value-32chars',
+    },
   },
 });

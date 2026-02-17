@@ -218,9 +218,11 @@ jobs:
       - name: Run E2E tests
         run: pnpm --filter @nexus/web test:e2e
         env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
-          NEXT_PUBLIC_WS_URL: ws://localhost:8089/ws
+          NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+          NEXT_PUBLIC_WS_URL: ws://localhost:3000/ws
           NEXT_PUBLIC_MOCK_MODE: 'true'
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: e2e-test-secret-not-a-real-secret-value-32chars
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
@@ -265,6 +267,10 @@ jobs:
         run: pnpm --filter @nexus/web exec playwright install --with-deps chromium
       - name: Run accessibility tests
         run: pnpm --filter @nexus/web test:a11y
+        env:
+          NEXT_PUBLIC_MOCK_MODE: 'true'
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: e2e-test-secret-not-a-real-secret-value-32chars
       - name: Upload a11y report
         if: always()
         uses: actions/upload-artifact@v4

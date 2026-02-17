@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Next.js Middleware
- * 
+ *
  * Handles:
  * - Route protection (authentication required)
  * - Role-based access control
@@ -63,7 +63,7 @@ function isAuthRoute(pathname: string): boolean {
 }
 
 function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.some((route) => 
+  return PUBLIC_ROUTES.some((route) =>
     pathname === route || pathname.startsWith(`${route}/`)
   );
 }
@@ -90,6 +90,11 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/') && !pathname.startsWith('/api/auth') ||
     pathname.includes('.') // Static files
   ) {
+    return NextResponse.next();
+  }
+
+  // In mock/E2E mode, skip authentication checks entirely
+  if (process.env.NEXT_PUBLIC_MOCK_MODE === 'true') {
     return NextResponse.next();
   }
 

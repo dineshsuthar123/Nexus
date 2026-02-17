@@ -3,9 +3,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { setupApiMocks } from './fixtures/api-mocks';
 
 test.describe('Settings Page', () => {
   test.beforeEach(async ({ page }) => {
+    await setupApiMocks(page);
     await page.goto('/dashboard/settings');
   });
 
