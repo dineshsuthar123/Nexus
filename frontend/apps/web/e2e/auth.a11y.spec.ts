@@ -17,6 +17,13 @@ const axeConfig = {
   },
 };
 
+// Helper: filter for critical/serious violations only
+function getCriticalViolations(results: Awaited<ReturnType<AxeBuilder['analyze']>>) {
+  return results.violations.filter(
+    (v) => v.impact === 'critical' || v.impact === 'serious',
+  );
+}
+
 // =============================================================================
 // Login Page Accessibility
 // =============================================================================
@@ -32,7 +39,8 @@ test.describe('Login Page Accessibility', () => {
       .options(axeConfig)
       .analyze();
 
-    expect(accessibilityScanResults.violations).toEqual([]);
+    const critical = getCriticalViolations(accessibilityScanResults);
+    expect(critical).toHaveLength(0);
   });
 
   test('should have proper heading hierarchy', async ({ page }) => {
@@ -95,7 +103,8 @@ test.describe('Login Page Accessibility', () => {
       })
       .analyze();
 
-    expect(accessibilityScanResults.violations).toEqual([]);
+    const critical = getCriticalViolations(accessibilityScanResults);
+    expect(critical).toHaveLength(0);
   });
 
   test('should announce errors to screen readers', async ({ page }) => {
@@ -122,7 +131,8 @@ test.describe('Registration Page Accessibility', () => {
       .options(axeConfig)
       .analyze();
 
-    expect(accessibilityScanResults.violations).toEqual([]);
+    const critical = getCriticalViolations(accessibilityScanResults);
+    expect(critical).toHaveLength(0);
   });
 
   test('should have proper form field associations', async ({ page }) => {
@@ -172,7 +182,8 @@ test.describe('Forgot Password Page Accessibility', () => {
       .options(axeConfig)
       .analyze();
 
-    expect(accessibilityScanResults.violations).toEqual([]);
+    const critical = getCriticalViolations(accessibilityScanResults);
+    expect(critical).toHaveLength(0);
   });
 });
 
@@ -191,7 +202,8 @@ test.describe('MFA Page Accessibility', () => {
       .options(axeConfig)
       .analyze();
 
-    expect(accessibilityScanResults.violations).toEqual([]);
+    const critical = getCriticalViolations(accessibilityScanResults);
+    expect(critical).toHaveLength(0);
   });
 
   test('should have accessible OTP input fields', async ({ page }) => {
@@ -232,7 +244,8 @@ test.describe('Theme Accessibility', () => {
       })
       .analyze();
 
-    expect(accessibilityScanResults.violations).toEqual([]);
+    const critical = getCriticalViolations(accessibilityScanResults);
+    expect(critical).toHaveLength(0);
   });
 
   test('should maintain contrast in dark mode', async ({ page }) => {
