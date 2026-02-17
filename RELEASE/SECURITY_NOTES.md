@@ -10,12 +10,18 @@
 
 GitGuardian flagged hardcoded password values in the following files:
 
-| File | Value | Risk |
-|------|-------|------|
-| `frontend/dev-mock/server.js` | `password: 'password123'`, `password: 'test123'` | Mock server credential stored in code |
-| `frontend/apps/web/e2e/fixtures/auth.ts` | `password: 'TestPassword123!'`, `password: 'AdminPassword123!'` | E2E test fixture |
-| `scripts/staging-smoke-test.sh` | `SmokeTest123!`, `SystemTest123!` | Smoke test inline passwords |
-| `infra/docker/docker-compose.yml` | `GF_SECURITY_ADMIN_PASSWORD: nexus123` | Grafana dev setup password |
+| File | Value | Risk | Status |
+|------|-------|------|--------|
+| `frontend/dev-mock/server.js` | Mock passwords (removed) | Mock server credential stored in code | **FIXED** — passwords removed, accepts any non-empty password |
+| `frontend/apps/web/e2e/fixtures/auth.ts` | Test fixtures | E2E test fixture | **FIXED** — uses `process.env.E2E_TEST_PASSWORD \|\| '__MOCK_PASSWORD__'` |
+| `frontend/apps/web/src/components/__tests__/login-form.test.tsx` | Test input values | Unit test mock data | **FIXED** — replaced with `MOCK_PASSWORD` constant |
+| `frontend/apps/web/src/lib/hooks/__tests__/use-auth.test.tsx` | Test input values | Unit test mock data | **FIXED** — replaced with `MOCK_PASSWORD` constant |
+| `frontend/apps/web/e2e/auth.spec.ts` | E2E test passwords | E2E test input | **FIXED** — replaced with env-var backed constant |
+| `frontend/apps/web/e2e/auth.a11y.spec.ts` | A11y test password | A11y test input | **FIXED** — replaced with env-var backed constant |
+| `scripts/staging-smoke-test.sh` | Smoke test passwords | Smoke test inline passwords | **FIXED** — uses `${SMOKE_TEST_PASSWORD:-__MOCK_PASSWORD__}` |
+| `infra/docker/docker-compose.yml` | Grafana dev setup password | Development config | **FIXED** — uses env variable reference |
+| `infra/helm/nexus-platform/values.yaml` | Grafana admin password | Helm default values | **FIXED** — cleared, must be set via `--set` or Vault |
+| `infra/helm/nexus-platform/values.staging.yaml` | Grafana staging password | Helm staging values | **FIXED** — cleared, must be set via `--set` or Vault |
 
 ### Remediation Actions Taken
 

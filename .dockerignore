@@ -1,0 +1,20 @@
+# Docker build context exclusions
+# Only include services/ and pkg/ directories needed for Go builds
+node_modules
+frontend/node_modules
+frontend/apps/web/.next
+frontend/packages/ui/storybook-static
+*.md
+docs/
+chaos/
+loadtest/
+proofs/
+audit/
+replay/
+diagnostics/
+COMPLIANCE/
+RELEASE/
+runbooks/
+.git
+.github
+*.patch

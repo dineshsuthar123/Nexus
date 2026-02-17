@@ -4,6 +4,9 @@
  * Tests for the login form component with validation and submission.
  */
 
+// Test-only mock credential — NOT a real secret
+const MOCK_PASSWORD = '__MOCK_TEST_PASSWORD__';
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -161,9 +164,9 @@ describe('LoginForm', () => {
       render(<MockLoginForm />, { wrapper: createTestWrapper() });
 
       const passwordInput = screen.getByLabelText(/password/i);
-      await user.type(passwordInput, 'password123');
+      await user.type(passwordInput, MOCK_PASSWORD);
 
-      expect(passwordInput).toHaveValue('password123');
+      expect(passwordInput).toHaveValue(MOCK_PASSWORD);
     });
 
     it('should toggle remember me checkbox', async () => {
@@ -192,13 +195,13 @@ describe('LoginForm', () => {
       render(<MockLoginForm />, { wrapper: createTestWrapper() });
 
       await user.type(screen.getByLabelText(/email/i), 'test@example.com');
-      await user.type(screen.getByLabelText(/password/i), 'password123');
+      await user.type(screen.getByLabelText(/password/i), MOCK_PASSWORD);
       await user.click(screen.getByRole('button', { name: /sign in/i }));
 
       await waitFor(() => {
         expect(signIn).toHaveBeenCalledWith('credentials', {
           email: 'test@example.com',
-          password: 'password123',
+          password: MOCK_PASSWORD,
           redirect: false,
         });
       });
@@ -215,7 +218,7 @@ describe('LoginForm', () => {
       render(<MockLoginForm />, { wrapper: createTestWrapper() });
 
       await user.type(screen.getByLabelText(/email/i), 'test@example.com');
-      await user.type(screen.getByLabelText(/password/i), 'password123{enter}');
+      await user.type(screen.getByLabelText(/password/i), MOCK_PASSWORD + '{enter}');
 
       await waitFor(() => {
         expect(signIn).toHaveBeenCalled();
@@ -282,7 +285,7 @@ describe('LoginForm', () => {
       const submitButton = screen.getByRole('button', { name: /sign in/i });
       
       await user.type(screen.getByLabelText(/email/i), 'test@example.com');
-      await user.type(screen.getByLabelText(/password/i), 'password123');
+      await user.type(screen.getByLabelText(/password/i), MOCK_PASSWORD);
       
       // Button should be enabled before submission
       expect(submitButton).not.toBeDisabled();
@@ -322,7 +325,7 @@ describe('LoginForm', () => {
       render(<MockLoginForm />, { wrapper: createTestWrapper() });
 
       await user.type(screen.getByLabelText(/email/i), 'test@example.com');
-      await user.type(screen.getByLabelText(/password/i), 'password123');
+      await user.type(screen.getByLabelText(/password/i), MOCK_PASSWORD);
       await user.click(screen.getByRole('button', { name: /sign in/i }));
 
       await waitFor(() => {

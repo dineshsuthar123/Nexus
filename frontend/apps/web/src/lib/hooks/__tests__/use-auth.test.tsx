@@ -4,6 +4,10 @@
  * Tests for authentication React Query hooks.
  */
 
+// Test-only mock credentials — NOT real secrets
+const MOCK_PASSWORD = '__MOCK_TEST_PASSWORD__';
+const MOCK_NEW_PASSWORD = '__MOCK_NEW_PASSWORD__';
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -130,13 +134,13 @@ describe('Auth Hooks', () => {
 
       await result.current.mutateAsync({
         email: 'newuser@example.com',
-        password: 'SecurePass123!',
+        password: MOCK_PASSWORD,
         name: 'New User',
       });
 
       expect(api.post).toHaveBeenCalledWith('/api/v1/auth/register', {
         email: 'newuser@example.com',
-        password: 'SecurePass123!',
+        password: MOCK_PASSWORD,
         name: 'New User',
       });
     });
@@ -151,7 +155,7 @@ describe('Auth Hooks', () => {
       await expect(
         result.current.mutateAsync({
           email: 'existing@example.com',
-          password: 'SecurePass123!',
+          password: MOCK_PASSWORD,
           name: 'Test',
         })
       ).rejects.toThrow('Email already exists');
@@ -212,12 +216,12 @@ describe('Auth Hooks', () => {
 
       await result.current.mutateAsync({
         token: 'reset-token-123',
-        password: 'NewSecurePass123!',
+        password: MOCK_NEW_PASSWORD,
       });
 
       expect(api.post).toHaveBeenCalledWith('/api/v1/auth/reset-password', {
         token: 'reset-token-123',
-        password: 'NewSecurePass123!',
+        password: MOCK_NEW_PASSWORD,
       });
     });
 
@@ -231,7 +235,7 @@ describe('Auth Hooks', () => {
       await expect(
         result.current.mutateAsync({
           token: 'expired-token',
-          password: 'NewPassword123!',
+          password: MOCK_NEW_PASSWORD,
         })
       ).rejects.toThrow('Invalid or expired token');
     });

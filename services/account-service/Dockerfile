@@ -1,16 +1,21 @@
 # Build stage
 FROM golang:1.21-alpine AS builder
 
-WORKDIR /app
+WORKDIR /build
 
 RUN apk add --no-cache git ca-certificates
 
-COPY go.mod go.sum ./
+# Copy the shared idempotency package (referenced via replace directive)
+COPY pkg/idempotency /build/pkg/idempotency
+
+# Copy the service
+COPY services/account-service /build/services/account-service
+
+WORKDIR /build/services/account-service
+
 RUN go mod download
 
-COPY . .
-
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /server ./cmd/server
 
 # Final stage
 FROM alpine:3.19
@@ -19,7 +24,7 @@ WORKDIR /app
 
 RUN apk --no-cache add ca-certificates tzdata
 
-COPY --from=builder /app/server .
+COPY --from=builder /server .
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser

@@ -197,7 +197,7 @@ prometheus:
         memory: 256Mi
 
 grafana:
-  adminPassword: "staging-only-password"
+  adminPassword: ""  # Set via --set grafana.adminPassword or Vault
   persistence:
     size: 2Gi
 

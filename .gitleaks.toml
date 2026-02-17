@@ -17,4 +17,6 @@ title = "Nexus RTP gitleaks config"
     '''frontend/apps/web/src/lib/hooks/__tests__/.*''',
     '''scripts/staging-smoke-test\.sh''',
     '''infra/docker/docker-compose\.yml''',
+    '''infra/helm/.*''',
+    '''RELEASE/SECURITY_NOTES\.md''',
   ]

@@ -11,6 +11,9 @@
 
 import { test, expect, TEST_USER, ADMIN_USER } from './fixtures/auth';
 
+// Test-only mock credential — NOT a real secret
+const MOCK_PASSWORD = process.env.E2E_TEST_PASSWORD || '__MOCK_PASSWORD__';
+
 // =============================================================================
 // Login Flow Tests
 // =============================================================================
@@ -46,7 +49,7 @@ test.describe('Login Flow', () => {
 
   test('should show validation error for invalid email format', async ({ page }) => {
     await page.getByLabel(/email/i).fill('invalid-email');
-    await page.getByLabel(/password/i).fill('password123');
+    await page.getByLabel(/password/i).fill(MOCK_PASSWORD);
     await page.getByRole('button', { name: /sign in/i }).click();
     
     await expect(page.getByText(/valid.*email|invalid.*email/i)).toBeVisible();
@@ -132,8 +135,8 @@ test.describe('Registration Flow', () => {
   });
 
   test('should show password mismatch error', async ({ page }) => {
-    await page.getByLabel(/^password$/i).fill('Password123!');
-    await page.getByLabel(/confirm password/i).fill('DifferentPassword123!');
+    await page.getByLabel(/^password$/i).fill(MOCK_PASSWORD);
+    await page.getByLabel(/confirm password/i).fill(MOCK_PASSWORD + 'Different');
     
     await expect(page.getByText(/passwords.*match|do not match/i)).toBeVisible();
   });

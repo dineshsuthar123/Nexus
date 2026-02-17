@@ -189,15 +189,15 @@ jobs:
 
       - name: Build payment-service image
         run: |
-          docker build -t nexus/payment-service:${{ github.sha }} -f services/payment-service/Dockerfile services/payment-service
+          docker build -t nexus/payment-service:${{ github.sha }} -f services/payment-service/Dockerfile .
 
       - name: Build account-service image
         run: |
-          docker build -t nexus/account-service:${{ github.sha }} -f services/account-service/Dockerfile services/account-service
+          docker build -t nexus/account-service:${{ github.sha }} -f services/account-service/Dockerfile .
 
       - name: Build reconciliation-service image
         run: |
-          docker build -t nexus/reconciliation-service:${{ github.sha }} -f services/reconciliation-service/Dockerfile services/reconciliation-service
+          docker build -t nexus/reconciliation-service:${{ github.sha }} -f services/reconciliation-service/Dockerfile .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master

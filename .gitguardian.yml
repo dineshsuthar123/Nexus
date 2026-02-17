@@ -1,0 +1,27 @@
+# GitGuardian configuration
+# Exclude test/mock files that contain placeholder credentials (not real secrets)
+version: 2
+
+secret:
+  ignored-paths:
+    - "frontend/dev-mock/**"
+    - "frontend/apps/web/e2e/**"
+    - "frontend/apps/web/src/components/__tests__/**"
+    - "frontend/apps/web/src/lib/hooks/__tests__/**"
+    - "scripts/staging-smoke-test.sh"
+    - "**/*.test.ts"
+    - "**/*.test.tsx"
+    - "**/*.spec.ts"
+    - "**/*.spec.tsx"
+    - "**/fixtures/**"
+    - "RELEASE/SECURITY_NOTES.md"
+    - "infra/helm/**"
+    - "infra/docker/**"
+
+  ignored-matches:
+    - name: "Mock test passwords"
+      match: "__MOCK_PASSWORD__"
+    - name: "Mock test credentials"
+      match: "__MOCK_TEST_PASSWORD__"
+    - name: "Mock new password"
+      match: "__MOCK_NEW_PASSWORD__"

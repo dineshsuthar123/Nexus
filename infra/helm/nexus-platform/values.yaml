@@ -301,7 +301,7 @@ prometheus:
 # ============================================================
 grafana:
   enabled: true
-  adminPassword: "nexus-admin"
+  adminPassword: ""  # Set via --set grafana.adminPassword or Vault
   persistence:
     enabled: true
     size: 5Gi

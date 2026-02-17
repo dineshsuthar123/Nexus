@@ -146,7 +146,7 @@ test.describe('Registration Page Accessibility', () => {
 
   test('should have accessible password strength indicator', async ({ page }) => {
     const passwordInput = page.getByLabel(/^password$/i);
-    await passwordInput.fill('TestPassword123!');
+    await passwordInput.fill(process.env.E2E_TEST_PASSWORD || '__MOCK_PASSWORD__');
 
     // Check that strength indicator has proper ARIA
     const strengthIndicator = page.locator('[role="progressbar"], [aria-valuenow], [aria-valuemax]');
