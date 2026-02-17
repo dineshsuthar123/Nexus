@@ -61,8 +61,8 @@ test.describe('Accessibility - WCAG AA Compliance', () => {
       // Mock API routes so protected pages render their real UI
       await setupApiMocks(page);
 
-      await page.goto(pg.url);
-      await page.waitForLoadState('networkidle');
+      await page.goto(pg.url, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1000);
 
       const violations = await getCriticalViolations(page);
 
@@ -109,8 +109,8 @@ test.describe('Accessibility - Keyboard Navigation', () => {
 
   test('should support keyboard navigation in payments table', async ({ page }) => {
     await setupApiMocks(page);
-    await page.goto('/dashboard/payments');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/dashboard/payments', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     // Table should be keyboard-navigable — Tab to first interactive element
     await page.keyboard.press('Tab');
@@ -137,8 +137,8 @@ test.describe('Accessibility - Keyboard Navigation', () => {
 
 test.describe('Accessibility - Color Contrast', () => {
   test('login page meets WCAG AA color contrast ratios', async ({ page }) => {
-    await page.goto('/auth/login');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/auth/login', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     const results = await new AxeBuilder({ page })
       .withRules(['color-contrast'])
@@ -153,8 +153,8 @@ test.describe('Accessibility - Color Contrast', () => {
 
   test('dashboard meets color contrast ratios', async ({ page }) => {
     await setupApiMocks(page);
-    await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     const results = await new AxeBuilder({ page })
       .withRules(['color-contrast'])
@@ -169,8 +169,8 @@ test.describe('Accessibility - Color Contrast', () => {
 
   test('dark mode meets color contrast ratios', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
-    await page.goto('/auth/login');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/auth/login', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     const results = await new AxeBuilder({ page })
       .withRules(['color-contrast'])
@@ -225,8 +225,8 @@ test.describe('Accessibility - ARIA Attributes', () => {
 
   test('tables have proper ARIA attributes', async ({ page }) => {
     await setupApiMocks(page);
-    await page.goto('/dashboard/payments');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/dashboard/payments', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     // Look for table roles
     const tables = page.locator('table, [role="grid"], [role="table"]');
@@ -245,8 +245,8 @@ test.describe('Accessibility - ARIA Attributes', () => {
 test.describe('Accessibility - Reduced Motion', () => {
   test('respects prefers-reduced-motion', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/auth/login');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/auth/login', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     // In reduced-motion mode, no element should have animations > 200ms
     const hasLongAnimations = await page.evaluate(() => {
@@ -270,8 +270,8 @@ test.describe('Accessibility - Reduced Motion', () => {
 test.describe('Accessibility - Fintech Domain', () => {
   test('payment amounts are screen-reader friendly', async ({ page }) => {
     await setupApiMocks(page);
-    await page.goto('/dashboard/payments');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/dashboard/payments', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     // Amounts should not use aria-hidden and should be readable text
     const amounts = page.locator('[data-testid*="amount"], .amount, td');
@@ -284,8 +284,8 @@ test.describe('Accessibility - Fintech Domain', () => {
 
   test('status badges convey meaning beyond color', async ({ page }) => {
     await setupApiMocks(page);
-    await page.goto('/dashboard/payments');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/dashboard/payments', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     // Status indicators should have text content, not just color
     const badges = page.locator('[data-testid*="status"], .badge, .status');
@@ -299,8 +299,8 @@ test.describe('Accessibility - Fintech Domain', () => {
 
   test('interactive data tables have keyboard row selection', async ({ page }) => {
     await setupApiMocks(page);
-    await page.goto('/dashboard/payments');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/dashboard/payments', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     // Table rows that are clickable should also be keyboard-accessible
     const clickableRows = page.locator('tr[onclick], tr.cursor-pointer, [role="row"][tabindex]');
