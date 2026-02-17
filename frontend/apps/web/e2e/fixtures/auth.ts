@@ -41,8 +41,8 @@ class LoginPage {
   constructor(public readonly page: Page) {}
 
   async goto() {
-    await this.page.goto('/auth/login');
-    await this.page.waitForLoadState('networkidle');
+    await this.page.goto('/auth/login', { waitUntil: 'domcontentloaded' });
+    await this.page.getByRole('heading', { name: /sign in|welcome/i }).waitFor({ state: 'visible' });
   }
 
   async login(email: string, password: string) {
@@ -68,8 +68,8 @@ class RegisterPage {
   constructor(public readonly page: Page) {}
 
   async goto() {
-    await this.page.goto('/auth/register');
-    await this.page.waitForLoadState('networkidle');
+    await this.page.goto('/auth/register', { waitUntil: 'domcontentloaded' });
+    await this.page.getByRole('heading', { name: /create.*account|sign up|register/i }).waitFor({ state: 'visible' });
   }
 
   async register(data: {
