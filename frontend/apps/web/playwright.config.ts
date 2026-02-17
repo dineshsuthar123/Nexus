@@ -115,6 +115,8 @@ export default defineConfig({
       },
       testMatch: /.*\.(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
+      retries: 0,
+      timeout: 30 * 1000,
     },
   ],
 
