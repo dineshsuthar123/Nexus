@@ -326,7 +326,7 @@ function MfaPageContent() {
       {/* Help text */}
       <p className="mt-6 text-center text-xs text-muted-foreground">
         Lost access to your authenticator app and backup codes?{' '}
-        <Link href="/support" className="text-primary hover:underline">
+        <Link href="/support" className="text-primary underline">
           Contact support
         </Link>
       </p>
