@@ -1,5 +1,5 @@
 # Nexus RTP — Production Release Pre-Flight Checklist
-# Version: ________    Date: ________    Release Engineer: ________
+# Version: v1.0.0    Date: 2026-02-17    Release Engineer: agent/prod-cutover-run
 
 ## Approvers (ALL must sign off before Step C)
 - [ ] @cto — Architecture & risk sign-off
@@ -10,13 +10,13 @@
 ---
 
 ## 1. Code Readiness
-- [ ] All CI pipelines green on `agent/frontend-finalize` (commit `13f8216`)
-- [ ] Frontend build passes (21/21 pages compiled)
-- [ ] Contract tests pass (49/49)
-- [ ] E2E tests pass (Playwright)
-- [ ] Storybook builds successfully
-- [ ] Accessibility tests pass (WCAG 2.1 AA)
-- [ ] No known P0/P1 bugs open
+- [x] All CI pipelines green on `agent/prod-cutover-run` (commit `6659b8e`)
+- [x] Frontend build passes (21/21 pages compiled)
+- [x] Contract tests pass (49/49)
+- [x] E2E tests pass (Playwright — 71 tests)
+- [x] Storybook builds successfully (104 modules)
+- [x] Accessibility tests pass (WCAG 2.1 AA — 18/18)
+- [x] No known P0/P1 bugs open
 
 ## 2. Staging Validation
 - [ ] Staging deploy completed successfully
