@@ -218,6 +218,7 @@ jobs:
       - name: Run E2E tests
         run: pnpm --filter @nexus/web exec playwright test --project=chromium
         env:
+          NODE_ENV: production
           NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
           NEXT_PUBLIC_WS_URL: ws://localhost:3000/ws
           NEXT_PUBLIC_MOCK_MODE: 'true'
