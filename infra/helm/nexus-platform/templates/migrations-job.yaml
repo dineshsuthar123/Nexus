@@ -1,0 +1,163 @@
+{{/*
+Database Migration Pre-Upgrade Job
+Runs schema migrations before deploying new application versions.
+Uses Helm hook to ensure migrations complete before deployment.
+*/}}
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nexus-platform.fullname" . }}-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit | default 3 }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds | default 300 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nexus-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      serviceAccountName: {{ include "nexus-platform.fullname" . }}
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      initContainers:
+        # Wait for database to be ready
+        - name: wait-for-db
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z cockroachdb 26257; do echo "Waiting for CockroachDB..."; sleep 2; done']
+      containers:
+        - name: migrate
+          image: "{{ .Values.migrations.image.repository }}:{{ .Values.migrations.image.tag }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "=== Running Nexus RTP Database Migrations ==="
+              echo "Target database: $DATABASE_URL"
+
+              # Run migrations in order
+              for f in /migrations/*.sql; do
+                echo "Applying: $(basename $f)"
+                cockroach sql --url="$DATABASE_URL" --file="$f" || {
+                  echo "ERROR: Migration failed: $(basename $f)"
+                  exit 1
+                }
+                echo "  ✓ $(basename $f) applied"
+              done
+
+              echo "=== All migrations applied successfully ==="
+          env:
+            - name: DATABASE_URL
+              value: {{ include "nexus-platform.databaseUrl" . | quote }}
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: migrations
+          configMap:
+            name: {{ include "nexus-platform.fullname" . }}-migrations
+---
+# Migration ConfigMap — contains SQL files
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nexus-platform.fullname" . }}-migrations
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  # Migration files will be loaded from migrations/ directory during CI build
+  README.md: |
+    Migration files are injected during CI build.
+    See migrations/ directory in the repository root.
+{{- end }}
+---
+{{/*
+Post-Upgrade Smoke Test Job
+Validates the deployment after upgrade completes.
+*/}}
+{{- if or .Values.canary.enabled .Values.blueGreen.smokeTestJob }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nexus-platform.fullname" . }}-smoke-test-{{ .Release.Revision }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: smoke-test
+  annotations:
+    "helm.sh/hook": post-upgrade,post-install
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        {{- include "nexus-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: smoke-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: smoke-test
+          image: curlimages/curl:8.5.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "=== Nexus RTP Post-Deploy Smoke Tests ==="
+
+              check_health() {
+                local svc=$1 url=$2
+                echo -n "  Checking $svc... "
+                status=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$url" || echo "000")
+                if [ "$status" = "200" ]; then
+                  echo "✓ ($status)"
+                else
+                  echo "✗ ($status)"
+                  return 1
+                fi
+              }
+
+              FAILURES=0
+
+              check_health "payment-service" "http://{{ include "nexus-platform.paymentService.fullname" . }}:{{ .Values.paymentService.service.port }}/health" || FAILURES=$((FAILURES+1))
+              check_health "account-service" "http://{{ include "nexus-platform.accountService.fullname" . }}:{{ .Values.accountService.service.port }}/health" || FAILURES=$((FAILURES+1))
+
+              echo ""
+              if [ "$FAILURES" -gt 0 ]; then
+                echo "=== SMOKE TESTS FAILED ($FAILURES failures) ==="
+                echo "Deployment should be rolled back!"
+                exit 1
+              fi
+              echo "=== ALL SMOKE TESTS PASSED ==="
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+{{- end }}

@@ -1,6 +1,6 @@
 # Nexus - Global Real-Time Payment Network
 # Docker Compose for Local Development
-# 
+#
 # Usage:
 #   docker compose up -d        # Start all services
 #   docker compose logs -f      # View logs
@@ -419,7 +419,7 @@ services:
     hostname: watchman
     ports:
       - "8084:8084"
-      - "9094:9094"
+      - "19094:9094"
     environment:
       LOG_FORMAT: json
       HTTP_BIND_ADDRESS: ":8084"
@@ -458,8 +458,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: nexus123
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-changeme}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
@@ -504,6 +504,7 @@ services:
       DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
       KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
       REDIS_URL: redis://redis:6379
+      IDEMPOTENCY_TTL_SECONDS: "86400"
       WATCHMAN_URL: http://watchman:8084
       JAEGER_ENDPOINT: http://jaeger:14268/api/traces
     networks:
@@ -529,6 +530,7 @@ services:
       DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
       KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
       REDIS_URL: redis://redis:6379
+      IDEMPOTENCY_TTL_SECONDS: "86400"
       JAEGER_ENDPOINT: http://jaeger:14268/api/traces
     networks:
       - nexus-network
@@ -551,12 +553,247 @@ services:
       <<: *common-env
       DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
       KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      REDIS_URL: redis://redis:6379
+      IDEMPOTENCY_TTL_SECONDS: "86400"
       JAEGER_ENDPOINT: http://jaeger:14268/api/traces
     networks:
       - nexus-network
     depends_on:
       - cockroachdb-1
       - kafka-1
+      - redis
+
+  # ============================================================================
+  # Auth Service - JWT, MFA, Password Reset
+  # ============================================================================
+  auth-service:
+    build:
+      context: ../../services/auth-service
+      dockerfile: Dockerfile
+    container_name: nexus-auth-service
+    hostname: auth-service
+    profiles:
+      - services
+    ports:
+      - "8088:8080"
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_auth?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      JWT_PRIVATE_KEY_PATH: /app/keys/dev_private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/dev_public.pem
+      JWT_ISSUER: nexus-rtp
+      JWT_ACCESS_TOKEN_EXPIRY: 15m
+      JWT_REFRESH_TOKEN_EXPIRY: 168h
+      MFA_ISSUER: NexusRTP
+      MFA_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+      - redis
+
+  # ============================================================================
+  # WebSocket Gateway - Real-time event streaming
+  # ============================================================================
+  ws-gateway:
+    build:
+      context: ../../services/ws-gateway
+      dockerfile: Dockerfile
+    container_name: nexus-ws-gateway
+    hostname: ws-gateway
+    profiles:
+      - services
+    ports:
+      - "8089:8080"
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      KAFKA_TOPICS: nexus.payments.status,nexus.events.raw,nexus.notifications,nexus.reconciliation.events,nexus.fraud.alerts
+      KAFKA_GROUP_ID: ws-gateway
+      JWT_PUBLIC_KEY_PATH: /app/keys/dev_public.pem
+      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001"
+      WS_PING_INTERVAL: 30
+      WS_PONG_TIMEOUT: 10
+    networks:
+      - nexus-network
+    depends_on:
+      - kafka-1
+      - auth-service
+
+  # ============================================================================
+  # Analytics Service - Platform metrics and trends
+  # ============================================================================
+  analytics-service:
+    build:
+      context: ../../services/analytics-service
+      dockerfile: Dockerfile
+    container_name: nexus-analytics-service
+    hostname: analytics-service
+    profiles:
+      - services
+    ports:
+      - "8090:8080"
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+
+  # ============================================================================
+  # Audit Service - Cryptographic audit bundle generation
+  # ============================================================================
+  audit-service:
+    build:
+      context: ../../services/audit-service
+      dockerfile: Dockerfile
+    container_name: nexus-audit-service
+    hostname: audit-service
+    profiles:
+      - services
+    ports:
+      - "8091:8080"
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+
+  # ============================================================================
+  # Notification Service - Notification management & delivery
+  # ============================================================================
+  notification-service:
+    build:
+      context: ../../services/notification-service
+      dockerfile: Dockerfile
+    container_name: nexus-notification-service
+    hostname: notification-service
+    profiles:
+      - services
+    ports:
+      - "8092:8080"
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb-1:26257/nexus_ledger?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka-1:29092
+      KAFKA_TOPIC: nexus.notifications
+      SMTP_ENABLED: "false"
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+    networks:
+      - nexus-network
+    depends_on:
+      - cockroachdb-1
+      - redis
+      - kafka-1
+
+  # ============================================================================
+  # Kong Route Init - Configures API gateway routes
+  # ============================================================================
+  kong-init:
+    image: curlimages/curl:8.5.0
+    container_name: nexus-kong-init
+    profiles:
+      - services
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "Waiting for Kong Admin API..."
+        until curl -s http://kong:8001/status > /dev/null 2>&1; do sleep 2; done
+        echo "Kong is ready. Configuring routes..."
+
+        # Auth service
+        curl -s -X PUT http://kong:8001/services/auth-service -d name=auth-service -d url=http://auth-service:8080
+        curl -s -X PUT http://kong:8001/services/auth-service/routes/auth-routes -d "name=auth-routes" -d "paths[]=/api/v1/auth" -d "strip_path=false"
+        curl -s -X PUT http://kong:8001/services/auth-service/routes/user-routes -d "name=user-routes" -d "paths[]=/api/v1/users" -d "strip_path=false"
+
+        # Payment service
+        curl -s -X PUT http://kong:8001/services/payment-service -d name=payment-service -d url=http://payment-service:8080
+        curl -s -X PUT http://kong:8001/services/payment-service/routes/payment-routes -d "name=payment-routes" -d "paths[]=/api/v1/payments" -d "strip_path=false"
+        curl -s -X PUT http://kong:8001/services/payment-service/routes/message-routes -d "name=message-routes" -d "paths[]=/api/v1/messages" -d "strip_path=false"
+
+        # Account service
+        curl -s -X PUT http://kong:8001/services/account-service -d name=account-service -d url=http://account-service:8080
+        curl -s -X PUT http://kong:8001/services/account-service/routes/account-routes -d "name=account-routes" -d "paths[]=/api/v1/accounts" -d "strip_path=false"
+        curl -s -X PUT http://kong:8001/services/account-service/routes/customer-routes -d "name=customer-routes" -d "paths[]=/api/v1/customers" -d "strip_path=false"
+
+        # Reconciliation service
+        curl -s -X PUT http://kong:8001/services/reconciliation-service -d name=reconciliation-service -d url=http://reconciliation-service:8080
+        curl -s -X PUT http://kong:8001/services/reconciliation-service/routes/reconciliation-routes -d "name=reconciliation-routes" -d "paths[]=/api/v1/reconciliation" -d "strip_path=false"
+
+        # Analytics service
+        curl -s -X PUT http://kong:8001/services/analytics-service -d name=analytics-service -d url=http://analytics-service:8080
+        curl -s -X PUT http://kong:8001/services/analytics-service/routes/analytics-routes -d "name=analytics-routes" -d "paths[]=/api/v1/analytics" -d "strip_path=false"
+
+        # Audit service
+        curl -s -X PUT http://kong:8001/services/audit-service -d name=audit-service -d url=http://audit-service:8080
+        curl -s -X PUT http://kong:8001/services/audit-service/routes/audit-routes -d "name=audit-routes" -d "paths[]=/api/v1/audit" -d "strip_path=false"
+
+        # Notification service
+        curl -s -X PUT http://kong:8001/services/notification-service -d name=notification-service -d url=http://notification-service:8080
+        curl -s -X PUT http://kong:8001/services/notification-service/routes/notification-routes -d "name=notification-routes" -d "paths[]=/api/v1/notifications" -d "strip_path=false"
+
+        # WebSocket gateway
+        curl -s -X PUT http://kong:8001/services/ws-gateway -d name=ws-gateway -d url=http://ws-gateway:8080
+        curl -s -X PUT http://kong:8001/services/ws-gateway/routes/ws-route -d "name=ws-route" -d "paths[]=/ws" -d "strip_path=false"
+
+        # CORS plugin
+        curl -s -X POST http://kong:8001/plugins -d name=cors \
+          -d "config.origins[]=http://localhost:3000" -d "config.origins[]=http://localhost:3001" \
+          -d "config.methods[]=GET" -d "config.methods[]=POST" -d "config.methods[]=PUT" \
+          -d "config.methods[]=PATCH" -d "config.methods[]=DELETE" -d "config.methods[]=OPTIONS" \
+          -d "config.headers[]=Authorization" -d "config.headers[]=Content-Type" \
+          -d "config.headers[]=X-Request-ID" -d "config.headers[]=X-Idempotency-Key" \
+          -d "config.credentials=true" -d "config.max_age=3600" 2>/dev/null || true
+
+        echo "Kong routing configured successfully!"
+        curl -s http://kong:8001/routes | grep -o '"name":"[^"]*"' | sort
+    networks:
+      - nexus-network
+    depends_on:
+      - kong
+      - auth-service
+      - payment-service
+      - account-service
+      - reconciliation-service
+      - analytics-service
+      - audit-service
+      - notification-service
+      - ws-gateway
+
+  # ============================================================================
+  # Frontend - Next.js Web Application
+  # ============================================================================
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: apps/web/Dockerfile
+    container_name: nexus-frontend
+    hostname: frontend
+    profiles:
+      - frontend
+    ports:
+      - "3001:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://kong:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8089/ws
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: nexus-dev-secret-change-in-production
+    networks:
+      - nexus-network
+    depends_on:
+      - kong
 
 # ============================================================================
 # Networks

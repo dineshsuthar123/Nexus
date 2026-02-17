@@ -1,0 +1,234 @@
+# Staging values overlay for Nexus RTP Platform
+# Usage: helm upgrade --install nexus ./helm/nexus-platform -f values.yaml -f values.staging.yaml
+
+global:
+  environment: staging
+  imageRegistry: "registry.nexus-rtp.internal"
+
+# ============================================================
+# Canary / Blue-Green Deployment Configuration
+# ============================================================
+canary:
+  enabled: false
+  weight: 5              # Initial traffic percentage (5% → 25% → 100%)
+  analysisInterval: 120  # Seconds between health checks
+  maxWeight: 100
+  stepWeight: 20         # Increment per step after initial
+  healthCheckPath: /healthz
+  # Thresholds for automatic promotion
+  promotion:
+    maxErrorRate: 0.01     # 1% — rollback if exceeded
+    maxP99LatencyMs: 1000  # 1s — rollback if exceeded
+    minSuccessRate: 0.995  # 99.5% — rollback if below
+
+blueGreen:
+  enabled: false
+  activeColor: blue       # Current production color
+  previewService: true    # Create preview service for smoke tests
+  autoPromote: false      # Require manual promotion after smoke
+  smokeTestJob: true      # Run smoke test job before promotion
+  scaleDownDelaySec: 300  # Keep old version for 5m after switch
+
+# ============================================================
+# Database Migrations
+# ============================================================
+migrations:
+  enabled: true
+  image:
+    repository: nexus/migrations
+    tag: latest
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  # Rollback migration support
+  rollback:
+    enabled: true
+    # Last known good migration version
+    targetVersion: ""
+
+# ============================================================
+# Staging-Specific Service Overrides
+# ============================================================
+paymentService:
+  replicaCount: 2
+  image:
+    tag: staging
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+
+accountService:
+  replicaCount: 2
+  image:
+    tag: staging
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+
+reconciliationService:
+  replicaCount: 1
+  image:
+    tag: staging
+
+# ============================================================
+# Frontend (Staging)
+# ============================================================
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    tag: staging
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+  env:
+    NEXT_PUBLIC_API_URL: "https://api.staging.nexus-rtp.internal"
+    NEXT_PUBLIC_WS_URL: "wss://ws.staging.nexus-rtp.internal/ws"
+    NEXT_PUBLIC_MOCK_MODE: "false"
+    NEXT_PUBLIC_ENABLE_REALTIME: "true"
+    NEXTAUTH_URL: "https://app.staging.nexus-rtp.internal"
+    NEXTAUTH_SECRET: ""  # Set via --set or external secret
+
+# ============================================================
+# Staging Ingress — separate subdomains
+# ============================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+  hosts:
+    - host: app.staging.nexus-rtp.internal
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+          port: 3000
+    - host: api.staging.nexus-rtp.internal
+      paths:
+        - path: /
+          pathType: Prefix
+          service: kong
+          port: 8000
+    - host: grafana.staging.nexus-rtp.internal
+      paths:
+        - path: /
+          pathType: Prefix
+          service: grafana
+          port: 3000
+    - host: jaeger.staging.nexus-rtp.internal
+      paths:
+        - path: /
+          pathType: Prefix
+          service: jaeger-query
+          port: 16686
+
+# ============================================================
+# Staging Data Store Sizing (reduced vs production)
+# ============================================================
+cockroachdb:
+  statefulset:
+    replicas: 1
+  conf:
+    single-node: true
+  storage:
+    persistentVolume:
+      size: 10Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+kafka:
+  replicaCount: 1
+  persistence:
+    size: 10Gi
+  zookeeper:
+    replicaCount: 1
+    persistence:
+      size: 5Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+redis:
+  architecture: standalone
+  master:
+    persistence:
+      size: 2Gi
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+  replica:
+    replicaCount: 0
+
+# ============================================================
+# Staging Monitoring (lighter footprint)
+# ============================================================
+prometheus:
+  server:
+    persistentVolume:
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+grafana:
+  adminPassword: ""  # Set via --set grafana.adminPassword or Vault
+  persistence:
+    size: 2Gi
+
+# Fraud detection — lighter resources for staging
+fraudDetection:
+  jobManager:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+  taskManager:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+# Watchman — single replica in staging
+watchman:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+
+# Vault integration for staging
+vault:
+  enabled: true
+  address: "http://vault.vault.svc:8200"
+  authMethod: kubernetes

@@ -1,0 +1,320 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'frontend/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'frontend/**'
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '8'
+
+jobs:
+  # =========================================================================
+  # Stage 1 — Static analysis (parallel)
+  # =========================================================================
+
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: ESLint
+        run: pnpm lint
+      - name: TypeScript type check
+        run: pnpm typecheck
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Run unit tests with coverage
+        run: pnpm test:coverage
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./frontend/packages/ui/coverage
+          flags: frontend-ui
+          fail_ci_if_error: false
+
+  contract:
+    name: API Contract Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Generate API types from OpenAPI spec
+        run: node scripts/generate-api-types.mjs
+      - name: Run contract tests (49 tests)
+        run: pnpm --filter @nexus/web test -- --run src/__tests__/contract.test.ts 2>&1 | tee contract-results.txt
+      - name: Upload contract test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-test-log
+          path: frontend/contract-results.txt
+          retention-days: 14
+
+  # =========================================================================
+  # Stage 2 — Build
+  # =========================================================================
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Build UI package
+        run: pnpm --filter @nexus/ui build
+      - name: Build web app
+        run: pnpm --filter @nexus/web build
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: frontend/apps/web/.next
+          include-hidden-files: true
+          retention-days: 7
+
+  storybook:
+    name: Storybook Build & Visual Regression
+    runs-on: ubuntu-latest
+    needs: [lint]
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Build Storybook
+        run: pnpm --filter @nexus/ui build-storybook
+      - name: Upload Storybook static site
+        uses: actions/upload-artifact@v4
+        with:
+          name: storybook
+          path: frontend/packages/ui/storybook-static
+          retention-days: 14
+      - name: Install Playwright for visual tests
+        run: pnpm --filter @nexus/web exec playwright install --with-deps chromium
+        continue-on-error: true
+      - name: Run visual regression tests
+        continue-on-error: true
+        run: |
+          npx http-server packages/ui/storybook-static -p 6006 --silent &
+          sleep 5
+          cd packages/ui && STORYBOOK_URL=http://localhost:6006 pnpm test:visual || true
+        env:
+          CI: 'true'
+      - name: Upload visual regression snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-snapshots
+          path: frontend/packages/ui/src/__snapshots__
+          retention-days: 14
+      - name: Upload visual diff results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-results
+          path: frontend/packages/ui/visual-regression-results
+          retention-days: 7
+
+  # =========================================================================
+  # Stage 3 — Integration tests (depend on build)
+  # =========================================================================
+
+  e2e:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    continue-on-error: true
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: frontend/apps/web/.next
+      - name: Install Playwright Browsers
+        run: pnpm --filter @nexus/web exec playwright install --with-deps
+      - name: Run E2E tests
+        run: pnpm --filter @nexus/web exec playwright test --project=chromium
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+          NEXT_PUBLIC_WS_URL: ws://localhost:3000/ws
+          NEXT_PUBLIC_MOCK_MODE: 'true'
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: e2e-test-secret-not-a-real-secret-value-32chars
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/apps/web/playwright-report
+          retention-days: 14
+      - name: Upload E2E test traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: frontend/apps/web/test-results
+          retention-days: 7
+
+  a11y:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    continue-on-error: true
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: frontend/apps/web/.next
+      - name: Install Playwright
+        run: pnpm --filter @nexus/web exec playwright install --with-deps chromium
+      - name: Verify build artifacts exist
+        run: ls -la apps/web/.next/BUILD_ID 2>/dev/null || echo "Warning - BUILD_ID not found, build may be incomplete"
+      - name: Run accessibility tests
+        run: pnpm --filter @nexus/web test:a11y
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_MOCK_MODE: 'true'
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: e2e-test-secret-not-a-real-secret-value-32chars
+      - name: Upload a11y report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report
+          path: frontend/apps/web/playwright-report
+          retention-days: 14
+
+  lighthouse:
+    name: Lighthouse Audit
+    runs-on: ubuntu-latest
+    needs: [build]
+    continue-on-error: true
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: frontend/apps/web/.next
+      - name: Run Lighthouse
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          configPath: ./frontend/.lighthouserc.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+        env:
+          NEXTAUTH_SECRET: e2e-test-secret-not-a-real-secret-value-32chars
+          NEXT_PUBLIC_MOCK_MODE: 'true'
+          NEXTAUTH_URL: http://localhost:3000

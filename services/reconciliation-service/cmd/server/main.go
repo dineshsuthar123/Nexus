@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	idempotency "github.com/nexus-rtp/idempotency"
 	"github.com/nexus-rtp/reconciliation-service/internal/api"
 	"github.com/nexus-rtp/reconciliation-service/internal/config"
 	"github.com/nexus-rtp/reconciliation-service/internal/db"
@@ -17,6 +18,7 @@ import (
 	"github.com/nexus-rtp/reconciliation-service/internal/reconciler"
 	"github.com/nexus-rtp/reconciliation-service/internal/scheduler"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -79,6 +81,27 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(observability.GinMiddleware())
+
+	// Initialize Redis client for idempotency middleware
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.URL,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	if pingErr := rdb.Ping(context.Background()).Err(); pingErr != nil {
+		logger.Warn("Redis not available — idempotency disabled", zap.Error(pingErr))
+		rdb = nil
+	} else {
+		logger.Info("Connected to Redis for idempotency")
+	}
+	if rdb != nil {
+		defer rdb.Close()
+		idempCfg := idempotency.DefaultConfig("reconciliation-service", logger)
+		if cfg.IdempotencyTTL > 0 {
+			idempCfg.TTL = time.Duration(cfg.IdempotencyTTL) * time.Second
+		}
+		router.Use(idempotency.Middleware(rdb, idempCfg))
+	}
 
 	// Health check endpoints
 	router.GET("/health", func(c *gin.Context) {

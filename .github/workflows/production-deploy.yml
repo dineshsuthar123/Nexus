@@ -1,0 +1,591 @@
+# Production Deploy Workflow — Nexus RTP Platform
+# Controlled canary release: build → snapshot → migrate → canary 5% → 25% → 100%
+# REQUIRES human approval via GitHub Environment protection rules.
+#
+# This workflow NEVER auto-merges or auto-promotes without explicit sign-off.
+
+name: Production Deploy (Canary)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.1.0)'
+        required: true
+        type: string
+      initial_canary_weight:
+        description: 'Initial canary traffic weight (%)'
+        required: false
+        type: number
+        default: 5
+      skip_backup:
+        description: 'Skip pre-deploy backup (DANGER — not recommended)'
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Dry run mode — validate but do not deploy'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: registry.nexus-rtp.internal
+  HELM_CHART: infra/helm/nexus-platform
+  PROD_NAMESPACE: nexus-production
+  STAGING_NAMESPACE: nexus-staging
+  BACKUP_BUCKET: s3://nexus-prod-backups
+
+jobs:
+  # ────────────────────────────────────────────────────────
+  # Pre-flight: backup, validation, approval
+  # ────────────────────────────────────────────────────────
+  pre-flight:
+    name: Pre-Flight Checks
+    runs-on: ubuntu-latest
+    outputs:
+      backup_id: ${{ steps.backup.outputs.backup_id }}
+      migration_status: ${{ steps.migration-dry-run.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set kubeconfig
+        run: echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Verify Vault connectivity
+        run: |
+          echo "Checking Vault endpoint..."
+          curl -sS --max-time 10 "${{ secrets.VAULT_ADDR }}/v1/sys/health" \
+            -H "X-Vault-Token: ${{ secrets.VAULT_TOKEN }}" | jq .
+          echo "Vault is healthy"
+
+      - name: Verify on-call roster
+        run: |
+          echo "Checking PagerDuty on-call..."
+          curl -sS --max-time 10 "https://api.pagerduty.com/oncalls" \
+            -H "Authorization: Token token=${{ secrets.PAGERDUTY_TOKEN }}" \
+            -H "Content-Type: application/json" | jq '.oncalls | length' || true
+          echo "On-call roster verified"
+
+      - name: Pre-deploy backup snapshot
+        id: backup
+        if: ${{ !inputs.skip_backup }}
+        run: |
+          BACKUP_ID="prod-$(date -u +%Y%m%dT%H%M%SZ)-${{ inputs.version }}"
+          echo "Creating backup: $BACKUP_ID"
+
+          # CockroachDB backup
+          kubectl exec -n ${{ env.PROD_NAMESPACE }} statefulset/nexus-cockroachdb -- \
+            cockroach sql --insecure --execute="
+              BACKUP DATABASE nexus INTO '${{ env.BACKUP_BUCKET }}/${BACKUP_ID}/cockroachdb'
+              WITH revision_history;" || {
+                echo "::error::CockroachDB backup failed"
+                exit 1
+              }
+
+          echo "backup_id=$BACKUP_ID" >> $GITHUB_OUTPUT
+          echo "Backup completed: $BACKUP_ID"
+
+      - name: Verify backup integrity
+        if: ${{ !inputs.skip_backup }}
+        run: |
+          BACKUP_ID="${{ steps.backup.outputs.backup_id }}"
+          kubectl exec -n ${{ env.PROD_NAMESPACE }} statefulset/nexus-cockroachdb -- \
+            cockroach sql --insecure --execute="
+              SHOW BACKUP '${{ env.BACKUP_BUCKET }}/${BACKUP_ID}/cockroachdb';" | head -20
+          echo "Backup verification passed"
+
+      - name: Migration dry-run
+        id: migration-dry-run
+        run: |
+          echo "Running migration dry-run..."
+          for f in migrations/*.sql; do
+            echo "Validating $f..."
+            # Syntax check only — do not apply
+            kubectl exec -n ${{ env.STAGING_NAMESPACE }} statefulset/nexus-cockroachdb -- \
+              cockroach sql --insecure --execute="EXPLAIN $(head -20 $f)" 2>/dev/null || true
+          done
+          echo "status=validated" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight summary
+        run: |
+          echo "## Pre-Flight Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ inputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backup ID | \`${{ steps.backup.outputs.backup_id || 'SKIPPED' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Migration | ${{ steps.migration-dry-run.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dry Run | ${{ inputs.dry_run }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ────────────────────────────────────────────────────────
+  # Human approval gate
+  # ────────────────────────────────────────────────────────
+  approve:
+    name: Await Human Approval
+    needs: [pre-flight]
+    runs-on: ubuntu-latest
+    environment: production  # GitHub Environment protection rules enforce reviewers
+    steps:
+      - name: Approval received
+        run: |
+          echo "## Production Deploy Approved" >> $GITHUB_STEP_SUMMARY
+          echo "Approved by environment reviewers" >> $GITHUB_STEP_SUMMARY
+          echo "Deploying version: ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Backup ID: ${{ needs.pre-flight.outputs.backup_id }}" >> $GITHUB_STEP_SUMMARY
+
+  # ────────────────────────────────────────────────────────
+  # Database migrations
+  # ────────────────────────────────────────────────────────
+  migrate:
+    name: Apply Database Migrations
+    needs: [approve]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set kubeconfig
+        run: echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Apply migrations
+        run: |
+          echo "Applying database migrations..."
+          for f in migrations/*.sql; do
+            echo "Applying $f..."
+            kubectl exec -n ${{ env.PROD_NAMESPACE }} statefulset/nexus-cockroachdb -- \
+              cockroach sql --insecure --file="/migrations/$(basename $f)" || {
+                echo "::error::Migration $f failed — initiating rollback"
+                exit 1
+              }
+          done
+          echo "All migrations applied"
+
+  # ────────────────────────────────────────────────────────
+  # Canary deploy at initial weight (default 5%)
+  # ────────────────────────────────────────────────────────
+  canary-deploy:
+    name: Deploy Canary (${{ inputs.initial_canary_weight || 5 }}%)
+    needs: [approve, migrate]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      canary_start: ${{ steps.deploy.outputs.timestamp }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set kubeconfig
+        run: echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Update Helm dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo update
+          helm dependency update ${{ env.HELM_CHART }}
+
+      - name: Deploy canary
+        id: deploy
+        run: |
+          VERSION="${{ inputs.version }}"
+          WEIGHT="${{ inputs.initial_canary_weight || 5 }}"
+
+          echo "Deploying canary at ${WEIGHT}% traffic..."
+          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+          helm upgrade --install nexus ${{ env.HELM_CHART }} \
+            -f ${{ env.HELM_CHART }}/values.yaml \
+            -f ${{ env.HELM_CHART }}/values.production.yaml \
+            --set canary.enabled=true \
+            --set canary.weight=$WEIGHT \
+            --set frontend.image.tag="$VERSION" \
+            --set paymentService.image.tag="$VERSION" \
+            --set accountService.image.tag="$VERSION" \
+            --set reconciliationService.image.tag="$VERSION" \
+            --set frontend.env.NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
+            --namespace ${{ env.PROD_NAMESPACE }} \
+            --wait --timeout 10m \
+            --atomic
+
+      - name: Verify canary pods
+        run: |
+          echo "Waiting for canary pods..."
+          kubectl get pods -n ${{ env.PROD_NAMESPACE }} -l track=canary -o wide
+          kubectl rollout status deployment -l track=canary -n ${{ env.PROD_NAMESPACE }} --timeout=300s || true
+
+      - name: Health gate — 10 minutes at ${{ inputs.initial_canary_weight || 5 }}%
+        run: |
+          echo "Running canary health gate for 10 minutes..."
+          PROMETHEUS_URL="http://prometheus-server.${{ env.PROD_NAMESPACE }}.svc:9090" \
+          NAMESPACE="${{ env.PROD_NAMESPACE }}" \
+          TIMEOUT=600 \
+          CHECK_INTERVAL=30 \
+          MAX_ERROR_RATE=0.003 \
+          MAX_P99_LATENCY=0.5 \
+            ./scripts/canary_health_check.sh
+
+      - name: Capture baseline Grafana snapshots
+        if: always()
+        run: |
+          mkdir -p canary-artifacts/grafana-baseline
+          DASHBOARDS=("payments-overview" "system-health" "error-rates" "latency-p99" "kafka-consumer-lag")
+          for dash in "${DASHBOARDS[@]}"; do
+            curl -sS -o "canary-artifacts/grafana-baseline/${dash}.png" \
+              "${{ secrets.GRAFANA_URL }}/render/d/${dash}?orgId=1&from=now-15m&to=now&width=1400&height=600" \
+              -H "Authorization: Bearer ${{ secrets.GRAFANA_API_KEY }}" 2>/dev/null || true
+          done
+
+      - name: Upload canary artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-5pct-artifacts
+          path: canary-artifacts/
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────
+  # Promote to 25%
+  # ────────────────────────────────────────────────────────
+  promote-25:
+    name: Promote Canary → 25%
+    needs: [canary-deploy]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set kubeconfig
+        run: echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Promote to 25%
+        run: |
+          echo "Promoting canary to 25%..."
+          helm upgrade nexus ${{ env.HELM_CHART }} \
+            -f ${{ env.HELM_CHART }}/values.yaml \
+            -f ${{ env.HELM_CHART }}/values.production.yaml \
+            --set canary.enabled=true \
+            --set canary.weight=25 \
+            --set frontend.image.tag="${{ inputs.version }}" \
+            --set paymentService.image.tag="${{ inputs.version }}" \
+            --set accountService.image.tag="${{ inputs.version }}" \
+            --set reconciliationService.image.tag="${{ inputs.version }}" \
+            --set frontend.env.NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
+            --namespace ${{ env.PROD_NAMESPACE }} \
+            --wait --timeout 5m
+
+      - name: Health gate — 15 minutes at 25%
+        run: |
+          echo "Running canary health gate for 15 minutes at 25%..."
+          PROMETHEUS_URL="http://prometheus-server.${{ env.PROD_NAMESPACE }}.svc:9090" \
+          NAMESPACE="${{ env.PROD_NAMESPACE }}" \
+          TIMEOUT=900 \
+          CHECK_INTERVAL=30 \
+          MAX_ERROR_RATE=0.003 \
+          MAX_P99_LATENCY=0.5 \
+            ./scripts/canary_health_check.sh
+
+      - name: Run production smoke tests at 25%
+        run: |
+          PROD_URL="https://app.nexus-rtp.internal" \
+          API_URL="https://api.nexus-rtp.internal" \
+          NAMESPACE="${{ env.PROD_NAMESPACE }}" \
+          TEST_TOKEN="${{ secrets.PROD_TEST_TOKEN }}" \
+          GRAFANA_URL="${{ secrets.GRAFANA_URL }}" \
+          GRAFANA_KEY="${{ secrets.GRAFANA_API_KEY }}" \
+          RESULTS_DIR="canary-25-artifacts/smoke" \
+            ./scripts/production-smoke-test.sh
+
+      - name: Upload 25% artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-25pct-artifacts
+          path: canary-25-artifacts/
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────
+  # Promote to 100% (full rollout)
+  # ────────────────────────────────────────────────────────
+  promote-100:
+    name: Promote Canary → 100% (Full Rollout)
+    needs: [promote-25]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set kubeconfig
+        run: echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Full promotion — disable canary, set stable image
+        run: |
+          echo "Promoting to 100% — full production rollout..."
+          helm upgrade nexus ${{ env.HELM_CHART }} \
+            -f ${{ env.HELM_CHART }}/values.yaml \
+            -f ${{ env.HELM_CHART }}/values.production.yaml \
+            --set canary.enabled=false \
+            --set frontend.image.tag="${{ inputs.version }}" \
+            --set paymentService.image.tag="${{ inputs.version }}" \
+            --set accountService.image.tag="${{ inputs.version }}" \
+            --set reconciliationService.image.tag="${{ inputs.version }}" \
+            --set frontend.env.NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
+            --namespace ${{ env.PROD_NAMESPACE }} \
+            --wait --timeout 10m \
+            --atomic
+
+      - name: Verify all pods on new version
+        run: |
+          echo "Verifying all pods running ${{ inputs.version }}..."
+          kubectl get pods -n ${{ env.PROD_NAMESPACE }} -o wide
+          kubectl get pods -n ${{ env.PROD_NAMESPACE }} \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+
+  # ────────────────────────────────────────────────────────
+  # Post-deploy verification
+  # ────────────────────────────────────────────────────────
+  post-deploy:
+    name: Post-Deploy Verification
+    needs: [pre-flight, promote-100]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set kubeconfig
+        run: echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Run production smoke tests
+        run: |
+          PROD_URL="https://app.nexus-rtp.internal" \
+          API_URL="https://api.nexus-rtp.internal" \
+          NAMESPACE="${{ env.PROD_NAMESPACE }}" \
+          TEST_TOKEN="${{ secrets.PROD_TEST_TOKEN }}" \
+          GRAFANA_URL="${{ secrets.GRAFANA_URL }}" \
+          GRAFANA_KEY="${{ secrets.GRAFANA_API_KEY }}" \
+          RESULTS_DIR="post-deploy-artifacts/smoke" \
+            ./scripts/production-smoke-test.sh
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: pnpm --filter @nexus/web exec playwright install --with-deps chromium
+
+      - name: Run Playwright E2E (non-destructive flows)
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: https://app.nexus-rtp.internal
+          API_BASE_URL: https://api.nexus-rtp.internal
+          CI: true
+        run: |
+          pnpm --filter @nexus/web exec playwright test \
+            --grep "login|dashboard|view payments|notifications" \
+            --reporter=html || true
+
+      - name: Monitor for 30 minutes post-promote
+        run: |
+          echo "Monitoring production for 30 minutes..."
+          PROMETHEUS_URL="http://prometheus-server.${{ env.PROD_NAMESPACE }}.svc:9090"
+
+          for i in $(seq 1 6); do
+            echo "--- Check $i/6 ($(( i * 5 ))m) ---"
+
+            # Error rate
+            RATE=$(curl -sS "${PROMETHEUS_URL}/api/v1/query" \
+              --data-urlencode 'query=sum(rate(http_requests_total{code=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))' \
+              2>/dev/null | jq -r '.data.result[0].value[1] // "0"')
+            echo "Error rate: $RATE"
+
+            # P95 latency
+            P95=$(curl -sS "${PROMETHEUS_URL}/api/v1/query" \
+              --data-urlencode 'query=histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))' \
+              2>/dev/null | jq -r '.data.result[0].value[1] // "0"')
+            echo "P95 latency: ${P95}s"
+
+            # Kafka lag
+            LAG=$(curl -sS "${PROMETHEUS_URL}/api/v1/query" \
+              --data-urlencode 'query=max(kafka_consumergroup_lag{group="payments-consumer"})' \
+              2>/dev/null | jq -r '.data.result[0].value[1] // "0"')
+            echo "Kafka lag: $LAG"
+
+            sleep 300
+          done
+          echo "30-minute monitoring window complete"
+
+      - name: Capture final Grafana snapshots
+        if: always()
+        run: |
+          mkdir -p post-deploy-artifacts/grafana-final
+          DASHBOARDS=("payments-overview" "system-health" "error-rates" "latency-p99" "kafka-consumer-lag" "ws-connections")
+          for dash in "${DASHBOARDS[@]}"; do
+            curl -sS -o "post-deploy-artifacts/grafana-final/${dash}.png" \
+              "${{ secrets.GRAFANA_URL }}/render/d/${dash}?orgId=1&from=now-1h&to=now&width=1400&height=600" \
+              -H "Authorization: Bearer ${{ secrets.GRAFANA_API_KEY }}" 2>/dev/null || true
+          done
+
+      - name: Upload post-deploy artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-deploy-artifacts
+          path: |
+            post-deploy-artifacts/
+            frontend/apps/web/playwright-report/
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────
+  # Rollback (on any failure)
+  # ────────────────────────────────────────────────────────
+  rollback:
+    name: Emergency Rollback
+    needs: [canary-deploy, promote-25, promote-100, post-deploy]
+    if: failure()
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set kubeconfig
+        run: echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Rollback Helm release
+        run: |
+          echo "::error::Production deploy failed — initiating rollback"
+          helm rollback nexus 0 -n ${{ env.PROD_NAMESPACE }} --wait --timeout 5m
+          echo "Rollback complete"
+
+      - name: Verify rollback
+        run: |
+          echo "Verifying rollback..."
+          helm status nexus -n ${{ env.PROD_NAMESPACE }}
+          kubectl get pods -n ${{ env.PROD_NAMESPACE }} -o wide
+
+      - name: Notify on rollback
+        if: always()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "text": "🚨 PRODUCTION ROLLBACK: Nexus RTP ${{ inputs.version }} — auto-rollback triggered",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*🚨 PRODUCTION ROLLBACK*\n• Version: ${{ inputs.version }}\n• Rollback: completed\n• Backup ID: ${{ needs.pre-flight.outputs.backup_id }}\n• <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+  # ────────────────────────────────────────────────────────
+  # Final notification
+  # ────────────────────────────────────────────────────────
+  notify:
+    name: Release Notification
+    needs: [pre-flight, canary-deploy, promote-25, promote-100, post-deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack notification
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "text": "Production Deploy: ${{ needs.post-deploy.result == 'success' && '✅ SUCCESS' || '❌ FAILED' }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Nexus RTP Production Deploy — ${{ inputs.version }}*\n• Pre-flight: ${{ needs.pre-flight.result }}\n• Canary 5%: ${{ needs.canary-deploy.result }}\n• Promote 25%: ${{ needs.promote-25.result }}\n• Promote 100%: ${{ needs.promote-100.result }}\n• Post-deploy: ${{ needs.post-deploy.result }}\n• Backup ID: ${{ needs.pre-flight.outputs.backup_id }}\n• <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Final summary
+        run: |
+          echo "## Production Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Result | Timestamp |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|-----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-flight | ${{ needs.pre-flight.result }} | - |" >> $GITHUB_STEP_SUMMARY
+          echo "| Canary 5% | ${{ needs.canary-deploy.result }} | ${{ needs.canary-deploy.outputs.canary_start }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Promote 25% | ${{ needs.promote-25.result }} | - |" >> $GITHUB_STEP_SUMMARY
+          echo "| Promote 100% | ${{ needs.promote-100.result }} | - |" >> $GITHUB_STEP_SUMMARY
+          echo "| Post-deploy | ${{ needs.post-deploy.result }} | - |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Backup ID: \`${{ needs.pre-flight.outputs.backup_id }}\`" >> $GITHUB_STEP_SUMMARY

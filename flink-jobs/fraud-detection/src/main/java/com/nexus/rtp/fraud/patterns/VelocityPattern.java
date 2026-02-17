@@ -3,6 +3,7 @@ package com.nexus.rtp.fraud.patterns;
 import com.nexus.rtp.fraud.model.PaymentEvent;
 import org.apache.flink.cep.pattern.Pattern;
 import org.apache.flink.cep.pattern.conditions.IterativeCondition;
+import org.apache.flink.cep.pattern.conditions.SimpleCondition;
 import org.apache.flink.streaming.api.windowing.time.Time;
 
 /**
@@ -65,10 +66,13 @@ public class VelocityPattern {
      */
     public static Pattern<PaymentEvent, ?> createRoundAmountPattern(int minCount) {
         return Pattern.<PaymentEvent>begin("round_amounts")
-                .where(event -> {
-                    // Check if amount is a round number (ends in 00)
-                    double amount = event.getAmountAsDouble();
-                    return amount >= 100 && amount % 100 == 0;
+                .where(new SimpleCondition<PaymentEvent>() {
+                    @Override
+                    public boolean filter(PaymentEvent event) throws Exception {
+                        // Check if amount is a round number (ends in 00)
+                        double amount = event.getAmountAsDouble();
+                        return amount >= 100 && amount % 100 == 0;
+                    }
                 })
                 .times(minCount)
                 .within(Time.minutes(30));

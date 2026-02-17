@@ -1,0 +1,48 @@
+{
+  "name": "nexus-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nexus RTP Platform - World Class UI",
+  "author": "Nexus RTP Team",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.4",
+  "scripts": {
+    "dev": "pnpm --filter @nexus/web dev",
+    "build": "pnpm -r build",
+    "build:web": "pnpm --filter @nexus/web build",
+    "build:ui": "pnpm --filter @nexus/ui build",
+    "build:api": "pnpm --filter @nexus/api build",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage",
+    "test:e2e": "pnpm --filter @nexus/web test:e2e",
+    "storybook": "pnpm --filter @nexus/storybook dev",
+    "storybook:build": "pnpm --filter @nexus/storybook build",
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.3"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
+  }
+}

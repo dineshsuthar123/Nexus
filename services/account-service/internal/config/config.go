@@ -9,13 +9,14 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	ServiceName string         `mapstructure:"SERVICE_NAME"`
-	Version     string         `mapstructure:"VERSION"`
-	Environment string         `mapstructure:"ENVIRONMENT"`
-	Server      ServerConfig   `mapstructure:"server"`
-	Database    DatabaseConfig `mapstructure:"database"`
-	Redis       RedisConfig    `mapstructure:"redis"`
-	Jaeger      JaegerConfig   `mapstructure:"jaeger"`
+	ServiceName    string         `mapstructure:"SERVICE_NAME"`
+	Version        string         `mapstructure:"VERSION"`
+	Environment    string         `mapstructure:"ENVIRONMENT"`
+	Server         ServerConfig   `mapstructure:"server"`
+	Database       DatabaseConfig `mapstructure:"database"`
+	Redis          RedisConfig    `mapstructure:"redis"`
+	Jaeger         JaegerConfig   `mapstructure:"jaeger"`
+	IdempotencyTTL int            `mapstructure:"IDEMPOTENCY_TTL_SECONDS"`
 }
 
 // ServerConfig holds server-related configuration
@@ -68,6 +69,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("redis.URL", "localhost:6379")
 	viper.SetDefault("redis.PASSWORD", "")
 	viper.SetDefault("redis.DB", 0)
+	viper.SetDefault("IDEMPOTENCY_TTL_SECONDS", 86400)
 	viper.SetDefault("jaeger.ENDPOINT", "http://localhost:14268/api/traces")
 
 	// Bind environment variables

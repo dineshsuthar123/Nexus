@@ -1,0 +1,22 @@
+# Gitleaks configuration
+# See https://github.com/gitleaks/gitleaks#configuration
+
+title = "Nexus RTP gitleaks config"
+
+# Allowlist for mock/test credentials that are NOT real secrets.
+# These were removed from HEAD in commit fix(security): remove hardcoded mock credentials.
+# See RELEASE/SECURITY_NOTES.md for full incident documentation.
+[allowlist]
+  description = "Allowlisted mock/dev-only credentials (not real secrets)"
+
+  # Paths that contain test fixtures, mock data, and dev-only configs
+  paths = [
+    '''frontend/dev-mock/.*''',
+    '''frontend/apps/web/e2e/.*''',
+    '''frontend/apps/web/src/components/__tests__/.*''',
+    '''frontend/apps/web/src/lib/hooks/__tests__/.*''',
+    '''scripts/staging-smoke-test\.sh''',
+    '''infra/docker/docker-compose\.yml''',
+    '''infra/helm/.*''',
+    '''RELEASE/SECURITY_NOTES\.md''',
+  ]

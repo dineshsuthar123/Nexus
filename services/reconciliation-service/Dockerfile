@@ -3,14 +3,18 @@ FROM golang:1.21-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 
-WORKDIR /app
+WORKDIR /build
 
-# Copy go mod files
-COPY go.mod go.sum* ./
+# Copy the shared idempotency package (referenced via replace directive)
+COPY pkg/idempotency /build/pkg/idempotency
+
+# Copy the service
+COPY services/reconciliation-service /build/services/reconciliation-service
+
+WORKDIR /build/services/reconciliation-service
+
+# Download deps
 RUN go mod download
-
-# Copy source
-COPY . .
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-w -s' -o /reconciliation-service ./cmd/server
@@ -23,7 +27,6 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /reconciliation-service .
-COPY --from=builder /app/config ./config
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

@@ -14,9 +14,11 @@ type Config struct {
 	Environment    string               `mapstructure:"ENVIRONMENT"`
 	Server         ServerConfig         `mapstructure:"server"`
 	Database       DatabaseConfig       `mapstructure:"database"`
+	Redis          RedisConfig          `mapstructure:"redis"`
 	Jaeger         JaegerConfig         `mapstructure:"jaeger"`
 	Reconciliation ReconciliationConfig `mapstructure:"reconciliation"`
 	Scheduler      SchedulerConfig      `mapstructure:"scheduler"`
+	IdempotencyTTL int                  `mapstructure:"IDEMPOTENCY_TTL_SECONDS"`
 }
 
 type ServerConfig struct {
@@ -34,6 +36,12 @@ type DatabaseConfig struct {
 
 type JaegerConfig struct {
 	Endpoint string `mapstructure:"ENDPOINT"`
+}
+
+type RedisConfig struct {
+	URL      string `mapstructure:"URL"`
+	Password string `mapstructure:"PASSWORD"`
+	DB       int    `mapstructure:"DB"`
 }
 
 type ReconciliationConfig struct {
@@ -72,6 +80,10 @@ func Load() (*Config, error) {
 	viper.SetDefault("database.MIN_CONNECTIONS", 5)
 	viper.SetDefault("database.MAX_CONN_LIFETIME", time.Hour)
 	viper.SetDefault("jaeger.ENDPOINT", "http://localhost:14268/api/traces")
+	viper.SetDefault("redis.URL", "localhost:6379")
+	viper.SetDefault("redis.PASSWORD", "")
+	viper.SetDefault("redis.DB", 0)
+	viper.SetDefault("IDEMPOTENCY_TTL_SECONDS", 86400)
 	viper.SetDefault("reconciliation.AUTO_RESOLVE_ENABLED", true)
 	viper.SetDefault("reconciliation.MAX_AUTO_RESOLVE_AMOUNT", 0.01)
 	viper.SetDefault("reconciliation.ROUNDING_THRESHOLD", 0.01)
