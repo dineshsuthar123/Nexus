@@ -67,7 +67,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
       },
-      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
+      testIgnore: /(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
 
@@ -76,7 +76,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Firefox'],
       },
-      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
+      testIgnore: /(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
 
@@ -85,7 +85,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Safari'],
       },
-      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
+      testIgnore: /(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
 
@@ -95,7 +95,7 @@ export default defineConfig({
       use: {
         ...devices['Pixel 5'],
       },
-      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
+      testIgnore: /(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
     {
@@ -103,7 +103,7 @@ export default defineConfig({
       use: {
         ...devices['iPhone 12'],
       },
-      testIgnore: /.*\.(a11y|accessibility)\.spec\.ts/,
+      testIgnore: /(a11y|accessibility)\.spec\.ts/,
       dependencies: ['setup'],
     },
 

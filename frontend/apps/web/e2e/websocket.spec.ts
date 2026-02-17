@@ -23,7 +23,9 @@ test.describe('WebSocket Integration', () => {
     });
 
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    // Allow time for JS to initialize
+    await page.waitForTimeout(2000);
 
     // Filter out WS connection errors (expected when backend isn't running)
     const criticalErrors = errors.filter(
@@ -57,12 +59,12 @@ test.describe('WebSocket Integration', () => {
 
   test('should not show connection error toast on initial load', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    // Allow time for any toast to appear
+    await page.waitForTimeout(2000);
 
     // There should not be a persistent error toast about WS
     const errorToast = page.locator('[role="alert"]').filter({ hasText: /websocket|connection failed/i });
-    // Allow 2 seconds for any toast to appear
-    await page.waitForTimeout(2000);
     expect(await errorToast.count()).toBe(0);
   });
 });

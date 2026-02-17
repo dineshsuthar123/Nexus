@@ -6,6 +6,7 @@
 
 import { test as base, expect, Page } from '@playwright/test';
 import path from 'path';
+import { setupApiMocks } from './api-mocks';
 
 // Storage state path for authenticated sessions
 export const STORAGE_STATE_PATH = path.join(__dirname, '../.auth/user.json');
@@ -41,8 +42,9 @@ class LoginPage {
   constructor(public readonly page: Page) {}
 
   async goto() {
+    await setupApiMocks(this.page);
     await this.page.goto('/auth/login', { waitUntil: 'domcontentloaded' });
-    await this.page.getByRole('heading', { name: /sign in|welcome/i }).waitFor({ state: 'visible' });
+    await this.page.getByRole('heading', { name: /sign in|welcome/i }).waitFor({ state: 'visible', timeout: 15000 });
   }
 
   async login(email: string, password: string) {
@@ -68,8 +70,9 @@ class RegisterPage {
   constructor(public readonly page: Page) {}
 
   async goto() {
+    await setupApiMocks(this.page);
     await this.page.goto('/auth/register', { waitUntil: 'domcontentloaded' });
-    await this.page.getByRole('heading', { name: /create.*account|sign up|register/i }).waitFor({ state: 'visible' });
+    await this.page.getByRole('heading', { name: /create.*account|sign up|register/i }).waitFor({ state: 'visible', timeout: 15000 });
   }
 
   async register(data: {

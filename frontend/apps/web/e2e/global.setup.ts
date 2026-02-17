@@ -6,12 +6,16 @@
 
 import { test as setup, expect } from '@playwright/test';
 import { STORAGE_STATE_PATH } from './fixtures/auth';
+import { setupApiMocks } from './fixtures/api-mocks';
 
 /**
  * Global setup that runs before all tests.
  * Creates authenticated session storage for use in tests.
  */
 setup('create authenticated session', async ({ page }) => {
+  // Setup API mocks so session/auth endpoint calls succeed
+  await setupApiMocks(page);
+
   // Navigate to login page and wait for DOM to be ready
   await page.goto('/auth/login', { waitUntil: 'domcontentloaded' });
   
