@@ -15,7 +15,7 @@
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:a11y": "playwright test --project=a11y e2e/accessibility.spec.ts",
+    "test:a11y": "playwright test --project=a11y",
     "test:contract": "vitest run src/__tests__/contract.test.ts",
     "generate:types": "node ../../scripts/generate-api-types.mjs",
     "analyze": "ANALYZE=true next build"

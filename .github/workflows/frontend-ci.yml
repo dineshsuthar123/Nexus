@@ -266,9 +266,12 @@ jobs:
           path: frontend/apps/web/.next
       - name: Install Playwright
         run: pnpm --filter @nexus/web exec playwright install --with-deps chromium
+      - name: Verify build artifacts exist
+        run: ls -la apps/web/.next/BUILD_ID 2>/dev/null || echo "Warning - BUILD_ID not found, build may be incomplete"
       - name: Run accessibility tests
         run: pnpm --filter @nexus/web test:a11y
         env:
+          NODE_ENV: production
           NEXT_PUBLIC_MOCK_MODE: 'true'
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: e2e-test-secret-not-a-real-secret-value-32chars
@@ -311,3 +314,7 @@ jobs:
           configPath: ./frontend/.lighthouserc.json
           uploadArtifacts: true
           temporaryPublicStorage: true
+        env:
+          NEXTAUTH_SECRET: e2e-test-secret-not-a-real-secret-value-32chars
+          NEXT_PUBLIC_MOCK_MODE: 'true'
+          NEXTAUTH_URL: http://localhost:3000
