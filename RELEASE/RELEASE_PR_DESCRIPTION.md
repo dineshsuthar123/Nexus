@@ -6,9 +6,12 @@ First production deployment of the Nexus RTP unified frontend. This PR represent
 the full frontend→backend integration, comprehensive test suites, CI/CD pipelines,
 and production deploy infrastructure built across 8 commits on `agent/frontend-finalize`.
 
-### Commits (46 total on `agent/prod-cutover-run`)
+### Commits (49 total on `agent/prod-cutover-run`)
 
 ```
+06d1a57 fix(ci): use env context instead of secrets in workflow if-condition for Slack notification
+1d010ea docs(release): add pre-flight verification report
+78ab67b docs(release): update release docs with latest commit refs, CI run IDs, and checklist status
 6659b8e fix(a11y): always underline MFA support link for WCAG link-in-text-block compliance
 ff7472d fix(a11y): filter for critical/serious violations only in auth.a11y.spec.ts
 1da6944 fix(a11y): fix auth.a11y.spec.ts networkidle hangs and strict selectors
