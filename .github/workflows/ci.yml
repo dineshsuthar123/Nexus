@@ -64,7 +64,7 @@ jobs:
             if [ -d "$dir" ]; then
               echo "Linting $dir..."
               cd $dir
-              golangci-lint run --timeout 5m || true
+              golangci-lint run --timeout 5m
               cd -
             fi
           done
@@ -87,7 +87,7 @@ jobs:
               echo "Testing $dir..."
               cd $dir
               go mod tidy
-              go test -v -race -coverprofile=coverage.out ./... || true
+              go test -v -race -coverprofile=coverage.out ./...
               cd -
             fi
           done
@@ -147,7 +147,7 @@ jobs:
 
       - name: Run Maven tests
         working-directory: flink-jobs/fraud-detection
-        run: mvn -B test --file pom.xml || true
+        run: mvn -B test --file pom.xml
 
   java-build:
     name: Java Build
