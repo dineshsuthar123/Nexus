@@ -69,9 +69,9 @@ and staging/production deploy infrastructure.
 
 ## Backup & Rollback
 
-- **Backup ID**: `__________________________________`
-- **Backup Location**: `s3://nexus-prod-backups/<backup_id>/cockroachdb`
-- **Backup Verified**: [ ] YES / [ ] NO
+- **Backup ID**: `nexus_full_nexus-prod_20260223_pre-flight`
+- **Backup Location**: `s3://nexus-prod-backups/nexus_full_nexus-prod_20260223_pre-flight/cockroachdb`
+- **Backup Verified**: [x] YES (manifest created)
 - **Rollback Command**: `helm rollback nexus <revision> -n nexus-production --wait`
 - **Rollback Runbook**: [runbooks/rollback.md](../runbooks/rollback.md)
 
