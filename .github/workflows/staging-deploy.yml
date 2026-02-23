@@ -98,6 +98,8 @@ jobs:
           - { name: auth-service, path: services/auth-service }
           - { name: notification-service, path: services/notification-service }
           - { name: ws-gateway, path: services/ws-gateway }
+          - { name: analytics-service, path: services/analytics-service }
+          - { name: audit-service, path: services/audit-service }
     steps:
       - uses: actions/checkout@v4
 
@@ -123,7 +125,8 @@ jobs:
       - name: Build & push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.service.path }}
+          context: .
+          file: ${{ matrix.service.path }}/Dockerfile
           push: true
           tags: |
             ${{ env.REGISTRY }}/nexus/${{ matrix.service.name }}:${{ steps.meta.outputs.tag }}
