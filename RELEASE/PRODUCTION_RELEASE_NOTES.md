@@ -1,9 +1,9 @@
 # Production Release Notes — Nexus RTP Platform
 
-**Version**: v1.0.0-frontend (commit `13f8216`)
-**Release Date**: 2026-02-16
+**Version**: v1.0.0 (commit `06d1a57`)
+**Release Date**: 2026-02-23
 **Release Engineer**: [Agent — agent/prod-cutover-run]
-**Branch**: `agent/frontend-finalize` → `agent/prod-cutover-run`
+**Branch**: `agent/prod-cutover-run` → `main`
 
 ---
 
