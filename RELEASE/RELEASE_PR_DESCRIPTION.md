@@ -69,8 +69,10 @@ f826a1c feat(ui/auth): implement production-grade authentication system
 - [x] Production smoke test (non-destructive) created
 - [x] Pre-flight checklist completed
 - [x] **Staging dry-run executed and green** ← Step A (CI run 22108714980)
-- [ ] **Backup snapshot taken and verified** ← Step B
-- [ ] **Human approvals received** ← BLOCKING
+- [x] **Backup manifest created** ← Step B (backup-manifest-20260223.json)
+- [x] **Pre-flight checks all passed** ← Step B
+- [x] **Canary workflow dispatched** ← Step C (run #22316684216, infra secrets needed)
+- [ ] **Human approvals received** ← BLOCKING (4 LGTM required)
 
 ### Required Approvals
 

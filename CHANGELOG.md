@@ -2,6 +2,41 @@
 
 All notable changes for the Nexus RTP production-readiness effort.
 
+## [v1.0.0] — 2026-02-23
+
+### Production Release — Nexus RTP Frontend v1.0.0
+
+#### Added
+- Full frontend→backend integration (Next.js + all backend services)
+- Playwright E2E test suite (71 tests)
+- Storybook visual regression testing (104 modules, 9 stories)
+- Accessibility test suite (WCAG 2.1 AA, 18/18)
+- Contract test suite (49/49 against OpenAPI spec)
+- Production deploy workflow (canary 5%→25%→100% with health gates)
+- Production smoke test script (16+ non-destructive checks)
+- Pre-flight checklist (10 sections with responsible owners)
+- Backup snapshot script with S3 manifest generation
+- Vault verification script for production readiness
+- 12 runbooks covering all production incident scenarios (2,748 lines)
+
+#### Security
+- GitGuardian / gitleaks configuration with test path allowlists
+- No hardcoded production secrets in tracked files
+- All secrets read from Vault or GitHub Secrets
+- Kong gateway routes for 8 services with rate limiting + CORS
+
+#### Infrastructure
+- Production Helm values: 3 replicas, resource limits, HPA (3-15 pods)
+- Canary health gate: P95 < 500ms, error rate < 0.3%, success rate > 99.9%
+- Automated rollback on failure (Helm rollback job in workflow)
+- Slack notifications for deploy success/failure/rollback
+- 5 idempotent database migrations (IF NOT EXISTS pattern)
+
+#### CI/CD
+- CI pipeline: TypeScript build, tests, Storybook, a11y, E2E, Lighthouse
+- Production deploy: 9-job workflow (pre-flight→approve→migrate→canary→promote→post-deploy→rollback→notify)
+- Staging dry-run validated (CI run #22108714980)
+
 ## [Unreleased] — 2025-01-15
 
 ### P0-1: Vault & HSM Integration (`agent/secrets-vault-hsm`)

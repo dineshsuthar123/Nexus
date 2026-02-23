@@ -60,12 +60,30 @@ and staging/production deploy infrastructure.
 
 | Time | Weight | Status | Error Rate | P95 Latency |
 |------|--------|--------|------------|-------------|
-| T+0 | 5% | PENDING | - | - |
-| T+10m | 5% → 25% | PENDING | - | - |
+| T+0 | 5% | DISPATCHED (run #22316684216) | - | - |
+| T+10m | 5% → 25% | PENDING (requires PROD_KUBECONFIG) | - | - |
 | T+25m | 25% → 100% | PENDING | - | - |
 | T+55m | 100% | PENDING | - | - |
 
-*To be filled during production deployment.*
+*Workflow validated. Actual deployment blocked on infrastructure secrets configuration.*
+
+## Rollback Commands
+
+```bash
+# Method 1: Helm rollback (primary)
+helm rollback nexus-production <REVISION> -n nexus-production --wait --timeout 5m
+
+# Method 2: GitHub Actions rollback workflow
+gh workflow run production-deploy.yml --ref main
+
+# Method 3: Emergency image rollback
+kubectl set image deployment/nexus-frontend nexus-frontend=<previous-tag> -n nexus-production
+
+# Method 4: Database restore (if migration issue)
+cockroach sql -e "RESTORE DATABASE nexus FROM 's3://nexus-prod-backups/nexus_full_nexus-prod_20260223_pre-flight/cockroachdb';"
+```
+
+See full runbook: [runbooks/rollback.md](../runbooks/rollback.md) (227 lines)
 
 ## Backup & Rollback
 
@@ -117,8 +135,8 @@ and staging/production deploy infrastructure.
 
 ## Post-Release Actions
 
-- [ ] Update CHANGELOG.md with release version
-- [ ] Close Release PR
+- [x] Update CHANGELOG.md with release version
+- [ ] Close Release PR (after merge)
 - [ ] Archive Grafana snapshots (baseline + during canary + post-promote)
 - [ ] Archive Playwright HTML report
 - [ ] Update on-call handover document
@@ -126,13 +144,33 @@ and staging/production deploy infrastructure.
 - [ ] Remove canary-specific resources if not in use
 - [ ] Verify PagerDuty alerting correct for new frontend service
 
+## Runbooks Available
+
+| Runbook | Lines | Scenario |
+|---------|-------|----------|
+| rollback.md | 226 | Deployment rollback (4 methods) |
+| cockroachdb-down.md | 188 | CockroachDB cluster failure |
+| db-restore.md | 225 | Database restore from backup |
+| degraded-payment-flow.md | 235 | Payment service degradation |
+| fraud-alert-spike.md | 228 | Fraud detection alerts |
+| idempotency-collision.md | 206 | Idempotency key collisions |
+| kafka-consumer-lag.md | 198 | Kafka consumer lag spikes |
+| key-rotation.md | 246 | HSM/Vault key rotation |
+| latency-slo-breach.md | 248 | Latency SLO breach |
+| reconciliation-match-low.md | 288 | Reconciliation match rate low |
+| service-down.md | 283 | Service health failure |
+| SLO_ERROR_BUDGET.md | 177 | Error budget policy |
+
 ## Artifacts
 
 | Artifact | Location |
 |----------|----------|
-| CI Run | GitHub Actions Run #___ |
-| Playwright Report | `post-deploy-artifacts/playwright-report/` |
-| Smoke Test Results | `prod-artifacts/smoke/smoke-prod-results.json` |
-| Grafana Baseline | `canary-artifacts/grafana-baseline/` |
-| Grafana Post-Deploy | `post-deploy-artifacts/grafana-final/` |
-| Backup Snapshot | `s3://nexus-prod-backups/<backup_id>/` |
+| CI Run (latest) | GitHub Actions Run #22316684216 |
+| Canary Deploy Attempt | https://github.com/dineshsuthar123/Nexus/actions/runs/22316684216 |
+| Release PR | https://github.com/dineshsuthar123/Nexus/pull/9 |
+| Backup Manifest | `RELEASE/backup-manifest-20260223.json` |
+| Playwright Report | `post-deploy-artifacts/playwright-report/` (post-deploy) |
+| Smoke Test Results | `prod-artifacts/smoke/smoke-prod-results.json` (post-deploy) |
+| Grafana Baseline | `canary-artifacts/grafana-baseline/` (post-deploy) |
+| Grafana Post-Deploy | `post-deploy-artifacts/grafana-final/` (post-deploy) |
+| Backup Snapshot | `s3://nexus-prod-backups/nexus_full_nexus-prod_20260223_pre-flight/` |
