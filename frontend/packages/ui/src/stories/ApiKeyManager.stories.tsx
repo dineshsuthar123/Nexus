@@ -69,7 +69,7 @@ export const WithNewKey: Story = {
     onRevokeKey: () => {},
     onRotateKey: () => {},
     availablePermissions: permissions,
-    newKeyValue: 'nxs_prod_sk_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0',
+    newKeyValue: 'nxs_demo_sk_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6',
     onDismissNewKey: () => console.log('Dismiss new key'),
   },
 };

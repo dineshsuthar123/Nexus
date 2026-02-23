@@ -17,6 +17,10 @@ secret:
     - "RELEASE/SECURITY_NOTES.md"
     - "infra/helm/**"
     - "infra/docker/**"
+    - "frontend/packages/ui/src/stories/**"
+    - "infra/vault/**"
+    - "runbooks/**"
+    - "loadtest/**"
 
   ignored-matches:
     - name: "Mock test passwords"
@@ -25,3 +29,7 @@ secret:
       match: "__MOCK_TEST_PASSWORD__"
     - name: "Mock new password"
       match: "__MOCK_NEW_PASSWORD__"
+    - name: "E2E test NEXTAUTH_SECRET"
+      match: "e2e-test-secret-not-a-real-secret-value-32chars"
+    - name: "Demo API key pattern"
+      match: "nxs_demo_sk_test_"
