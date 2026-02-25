@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/nexus-rtp/payment-service/internal/db"
-	"github.com/nexus-rtp/payment-service/internal/kafka"
 	"github.com/nexus-rtp/payment-service/internal/observability"
 	"github.com/nexus-rtp/payment-service/internal/sanctions"
 	"github.com/shopspring/decimal"
@@ -22,23 +21,23 @@ import (
 // PaymentService handles payment processing
 type PaymentService struct {
 	logger          *zap.Logger
-	pool            *db.Pool
-	accountRepo     *db.AccountRepository
-	transactionRepo *db.TransactionRepository
-	outboxRepo      *db.OutboxRepository
-	sanctionsClient *sanctions.Client
-	kafkaProducer   *kafka.Producer
+	pool            TxManager
+	accountRepo     AccountStore
+	transactionRepo TransactionStore
+	outboxRepo      OutboxStore
+	sanctionsClient SanctionsScreener
+	kafkaProducer   EventPublisher
 }
 
 // NewPaymentService creates a new payment service
 func NewPaymentService(
 	logger *zap.Logger,
-	pool *db.Pool,
-	accountRepo *db.AccountRepository,
-	transactionRepo *db.TransactionRepository,
-	outboxRepo *db.OutboxRepository,
-	sanctionsClient *sanctions.Client,
-	kafkaProducer *kafka.Producer,
+	pool TxManager,
+	accountRepo AccountStore,
+	transactionRepo TransactionStore,
+	outboxRepo OutboxStore,
+	sanctionsClient SanctionsScreener,
+	kafkaProducer EventPublisher,
 ) *PaymentService {
 	return &PaymentService{
 		logger:          logger,
