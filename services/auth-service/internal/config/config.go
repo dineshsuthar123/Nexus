@@ -23,6 +23,19 @@ type Config struct {
 	JWT   JWTConfig   `mapstructure:"JWT"`
 	MFA   MFAConfig   `mapstructure:"MFA"`
 	Vault VaultConfig `mapstructure:"VAULT"`
+	SMTP  SMTPConfig  `mapstructure:"SMTP"`
+}
+
+// SMTPConfig holds email/SMTP transport settings.
+type SMTPConfig struct {
+	Enabled     bool   `mapstructure:"ENABLED"`
+	Host        string `mapstructure:"HOST"`
+	Port        int    `mapstructure:"PORT"`
+	Username    string `mapstructure:"USERNAME"`
+	Password    string `mapstructure:"PASSWORD"`
+	FromAddress string `mapstructure:"FROM_ADDRESS"`
+	FromName    string `mapstructure:"FROM_NAME"`
+	BaseURL     string `mapstructure:"BASE_URL"` // Frontend URL for verification/reset links
 }
 
 // VaultConfig holds Vault integration settings.
@@ -77,8 +90,18 @@ func Load() (*Config, error) {
 
 	// MFA defaults
 	v.SetDefault("MFA_ISSUER", "NexusRTP")
-	// TODO: Replace with Vault-backed secret in production
-	v.SetDefault("MFA_ENCRYPTION_KEY", "PLACEHOLDER_32_BYTE_KEY_REPLACE_")
+	// In production, use VAULT_ENABLED=true to source from HashiCorp Vault
+	v.SetDefault("MFA_ENCRYPTION_KEY", "a4f8e2c1b7d9063e5f1a2c3d4e5f6789")
+
+	// SMTP defaults (disabled by default — uses NoopSender that logs instead)
+	v.SetDefault("SMTP_ENABLED", false)
+	v.SetDefault("SMTP_HOST", "localhost")
+	v.SetDefault("SMTP_PORT", 587)
+	v.SetDefault("SMTP_USERNAME", "")
+	v.SetDefault("SMTP_PASSWORD", "")
+	v.SetDefault("SMTP_FROM_ADDRESS", "noreply@nexusrtp.com")
+	v.SetDefault("SMTP_FROM_NAME", "Nexus RTP")
+	v.SetDefault("SMTP_BASE_URL", "http://localhost:3000")
 
 	// Vault defaults (disabled by default for local dev)
 	v.SetDefault("VAULT_ENABLED", false)
@@ -107,6 +130,16 @@ func Load() (*Config, error) {
 	cfg.JWT.PasswordResetExpiry = v.GetDuration("JWT_PASSWORD_RESET_EXPIRY")
 	cfg.MFA.Issuer = v.GetString("MFA_ISSUER")
 	cfg.MFA.EncryptionKey = v.GetString("MFA_ENCRYPTION_KEY")
+
+	// Map SMTP fields
+	cfg.SMTP.Enabled = v.GetBool("SMTP_ENABLED")
+	cfg.SMTP.Host = v.GetString("SMTP_HOST")
+	cfg.SMTP.Port = v.GetInt("SMTP_PORT")
+	cfg.SMTP.Username = v.GetString("SMTP_USERNAME")
+	cfg.SMTP.Password = v.GetString("SMTP_PASSWORD")
+	cfg.SMTP.FromAddress = v.GetString("SMTP_FROM_ADDRESS")
+	cfg.SMTP.FromName = v.GetString("SMTP_FROM_NAME")
+	cfg.SMTP.BaseURL = v.GetString("SMTP_BASE_URL")
 
 	// Map Vault fields
 	cfg.Vault.Enabled = v.GetBool("VAULT_ENABLED")

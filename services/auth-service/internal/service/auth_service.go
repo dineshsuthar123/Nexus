@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nexus-rtp/auth-service/internal/auth"
 	"github.com/nexus-rtp/auth-service/internal/db"
+	"github.com/nexus-rtp/auth-service/internal/email"
 	"github.com/nexus-rtp/auth-service/internal/models"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -42,6 +43,7 @@ type AuthService struct {
 	apiKeyRepo       *db.APIKeyRepository
 	tokenService     *auth.TokenService
 	mfaService       *auth.MFAService
+	emailSender      email.Sender
 }
 
 // NewAuthService creates a new AuthService.
@@ -55,6 +57,7 @@ func NewAuthService(
 	apiKeyRepo *db.APIKeyRepository,
 	tokenService *auth.TokenService,
 	mfaService *auth.MFAService,
+	emailSender email.Sender,
 ) *AuthService {
 	return &AuthService{
 		logger:           logger,
@@ -66,6 +69,7 @@ func NewAuthService(
 		apiKeyRepo:       apiKeyRepo,
 		tokenService:     tokenService,
 		mfaService:       mfaService,
+		emailSender:      emailSender,
 	}
 }
 
@@ -185,7 +189,16 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Regi
 
 	s.logAudit(ctx, user.ID, "register", "", "", "User registered", true)
 
-	// TODO: Send email verification email asynchronously
+	// Send verification email asynchronously
+	verificationToken := uuid.New().String()
+	go func() {
+		if err := s.emailSender.SendVerificationEmail(req.Email, verificationToken); err != nil {
+			s.logger.Error("Failed to send verification email",
+				zap.String("email", req.Email),
+				zap.Error(err),
+			)
+		}
+	}()
 	s.logger.Info("User registered", zap.String("email", req.Email), zap.String("userId", user.ID.String()))
 
 	return &RegisterResponse{
@@ -374,10 +387,17 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, req *PasswordRes
 		return fmt.Errorf("failed to create reset token: %w", err)
 	}
 
-	// TODO: Send email with reset link containing resetToken
+	// Send password reset email asynchronously
+	go func() {
+		if err := s.emailSender.SendPasswordResetEmail(user.Email, resetToken); err != nil {
+			s.logger.Error("Failed to send password reset email",
+				zap.String("userId", user.ID.String()),
+				zap.Error(err),
+			)
+		}
+	}()
 	s.logger.Info("Password reset token created",
 		zap.String("userId", user.ID.String()),
-		zap.String("resetToken", resetToken), // In prod, ONLY send this via email
 	)
 
 	s.logAudit(ctx, user.ID, "password_reset_request", "", "", "Password reset requested", true)

@@ -24,6 +24,7 @@ import {
   Sun,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { useSession, signOut } from 'next-auth/react';
 import {
   Button,
   Avatar,
@@ -63,6 +64,15 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
+  const { data: session } = useSession();
+  const user = session?.user;
+  const userName = user?.firstName && user?.lastName
+    ? `${user.firstName} ${user.lastName}`
+    : user?.email ?? 'User';
+  const userEmail = user?.email ?? '';
+  const userInitials = user?.firstName && user?.lastName
+    ? `${user.firstName[0]}${user.lastName[0]}`
+    : user?.email?.[0]?.toUpperCase() ?? 'U';
 
   React.useEffect(() => {
     setMounted(true);
@@ -165,7 +175,7 @@ export default function DashboardLayout({
             >
               <Menu className="h-5 w-5" />
             </button>
-            
+
             {/* Breadcrumb could go here */}
           </div>
 
@@ -206,8 +216,8 @@ export default function DashboardLayout({
                   className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                 >
                   <Avatar size="sm">
-                    <AvatarImage src="/avatars/user.jpg" alt="User" />
-                    <AvatarFallback>JD</AvatarFallback>
+                    <AvatarImage src="/avatars/user.jpg" alt={userName} />
+                    <AvatarFallback>{userInitials}</AvatarFallback>
                   </Avatar>
                   <ChevronDown className="h-4 w-4 text-neutral-500" />
                 </button>
@@ -215,8 +225,8 @@ export default function DashboardLayout({
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div className="flex flex-col">
-                    <span className="font-medium">John Doe</span>
-                    <span className="text-xs text-neutral-500">john@nexus-rtp.com</span>
+                    <span className="font-medium">{userName}</span>
+                    <span className="text-xs text-neutral-500">{userEmail}</span>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -227,7 +237,11 @@ export default function DashboardLayout({
                   Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem icon={<LogOut className="h-4 w-4" />} destructive>
+                <DropdownMenuItem
+                  icon={<LogOut className="h-4 w-4" />}
+                  destructive
+                  onClick={() => signOut({ callbackUrl: '/auth/login' })}
+                >
                   Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>

@@ -6,11 +6,11 @@ WORKDIR /build
 # Install dependencies
 RUN apk add --no-cache git ca-certificates
 
-# Copy the shared idempotency package (referenced via replace directive)
-COPY pkg/idempotency /build/pkg/idempotency
+# Copy the shared idempotency package from named build context
+COPY --from=idempotency . /build/pkg/idempotency
 
-# Copy the service
-COPY services/payment-service /build/services/payment-service
+# Copy the service source
+COPY . /build/services/payment-service
 
 WORKDIR /build/services/payment-service
 

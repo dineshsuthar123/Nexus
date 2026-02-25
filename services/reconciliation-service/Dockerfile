@@ -5,11 +5,11 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /build
 
-# Copy the shared idempotency package (referenced via replace directive)
-COPY pkg/idempotency /build/pkg/idempotency
+# Copy the shared idempotency package from named build context
+COPY --from=idempotency . /build/pkg/idempotency
 
-# Copy the service
-COPY services/reconciliation-service /build/services/reconciliation-service
+# Copy the service source
+COPY . /build/services/reconciliation-service
 
 WORKDIR /build/services/reconciliation-service
 
@@ -32,6 +32,9 @@ COPY --from=builder /reconciliation-service .
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-EXPOSE 8082
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["./reconciliation-service"]

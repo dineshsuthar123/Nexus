@@ -106,11 +106,13 @@ const TransactionRow = React.forwardRef<HTMLDivElement, TransactionRowProps>(
     },
     ref
   ) => {
-    const TypeIcon = transactionTypeIcons[type];
+    const TypeIcon = transactionTypeIcons[type] || RefreshCw;
     const isCredit = type === 'credit' || type === 'refund' || type === 'interest';
     // _displayAmount available for custom formatting
     void (isCredit ? Math.abs(amount) : -Math.abs(amount));
-    const statusConfig = transactionStatusMap[status];
+    // Normalize status to lowercase and map; fallback for unknown backend statuses
+    const normalizedStatus = (status || '').toLowerCase() as TransactionStatus;
+    const statusConfig = transactionStatusMap[normalizedStatus] ?? { status: 'pending' as StatusType, label: status || 'Unknown' };
 
     const formattedTime = typeof timestamp === 'string'
       ? timestamp

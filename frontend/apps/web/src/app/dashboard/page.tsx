@@ -167,20 +167,36 @@ export default function DashboardPage() {
                   No recent transactions
                 </div>
               ) : (
-                recentPayments?.data.map((payment) => (
-                  <TransactionRow
-                    key={payment.uetr}
-                    transactionId={payment.uetr}
-                    type={payment.amount >= 0 ? 'credit' : 'debit'}
-                    status={payment.status.toLowerCase() as 'completed' | 'pending' | 'processing'}
-                    amount={Math.abs(payment.amount)}
-                    description={payment.description || 'Payment'}
-                    category={payment.currency}
-                    timestamp={new Date(payment.createdAt)}
-                    counterparty={payment.toAccountName || payment.toAccountId}
-                    compact
-                  />
-                ))
+                recentPayments?.data.map((payment: any) => {
+                  // Map backend payment statuses to TransactionStatus
+                  const statusMap: Record<string, string> = {
+                    'PENDING': 'pending',
+                    'SANCTIONED': 'processing',
+                    'FRAUD_REVIEW': 'processing',
+                    'CLEARED': 'processing',
+                    'SETTLED': 'completed',
+                    'REJECTED': 'failed',
+                    'RETURNED': 'refunded',
+                    'CANCELLED': 'cancelled',
+                  };
+                  const mappedStatus = statusMap[payment.status] || 'pending';
+
+                  return (
+                    <TransactionRow
+                      key={payment.uetr || payment.transactionId}
+                      transactionId={payment.uetr || payment.transactionId}
+                      type="debit"
+                      status={mappedStatus as any}
+                      amount={Math.abs(parseFloat(payment.amount) || 0)}
+                      currency={payment.currency || 'EUR'}
+                      description={payment.creditorName || payment.debtorName || 'Payment'}
+                      category={payment.currency}
+                      timestamp={new Date(payment.createdAt)}
+                      counterparty={payment.debtorName || ''}
+                      compact
+                    />
+                  );
+                })
               )}
             </div>
           </CardContent>

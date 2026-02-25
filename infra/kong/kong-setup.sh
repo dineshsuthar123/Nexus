@@ -141,6 +141,7 @@ curl -s -X POST "$KONG_ADMIN/plugins" \
   -d "config.headers[]=Content-Type" \
   -d "config.headers[]=X-Request-ID" \
   -d "config.headers[]=X-Idempotency-Key" \
+  -d "config.headers[]=Idempotency-Key" \
   -d "config.exposed_headers[]=X-Request-ID" \
   -d "config.credentials=true" \
   -d "config.max_age=3600" > /dev/null 2>&1 || true
@@ -163,7 +164,7 @@ curl -s -X POST "$KONG_ADMIN/plugins" \
   -d "config.fault_tolerant=true" \
   -d "config.hide_client_headers=false" > /dev/null 2>&1 || true
 
-# Request size limiting  
+# Request size limiting
 echo "  -> Plugin: request-size-limiting (global)"
 curl -s -X POST "$KONG_ADMIN/plugins" \
   -d "name=request-size-limiting" \
