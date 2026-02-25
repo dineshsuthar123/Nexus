@@ -35,28 +35,28 @@ var (
 // AuthService handles authentication business logic.
 type AuthService struct {
 	logger           *zap.Logger
-	userRepo         *db.UserRepository
-	refreshTokenRepo *db.RefreshTokenRepository
-	mfaRepo          *db.MFARepository
-	auditRepo        *db.AuditLogRepository
-	resetRepo        *db.PasswordResetRepository
-	apiKeyRepo       *db.APIKeyRepository
-	tokenService     *auth.TokenService
-	mfaService       *auth.MFAService
+	userRepo         UserStore
+	refreshTokenRepo RefreshTokenStore
+	mfaRepo          MFAStore
+	auditRepo        AuditStore
+	resetRepo        PasswordResetStore
+	apiKeyRepo       APIKeyStore
+	tokenService     TokenProvider
+	mfaService       MFAProvider
 	emailSender      email.Sender
 }
 
 // NewAuthService creates a new AuthService.
 func NewAuthService(
 	logger *zap.Logger,
-	userRepo *db.UserRepository,
-	refreshTokenRepo *db.RefreshTokenRepository,
-	mfaRepo *db.MFARepository,
-	auditRepo *db.AuditLogRepository,
-	resetRepo *db.PasswordResetRepository,
-	apiKeyRepo *db.APIKeyRepository,
-	tokenService *auth.TokenService,
-	mfaService *auth.MFAService,
+	userRepo UserStore,
+	refreshTokenRepo RefreshTokenStore,
+	mfaRepo MFAStore,
+	auditRepo AuditStore,
+	resetRepo PasswordResetStore,
+	apiKeyRepo APIKeyStore,
+	tokenService TokenProvider,
+	mfaService MFAProvider,
 	emailSender email.Sender,
 ) *AuthService {
 	return &AuthService{
