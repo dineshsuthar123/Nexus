@@ -66,7 +66,6 @@ func main() {
 	// Initialize services
 	accountService := service.NewAccountService(
 		logger,
-		pool,
 		accountRepo,
 		auditRepo,
 		cacheClient,

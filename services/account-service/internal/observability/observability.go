@@ -80,6 +80,11 @@ var (
 
 var tracer trace.Tracer
 
+// InitNoop sets up a no-op tracer for unit testing.
+func InitNoop() {
+	tracer = otel.Tracer("test-noop")
+}
+
 // Initialize sets up observability stack
 func Initialize(serviceName, environment, jaegerEndpoint string) (*zap.Logger, func(), error) {
 	// Initialize logger
