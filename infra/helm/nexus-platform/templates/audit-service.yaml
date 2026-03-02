@@ -1,0 +1,108 @@
+{{- if .Values.auditService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus-platform.auditService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: audit-service
+spec:
+  {{- if not .Values.auditService.autoscaling.enabled }}
+  replicas: {{ .Values.auditService.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nexus-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: audit-service
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "nexus-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: audit-service
+    spec:
+      serviceAccountName: {{ include "nexus-platform.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: audit-service
+          image: "{{ .Values.auditService.image.repository }}:{{ .Values.auditService.image.tag }}"
+          imagePullPolicy: {{ .Values.auditService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              value: {{ include "nexus-platform.databaseUrl" . | quote }}
+            - name: KAFKA_BROKERS
+              value: {{ include "nexus-platform.kafkaBrokers" . | quote }}
+            - name: JAEGER_ENDPOINT
+              value: "http://jaeger:14268/api/traces"
+            - name: ENVIRONMENT
+              value: "production"
+          {{- with .Values.auditService.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.auditService.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.auditService.resources | nindent 12 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: audit-service
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nexus-platform.auditService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: audit-service
+spec:
+  type: {{ .Values.auditService.service.type }}
+  ports:
+    - port: {{ .Values.auditService.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nexus-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: audit-service
+{{- if .Values.auditService.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nexus-platform.auditService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nexus-platform.auditService.fullname" . }}
+  minReplicas: {{ .Values.auditService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.auditService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.auditService.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

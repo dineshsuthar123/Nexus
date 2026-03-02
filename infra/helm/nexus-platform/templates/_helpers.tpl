@@ -77,6 +77,41 @@ Frontend name
 {{- end }}
 
 {{/*
+Auth Service name
+*/}}
+{{- define "nexus-platform.authService.fullname" -}}
+{{- printf "%s-auth-service" (include "nexus-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+WS Gateway name
+*/}}
+{{- define "nexus-platform.wsGateway.fullname" -}}
+{{- printf "%s-ws-gateway" (include "nexus-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Notification Service name
+*/}}
+{{- define "nexus-platform.notificationService.fullname" -}}
+{{- printf "%s-notification-service" (include "nexus-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Analytics Service name
+*/}}
+{{- define "nexus-platform.analyticsService.fullname" -}}
+{{- printf "%s-analytics-service" (include "nexus-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Audit Service name
+*/}}
+{{- define "nexus-platform.auditService.fullname" -}}
+{{- printf "%s-audit-service" (include "nexus-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Database URL
 */}}
 {{- define "nexus-platform.databaseUrl" -}}
