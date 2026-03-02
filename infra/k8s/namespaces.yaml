@@ -1,0 +1,107 @@
+# Nexus RTP Platform — Namespace Configuration
+# Defines namespaces, resource quotas, and limit ranges
+# Apply: kubectl apply -f infra/k8s/namespaces.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus-system
+  labels:
+    app.kubernetes.io/part-of: nexus-rtp
+    environment: production
+    istio-injection: disabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus-data
+  labels:
+    app.kubernetes.io/part-of: nexus-rtp
+    tier: data
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus-monitoring
+  labels:
+    app.kubernetes.io/part-of: nexus-rtp
+    tier: monitoring
+
+---
+# =============================================================================
+# Resource Quotas — cap total resource consumption per namespace
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: nexus-system-quota
+  namespace: nexus-system
+spec:
+  hard:
+    requests.cpu: "32"
+    requests.memory: "64Gi"
+    limits.cpu: "64"
+    limits.memory: "128Gi"
+    pods: "200"
+    services: "30"
+    persistentvolumeclaims: "20"
+    secrets: "50"
+    configmaps: "50"
+
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: nexus-data-quota
+  namespace: nexus-data
+spec:
+  hard:
+    requests.cpu: "24"
+    requests.memory: "96Gi"
+    limits.cpu: "48"
+    limits.memory: "192Gi"
+    pods: "50"
+    persistentvolumeclaims: "30"
+
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: nexus-monitoring-quota
+  namespace: nexus-monitoring
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: "32Gi"
+    limits.cpu: "16"
+    limits.memory: "64Gi"
+    pods: "30"
+
+---
+# =============================================================================
+# LimitRange — default resource requests/limits for pods without explicit values
+# =============================================================================
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: nexus-system-limits
+  namespace: nexus-system
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+      max:
+        cpu: "4"
+        memory: "8Gi"
+    - type: Pod
+      max:
+        cpu: "8"
+        memory: "16Gi"
