@@ -180,7 +180,54 @@ curl -s -X POST "$KONG_ADMIN/plugins" \
   -d "config.latency_metrics=true" > /dev/null 2>&1 || true
 
 # ───────────────────────────────────────────
-# 4. Service-specific rate limits
+# 4. JWT validation on protected routes
+# ───────────────────────────────────────────
+echo ""
+echo "Enabling JWT validation on protected routes..."
+
+# Auth routes are PUBLIC (login, register, refresh, password reset).
+# All other service routes require a valid JWT in the Authorization header.
+# The auth-service issues JWTs; Kong validates them at the gateway layer
+# so that backend services receive only authenticated requests.
+
+# Create a JWT consumer (represents the auth-service issuer)
+echo "  -> Consumer: nexus-jwt-issuer"
+curl -s -X PUT "$KONG_ADMIN/consumers/nexus-jwt-issuer" \
+  -d "username=nexus-jwt-issuer" > /dev/null 2>&1 || true
+
+# Upload the RSA public key for JWT verification
+# In production, rotate this via Vault or K8s secrets.
+JWT_PUBLIC_KEY_FILE="${JWT_PUBLIC_KEY_FILE:-../../services/auth-service/keys/dev_public.pem}"
+if [ -f "$JWT_PUBLIC_KEY_FILE" ]; then
+  echo "  -> Uploading RSA public key for JWT verification"
+  JWT_PUBLIC_KEY=$(cat "$JWT_PUBLIC_KEY_FILE")
+  curl -s -X POST "$KONG_ADMIN/consumers/nexus-jwt-issuer/jwt" \
+    -F "algorithm=RS256" \
+    -F "key=nexus-rtp" \
+    -F "rsa_public_key=$JWT_PUBLIC_KEY" > /dev/null 2>&1 || true
+else
+  echo "  ⚠ WARNING: JWT public key not found at $JWT_PUBLIC_KEY_FILE"
+  echo "    Run scripts/generate-dev-keys.sh first, then re-run this script."
+fi
+
+# Enable JWT plugin on protected routes (NOT on auth-routes or health endpoints)
+PROTECTED_ROUTES="payment-routes message-routes account-routes customer-routes reconciliation-routes analytics-routes audit-routes notification-routes user-routes ws-route"
+for route in $PROTECTED_ROUTES; do
+  echo "  -> JWT plugin on route: $route"
+  curl -s -X POST "$KONG_ADMIN/routes/$route/plugins" \
+    -d "name=jwt" \
+    -d "config.key_claim_name=iss" \
+    -d "config.claims_to_verify[]=exp" \
+    -d "config.header_names[]=Authorization" \
+    -d "config.uri_param_names=" \
+    -d "config.cookie_names=" \
+    -d "config.run_on_preflight=false" > /dev/null 2>&1 || true
+done
+echo "  ✓ JWT validation enabled on all protected routes"
+echo "  ✓ Auth routes (/api/v1/auth/*) remain public"
+
+# ───────────────────────────────────────────
+# 5. Service-specific rate limits
 # ───────────────────────────────────────────
 echo ""
 echo "Configuring service-specific rate limits..."
@@ -194,7 +241,7 @@ enable_plugin "services/payment-service" "rate-limiting" \
   "config.minute=60" "config.hour=1800" "config.policy=local"
 
 # ───────────────────────────────────────────
-# 5. Logging
+# 6. Logging
 # ───────────────────────────────────────────
 echo ""
 echo "Enabling request logging..."
