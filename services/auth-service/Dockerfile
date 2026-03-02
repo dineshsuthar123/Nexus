@@ -10,7 +10,10 @@ FROM alpine:3.19
 WORKDIR /app
 RUN apk --no-cache add ca-certificates tzdata
 COPY --from=builder /app/server .
-COPY keys/ ./keys/
+# Keys are mounted at runtime via Docker volume — never baked into the image.
+# For local dev, docker-compose mounts ./keys/ → /app/keys/
+# For production, use Vault agent sidecar or K8s secrets.
+RUN mkdir -p /app/keys
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 EXPOSE 8080

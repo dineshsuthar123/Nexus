@@ -609,6 +609,8 @@ services:
       SMTP_FROM_ADDRESS: "noreply@nexusrtp.com"
       SMTP_FROM_NAME: "Nexus RTP"
       SMTP_BASE_URL: "http://localhost:3000"
+    volumes:
+      - ../../services/auth-service/keys:/app/keys:ro
     networks:
       - nexus-network
     depends_on:
@@ -638,6 +640,8 @@ services:
       ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001"
       WS_PING_INTERVAL: 30
       WS_PONG_TIMEOUT: 10
+    volumes:
+      - ../../services/ws-gateway/keys:/app/keys:ro
     networks:
       - nexus-network
     depends_on:

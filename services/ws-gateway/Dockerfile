@@ -11,7 +11,8 @@ RUN apk add --no-cache ca-certificates tzdata curl
 RUN adduser -D -u 1001 appuser
 WORKDIR /app
 COPY --from=builder /ws-gateway .
-COPY keys/ ./keys/
+# Keys are mounted at runtime via Docker volume — never baked into the image.
+RUN mkdir -p /app/keys
 USER appuser
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s --retries=3 CMD curl -f http://localhost:8080/health || exit 1
