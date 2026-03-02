@@ -452,6 +452,8 @@ services:
       - '--web.enable-lifecycle'
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ../../infra/prometheus/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro
       - prometheus-data:/prometheus
     networks:
       - nexus-network

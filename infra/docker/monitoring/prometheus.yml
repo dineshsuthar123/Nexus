@@ -8,14 +8,18 @@ global:
     cluster: 'nexus-local'
     env: 'development'
 
-# Alertmanager configuration (for future use)
+# Alertmanager configuration
 alerting:
   alertmanagers:
     - static_configs:
         - targets: []
+        # TODO: Add alertmanager target when deployed, e.g.:
+        # - targets: ['alertmanager:9093']
 
-# Rule files (for future use)
-rule_files: []
+# Alert and SLO rule files
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+  - '/etc/prometheus/slo-rules.yml'
 
 # Scrape configurations
 scrape_configs:
