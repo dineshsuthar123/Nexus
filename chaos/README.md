@@ -22,10 +22,16 @@ Runnable chaos engineering scripts for Nexus RTP Platform.
 ## Running
 
 ```bash
-# Run all experiments
-for script in chaos/*.sh; do bash "$script"; done
+# Run ALL experiments with consolidated report
+bash chaos/run_all.sh
 
-# Run individual experiment
+# Quick mode (reduced durations for CI, skips slow tests)
+bash chaos/run_all.sh --quick
+
+# Run single experiment
+bash chaos/run_all.sh db_failover
+
+# Run individual script directly
 bash chaos/kill_kafka_broker.sh
 
 # Customize parameters

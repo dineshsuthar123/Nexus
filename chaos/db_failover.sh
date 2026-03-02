@@ -54,16 +54,16 @@ echo "  Cluster status: $(echo "$CLUSTER_STATUS" | head -5)"
 echo "[1/8] Capturing pre-failover invariants..."
 PRE_BALANCE=$(docker exec cockroach-1 cockroach sql --insecure -e "
     SELECT
-        COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END), 0) as debits,
-        COALESCE(SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END), 0) as credits,
-        COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END), 0) -
-        COALESCE(SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END), 0) as imbalance
-    FROM nexus_ledger.ledger_entries;
+        COALESCE(SUM(CASE WHEN leg_type = 'DEBIT' THEN amount ELSE 0 END), 0) as debits,
+        COALESCE(SUM(CASE WHEN leg_type = 'CREDIT' THEN amount ELSE 0 END), 0) as credits,
+        COALESCE(SUM(CASE WHEN leg_type = 'DEBIT' THEN amount ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN leg_type = 'CREDIT' THEN amount ELSE 0 END), 0) as imbalance
+    FROM nexus_ledger.transaction_leg;
 " 2>/dev/null || echo "Unable to query ledger")
 echo "  Pre-failover ledger: $PRE_BALANCE"
 
 PRE_PAYMENT_COUNT=$(docker exec cockroach-1 cockroach sql --insecure --format csv -e "
-    SELECT COUNT(*) FROM nexus_ledger.payments;
+    SELECT COUNT(*) FROM nexus_ledger.\"transaction\";
 " 2>/dev/null | tail -1 || echo "0")
 echo "  Pre-failover payment count: $PRE_PAYMENT_COUNT"
 
@@ -157,9 +157,9 @@ echo "[7/8] Verifying data integrity..."
 # Balance invariant
 POST_BALANCE=$(docker exec "$SURVIVING_NODE" cockroach sql --insecure --format csv -e "
     SELECT
-        COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END), 0) -
-        COALESCE(SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END), 0) as imbalance
-    FROM nexus_ledger.ledger_entries;
+        COALESCE(SUM(CASE WHEN leg_type = 'DEBIT' THEN amount ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN leg_type = 'CREDIT' THEN amount ELSE 0 END), 0) as imbalance
+    FROM nexus_ledger.transaction_leg;
 " 2>/dev/null | tail -1 || echo "unknown")
 echo "  Post-failover imbalance: $POST_BALANCE"
 
@@ -172,7 +172,7 @@ fi
 
 # Payment count (should have increased)
 POST_PAYMENT_COUNT=$(docker exec "$SURVIVING_NODE" cockroach sql --insecure --format csv -e "
-    SELECT COUNT(*) FROM nexus_ledger.payments;
+    SELECT COUNT(*) FROM nexus_ledger.\"transaction\";
 " 2>/dev/null | tail -1 || echo "0")
 echo "  Post-failover payment count: $POST_PAYMENT_COUNT (was: $PRE_PAYMENT_COUNT)"
 
