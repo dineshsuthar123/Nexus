@@ -9,6 +9,10 @@ This directory contains SQL migration files for the Nexus RTP Platform's Cockroa
 |------|----------|-------------|
 | `001_auth_schema.sql` | `nexus_auth` | Auth service: users, MFA, tokens, audit logs |
 | `002_core_schema.sql` | `nexus_ledger` | Core platform: accounts, transactions, outbox, reconciliation |
+| `003_notifications_schema.sql` | `nexus_ledger` | Notification service: notifications, preferences |
+| `004_api_keys.sql` | `nexus_auth` | API keys for programmatic access |
+| `005_add_tenant_id.sql` | both | Multi-tenancy: adds `tenant_id` to all major tables |
+| `006_schema_reconciliation.sql` | `nexus_ledger` | Reconciles SQL schema with Go models (table/column renames, missing cols) |
 
 ## Running Migrations
 
