@@ -458,6 +458,22 @@ services:
     networks:
       - nexus-network
 
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: nexus-alertmanager
+    hostname: alertmanager
+    ports:
+      - "9093:9093"
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - nexus-network
+    depends_on:
+      - prometheus
+
   grafana:
     image: grafana/grafana:10.2.0
     container_name: nexus-grafana

@@ -12,9 +12,7 @@ global:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []
-        # TODO: Add alertmanager target when deployed, e.g.:
-        # - targets: ['alertmanager:9093']
+        - targets: ['alertmanager:9093']
 
 # Alert and SLO rule files
 rule_files:

@@ -296,7 +296,7 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [go-build]
-    if: github.ref == 'refs/heads/staging' || startsWith(github.ref, 'refs/heads/agent/')
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || startsWith(github.ref, 'refs/heads/agent/') || github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -325,7 +325,7 @@ jobs:
     name: Smoke Tests
     runs-on: ubuntu-latest
     needs: [go-build, docker-build]
-    if: github.ref == 'refs/heads/staging' || startsWith(github.ref, 'refs/heads/agent/')
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || startsWith(github.ref, 'refs/heads/agent/') || github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
