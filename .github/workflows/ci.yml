@@ -37,7 +37,7 @@ jobs:
 
       - name: Run gofmt check
         run: |
-          for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022 tests/chaos tests/e2e; do
+          for dir in services/payment-service services/account-service services/reconciliation-service services/auth-service services/notification-service services/ws-gateway services/analytics-service services/audit-service libs/iso20022 tests/chaos tests/e2e; do
             if [ -d "$dir" ]; then
               echo "Checking $dir..."
               cd $dir
@@ -48,7 +48,7 @@ jobs:
 
       - name: Run go vet
         run: |
-          for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022; do
+          for dir in services/payment-service services/account-service services/reconciliation-service services/auth-service services/notification-service services/ws-gateway services/analytics-service services/audit-service libs/iso20022; do
             if [ -d "$dir" ]; then
               echo "Vetting $dir..."
               cd $dir
@@ -60,7 +60,7 @@ jobs:
 
       - name: Run golangci-lint
         run: |
-          for dir in services/payment-service services/account-service services/reconciliation-service; do
+          for dir in services/payment-service services/account-service services/reconciliation-service services/auth-service services/notification-service services/ws-gateway services/analytics-service services/audit-service; do
             if [ -d "$dir" ]; then
               echo "Linting $dir..."
               cd $dir
@@ -82,7 +82,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          for dir in services/payment-service services/account-service services/reconciliation-service libs/iso20022; do
+          for dir in services/payment-service services/account-service services/reconciliation-service services/auth-service services/notification-service services/ws-gateway services/analytics-service services/audit-service libs/iso20022; do
             if [ -d "$dir" ]; then
               echo "Testing $dir..."
               cd $dir
@@ -113,7 +113,7 @@ jobs:
       - name: Build services
         run: |
           mkdir -p bin
-          for service in payment-service account-service reconciliation-service; do
+          for service in payment-service account-service reconciliation-service auth-service notification-service ws-gateway analytics-service audit-service; do
             if [ -d "services/$service" ]; then
               echo "Building $service..."
               cd services/$service
@@ -198,6 +198,26 @@ jobs:
       - name: Build reconciliation-service image
         run: |
           docker build -t nexus/reconciliation-service:${{ github.sha }} -f services/reconciliation-service/Dockerfile .
+
+      - name: Build auth-service image
+        run: |
+          docker build -t nexus/auth-service:${{ github.sha }} -f services/auth-service/Dockerfile .
+
+      - name: Build notification-service image
+        run: |
+          docker build -t nexus/notification-service:${{ github.sha }} -f services/notification-service/Dockerfile .
+
+      - name: Build ws-gateway image
+        run: |
+          docker build -t nexus/ws-gateway:${{ github.sha }} -f services/ws-gateway/Dockerfile .
+
+      - name: Build analytics-service image
+        run: |
+          docker build -t nexus/analytics-service:${{ github.sha }} -f services/analytics-service/Dockerfile .
+
+      - name: Build audit-service image
+        run: |
+          docker build -t nexus/audit-service:${{ github.sha }} -f services/audit-service/Dockerfile .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master

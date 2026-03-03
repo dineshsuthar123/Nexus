@@ -13,7 +13,7 @@ NC := \033[0m
 # Variables
 DOCKER_COMPOSE := docker compose -f infra/docker/docker-compose.yml
 KIND_CLUSTER := nexus-cluster
-GO_SERVICES := payment-service account-service reconciliation-service
+GO_SERVICES := payment-service account-service reconciliation-service auth-service notification-service ws-gateway analytics-service audit-service
 
 # Default target
 all: build

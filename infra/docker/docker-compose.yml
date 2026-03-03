@@ -804,7 +804,7 @@ services:
   frontend:
     build:
       context: ../../frontend
-      dockerfile: apps/web/Dockerfile
+      dockerfile: Dockerfile
     container_name: nexus-frontend
     hostname: frontend
     profiles:

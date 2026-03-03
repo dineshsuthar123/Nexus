@@ -36,7 +36,7 @@ paymentService:
     targetMemoryUtilizationPercentage: 80
   
   env:
-    DATABASE_URL: "postgres://root@cockroachdb:26257/nexus?sslmode=disable"
+    DATABASE_URL: "postgres://root@cockroachdb:26257/nexus?sslmode=verify-full"
     KAFKA_BROKERS: "kafka:9092"
     REDIS_URL: "redis-master:6379"
     WATCHMAN_URL: "http://watchman:8084"

@@ -90,8 +90,9 @@ func Load() (*Config, error) {
 
 	// MFA defaults
 	v.SetDefault("MFA_ISSUER", "NexusRTP")
-	// In production, use VAULT_ENABLED=true to source from HashiCorp Vault
-	v.SetDefault("MFA_ENCRYPTION_KEY", "a4f8e2c1b7d9063e5f1a2c3d4e5f6789")
+	// MFA_ENCRYPTION_KEY MUST be set via env var or Vault — no default.
+	// In production, use VAULT_ENABLED=true to source from HashiCorp Vault.
+	// For local dev, set MFA_ENCRYPTION_KEY in .env or docker-compose env.
 
 	// SMTP defaults (disabled by default — uses NoopSender that logs instead)
 	v.SetDefault("SMTP_ENABLED", false)

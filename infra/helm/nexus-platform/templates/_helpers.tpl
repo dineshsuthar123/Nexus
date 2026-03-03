@@ -116,7 +116,7 @@ Database URL
 */}}
 {{- define "nexus-platform.databaseUrl" -}}
 {{- if .Values.cockroachdb.enabled }}
-postgres://root@{{ .Release.Name }}-cockroachdb:26257/nexus?sslmode=disable
+postgres://root@{{ .Release.Name }}-cockroachdb:26257/nexus?sslmode=verify-full
 {{- else }}
 {{ .Values.externalDatabase.url }}
 {{- end }}
