@@ -135,13 +135,13 @@ test: ## Run all tests
 	done
 	@echo "$(GREEN)All tests passed.$(NC)"
 
-test-integration: ## Run integration tests
+test-integration: ## Run integration/e2e tests
 	@echo "$(GREEN)Running integration tests...$(NC)"
-	cd tests/integration && go test -v -tags=integration ./...
+	cd tests/e2e && go test -v -tags=integration ./...
 
-test-benchmark: ## Run performance benchmarks
-	@echo "$(GREEN)Running benchmarks...$(NC)"
-	cd tests/benchmark && go test -bench=. -benchmem ./...
+test-chaos: ## Run chaos tests
+	@echo "$(GREEN)Running chaos tests...$(NC)"
+	cd tests/chaos && go test -v -tags=chaos ./...
 
 test-coverage: ## Generate test coverage report
 	@echo "$(GREEN)Generating coverage report...$(NC)"
@@ -199,13 +199,15 @@ chaos-install: ## Install Chaos Mesh
 	kubectl apply -f https://mirrors.chaos-mesh.org/v2.6.0/install.yaml
 	@echo "$(GREEN)Chaos Mesh installed.$(NC)"
 
-chaos-pod-kill: ## Run pod failure experiment
+chaos-pod-kill: ## Run pod failure experiment (requires Chaos Mesh on K8s)
 	@echo "$(YELLOW)Running pod kill experiment...$(NC)"
-	kubectl apply -f infra/chaos/pod-kill.yaml
+	@echo "$(RED)Requires: kubectl apply -f with Chaos Mesh CRDs$(NC)"
+	@echo "$(YELLOW)For local chaos tests use: make test-chaos or bash chaos/run_all.sh$(NC)"
 
-chaos-network-delay: ## Run network delay experiment
+chaos-network-delay: ## Run network delay experiment (requires Chaos Mesh on K8s)
 	@echo "$(YELLOW)Running network delay experiment...$(NC)"
-	kubectl apply -f infra/chaos/network-delay.yaml
+	@echo "$(RED)Requires: kubectl apply -f with Chaos Mesh CRDs$(NC)"
+	@echo "$(YELLOW)For local chaos tests use: make test-chaos or bash chaos/run_all.sh$(NC)"
 
 # ============================================================================
 # Utilities
@@ -218,7 +220,6 @@ clean: ## Clean build artifacts
 	@for service in $(GO_SERVICES); do \
 		rm -f services/$$service/coverage.out; \
 	done
-	cd flink-jobs && ./gradlew clean || true
 	@echo "$(GREEN)Clean complete.$(NC)"
 
 deps: ## Install dependencies
@@ -228,15 +229,11 @@ deps: ## Install dependencies
 	done
 	@echo "$(GREEN)Dependencies installed.$(NC)"
 
-proto: ## Generate protobuf code
-	@echo "$(GREEN)Generating protobuf code...$(NC)"
-	protoc --go_out=. --go-grpc_out=. libs/proto/*.proto
-	@echo "$(GREEN)Protobuf code generated.$(NC)"
+proto: ## Generate protobuf code (placeholder — no .proto files yet)
+	@echo "$(YELLOW)No .proto files found in libs/proto/ — skipping$(NC)"
 
-docs: ## Generate documentation
-	@echo "$(GREEN)Generating documentation...$(NC)"
-	cd docs && mkdocs build
-	@echo "$(GREEN)Documentation generated.$(NC)"
+docs: ## Serve documentation (placeholder — mkdocs not yet configured)
+	@echo "$(YELLOW)mkdocs not configured — open docs/ manually$(NC)"
 
 # ============================================================================
 # Development Shortcuts

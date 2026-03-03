@@ -113,14 +113,14 @@ func (m *mockTransactionStore) ListAll(ctx context.Context, limit, offset int) (
 }
 
 type mockAccountStore struct {
-	getByIDFn        func(ctx context.Context, id uuid.UUID) (*db.Account, error)
-	getForUpdateFn   func(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*db.Account, error)
-	getIDByIBANFn    func(ctx context.Context, iban string) (uuid.UUID, error)
-	reserveFundsFn   func(ctx context.Context, tx pgx.Tx, id uuid.UUID, amount decimal.Decimal) error
-	releaseFundsFn   func(ctx context.Context, tx pgx.Tx, id uuid.UUID, amount decimal.Decimal) error
-	debitAccountFn   func(ctx context.Context, tx pgx.Tx, id uuid.UUID, amount decimal.Decimal) (decimal.Decimal, error)
-	creditAccountFn  func(ctx context.Context, tx pgx.Tx, id uuid.UUID, amount decimal.Decimal) (decimal.Decimal, error)
-	addPendCreditFn  func(ctx context.Context, tx pgx.Tx, accountID, transactionID uuid.UUID, amount decimal.Decimal, currency string) error
+	getByIDFn       func(ctx context.Context, id uuid.UUID) (*db.Account, error)
+	getForUpdateFn  func(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*db.Account, error)
+	getIDByIBANFn   func(ctx context.Context, iban string) (uuid.UUID, error)
+	reserveFundsFn  func(ctx context.Context, tx pgx.Tx, id uuid.UUID, amount decimal.Decimal) error
+	releaseFundsFn  func(ctx context.Context, tx pgx.Tx, id uuid.UUID, amount decimal.Decimal) error
+	debitAccountFn  func(ctx context.Context, tx pgx.Tx, id uuid.UUID, amount decimal.Decimal) (decimal.Decimal, error)
+	creditAccountFn func(ctx context.Context, tx pgx.Tx, id uuid.UUID, amount decimal.Decimal) (decimal.Decimal, error)
+	addPendCreditFn func(ctx context.Context, tx pgx.Tx, accountID, transactionID uuid.UUID, amount decimal.Decimal, currency string) error
 }
 
 func (m *mockAccountStore) GetByID(ctx context.Context, id uuid.UUID) (*db.Account, error) {
@@ -193,8 +193,8 @@ func (m *mockAccountStore) AddPendingCredit(ctx context.Context, tx pgx.Tx, acco
 }
 
 type mockOutboxStore struct {
-	insertFn   func(ctx context.Context, tx pgx.Tx, event *db.OutboxEvent) error
-	lastEvent  *db.OutboxEvent
+	insertFn    func(ctx context.Context, tx pgx.Tx, event *db.OutboxEvent) error
+	lastEvent   *db.OutboxEvent
 	insertCalls int
 }
 

@@ -21,16 +21,16 @@ import (
 // ============================================================================
 
 type mockUserStore struct {
-	createFn            func(ctx context.Context, user *models.User) error
-	getByIDFn           func(ctx context.Context, id uuid.UUID) (*models.User, error)
-	getByEmailFn        func(ctx context.Context, email string) (*models.User, error)
-	updateLastLoginFn   func(ctx context.Context, userID uuid.UUID) error
-	updateEmailVerFn    func(ctx context.Context, userID uuid.UUID) error
-	updatePasswordFn    func(ctx context.Context, userID uuid.UUID, hash string) error
-	updateMFAEnabledFn  func(ctx context.Context, userID uuid.UUID, enabled bool) error
-	updateProfileFn     func(ctx context.Context, userID uuid.UUID, fn, ln, org string) (*models.User, error)
-	getPasswordHashFn   func(ctx context.Context, userID uuid.UUID) (string, error)
-	createCalls         int
+	createFn           func(ctx context.Context, user *models.User) error
+	getByIDFn          func(ctx context.Context, id uuid.UUID) (*models.User, error)
+	getByEmailFn       func(ctx context.Context, email string) (*models.User, error)
+	updateLastLoginFn  func(ctx context.Context, userID uuid.UUID) error
+	updateEmailVerFn   func(ctx context.Context, userID uuid.UUID) error
+	updatePasswordFn   func(ctx context.Context, userID uuid.UUID, hash string) error
+	updateMFAEnabledFn func(ctx context.Context, userID uuid.UUID, enabled bool) error
+	updateProfileFn    func(ctx context.Context, userID uuid.UUID, fn, ln, org string) (*models.User, error)
+	getPasswordHashFn  func(ctx context.Context, userID uuid.UUID) (string, error)
+	createCalls        int
 }
 
 func (m *mockUserStore) Create(ctx context.Context, user *models.User) error {
@@ -337,15 +337,15 @@ func (m *mockEmailSender) SendPasswordResetEmail(toEmail, token string) error {
 func newTestAuthService(opts ...func(*authTestOpts)) *AuthService {
 	logger, _ := zap.NewDevelopment()
 	o := &authTestOpts{
-		users:    &mockUserStore{},
-		refresh:  &mockRefreshTokenStore{},
-		mfa:      &mockMFAStore{},
-		audit:    &mockAuditStore{},
-		reset:    &mockPasswordResetStore{},
-		apiKeys:  &mockAPIKeyStore{},
-		tokens:   &mockTokenProvider{},
-		mfaProv:  &mockMFAProvider{},
-		email:    &mockEmailSender{},
+		users:   &mockUserStore{},
+		refresh: &mockRefreshTokenStore{},
+		mfa:     &mockMFAStore{},
+		audit:   &mockAuditStore{},
+		reset:   &mockPasswordResetStore{},
+		apiKeys: &mockAPIKeyStore{},
+		tokens:  &mockTokenProvider{},
+		mfaProv: &mockMFAProvider{},
+		email:   &mockEmailSender{},
 	}
 	for _, fn := range opts {
 		fn(o)
