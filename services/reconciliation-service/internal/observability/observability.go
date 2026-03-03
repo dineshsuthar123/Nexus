@@ -10,11 +10,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -70,10 +70,13 @@ func Initialize(serviceName, environment, jaegerEndpoint string) (*zap.Logger, f
 		return nil, nil, err
 	}
 
-	// Initialize tracer
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(jaegerEndpoint)))
+	// Initialize tracer — OTLP HTTP exporter (Jaeger accepts OTLP on port 4318)
+	exp, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(jaegerEndpoint),
+		otlptracehttp.WithInsecure(),
+	)
 	if err != nil {
-		logger.Warn("Failed to create Jaeger exporter", zap.Error(err))
+		logger.Warn("Failed to create OTLP exporter", zap.Error(err))
 	}
 
 	tp := sdktrace.NewTracerProvider(
@@ -81,7 +84,7 @@ func Initialize(serviceName, environment, jaegerEndpoint string) (*zap.Logger, f
 		sdktrace.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceName(serviceName),
-			semconv.DeploymentEnvironment(environment),
+			attribute.String("deployment.environment", environment),
 		)),
 	)
 

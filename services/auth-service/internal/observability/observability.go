@@ -8,11 +8,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -71,9 +71,12 @@ func NewLogger(level string) (*zap.Logger, error) {
 	return cfg.Build()
 }
 
-// InitTracer initializes OpenTelemetry tracing.
-func InitTracer(jaegerEndpoint, serviceName string) (func(context.Context) error, error) {
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(jaegerEndpoint)))
+// InitTracer initializes OpenTelemetry tracing with OTLP HTTP exporter.
+func InitTracer(otlpEndpoint, serviceName string) (func(context.Context) error, error) {
+	exp, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(otlpEndpoint),
+		otlptracehttp.WithInsecure(),
+	)
 	if err != nil {
 		return nil, err
 	}

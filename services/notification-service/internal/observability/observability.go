@@ -10,7 +10,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
@@ -82,11 +83,14 @@ func NewLogger(level string) (*zap.Logger, error) {
 	return config.Build()
 }
 
-// InitTracer initializes OpenTelemetry with Jaeger export.
-func InitTracer(jaegerEndpoint, serviceName string) (func(context.Context) error, error) {
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(jaegerEndpoint)))
+// InitTracer initializes OpenTelemetry with OTLP HTTP exporter.
+func InitTracer(otlpEndpoint, serviceName string) (func(context.Context) error, error) {
+	exp, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(otlpEndpoint),
+		otlptracehttp.WithInsecure(),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Jaeger exporter: %w", err)
+		return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
 	tp := sdktrace.NewTracerProvider(
@@ -97,6 +101,10 @@ func InitTracer(jaegerEndpoint, serviceName string) (func(context.Context) error
 		)),
 	)
 	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 
 	return tp.Shutdown, nil
 }
