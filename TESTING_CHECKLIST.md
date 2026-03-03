@@ -5,7 +5,7 @@
 ### 1.1 Prerequisites
 Ensure you have:
 - Docker & Docker Compose installed (`docker --version` && `docker compose --version`)
-- Go 1.21+ (`go version`)
+- Go 1.22+ (`go version`)
 - Make installed (`make --version`)
 - Git configured
 - ~8GB RAM available (for 3 CockroachDB nodes + Kafka + services)

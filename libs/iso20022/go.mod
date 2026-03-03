@@ -1,6 +1,6 @@
 module github.com/nexus-rtp/iso20022
 
-go 1.21
+go 1.22
 
 require (
 	github.com/google/uuid v1.5.0
