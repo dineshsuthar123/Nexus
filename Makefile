@@ -245,6 +245,11 @@ docs: ## Generate documentation
 dev: infra-up db-migrate ## Start development environment
 	@echo "$(GREEN)Development environment ready!$(NC)"
 
+release-manifest: ## Compute SHA-256 hashes for release manifest
+	@echo "$(GREEN)Computing release manifest hashes...$(NC)"
+	bash scripts/compute-release-hashes.sh
+	@echo "$(GREEN)Release manifest updated.$(NC)"
+
 run-payment: ## Run payment service locally
 	cd services/payment-service && go run ./cmd/server
 
