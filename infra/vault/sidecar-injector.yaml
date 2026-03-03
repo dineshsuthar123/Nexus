@@ -1,0 +1,140 @@
+# =============================================================================
+# Vault Agent Sidecar Injector — Kubernetes Annotations Reference
+# =============================================================================
+#
+# Add these annotations to service Deployments to inject Vault Agent sidecars
+# that automatically fetch and renew secrets.
+#
+# Usage: Add annotations to the pod template in each service's Deployment.
+#
+# Example for payment-service:
+#
+#   spec:
+#     template:
+#       metadata:
+#         annotations:
+#           vault.hashicorp.com/agent-inject: "true"
+#           vault.hashicorp.com/role: "payment-service"
+#           vault.hashicorp.com/agent-inject-secret-db: "nexus/kv/data/shared/database"
+#           vault.hashicorp.com/agent-inject-template-db: |
+#             {{- with secret "nexus/kv/data/shared/database" -}}
+#             DB_HOST={{ .Data.data.host }}
+#             DB_PORT={{ .Data.data.port }}
+#             DB_USER={{ .Data.data.username }}
+#             DB_PASS={{ .Data.data.password }}
+#             DB_NAME={{ .Data.data.database }}
+#             {{- end }}
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: nexus
+spec:
+  template:
+    metadata:
+      annotations:
+        # Enable Vault agent sidecar injection
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/role: "payment-service"
+
+        # Database credentials
+        vault.hashicorp.com/agent-inject-secret-db.env: "nexus/kv/data/shared/database"
+        vault.hashicorp.com/agent-inject-template-db.env: |
+          {{- with secret "nexus/kv/data/shared/database" -}}
+          DB_HOST={{ .Data.data.host }}
+          DB_PORT={{ .Data.data.port }}
+          DB_USER={{ .Data.data.username }}
+          DB_PASS={{ .Data.data.password }}
+          DB_NAME={{ .Data.data.database }}
+          {{- end }}
+
+        # Kafka credentials
+        vault.hashicorp.com/agent-inject-secret-kafka.env: "nexus/kv/data/shared/kafka"
+        vault.hashicorp.com/agent-inject-template-kafka.env: |
+          {{- with secret "nexus/kv/data/shared/kafka" -}}
+          KAFKA_BOOTSTRAP_SERVERS={{ .Data.data.bootstrap_servers }}
+          SCHEMA_REGISTRY_URL={{ .Data.data.schema_registry }}
+          {{- end }}
+
+        # Redis credentials
+        vault.hashicorp.com/agent-inject-secret-redis.env: "nexus/kv/data/shared/redis"
+        vault.hashicorp.com/agent-inject-template-redis.env: |
+          {{- with secret "nexus/kv/data/shared/redis" -}}
+          REDIS_HOST={{ .Data.data.host }}
+          REDIS_PORT={{ .Data.data.port }}
+          REDIS_PASSWORD={{ .Data.data.password }}
+          {{- end }}
+
+        # Service-specific secrets
+        vault.hashicorp.com/agent-inject-secret-config.env: "nexus/kv/data/payment-service/config"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "nexus/kv/data/payment-service/config" -}}
+          PAYMENT_ENCRYPTION_KEY={{ .Data.data.encryption_key }}
+          SANCTIONS_API_KEY={{ .Data.data.sanctions_api_key }}
+          {{- end }}
+
+---
+# Auth service — needs JWT signing keys from transit engine
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: nexus
+spec:
+  template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/role: "auth-service"
+
+        vault.hashicorp.com/agent-inject-secret-db.env: "nexus/kv/data/shared/database"
+        vault.hashicorp.com/agent-inject-template-db.env: |
+          {{- with secret "nexus/kv/data/shared/database" -}}
+          DB_HOST={{ .Data.data.host }}
+          DB_PORT={{ .Data.data.port }}
+          DB_USER={{ .Data.data.username }}
+          DB_PASS={{ .Data.data.password }}
+          DB_NAME={{ .Data.data.database }}
+          {{- end }}
+
+        vault.hashicorp.com/agent-inject-secret-auth.env: "nexus/kv/data/auth-service/config"
+        vault.hashicorp.com/agent-inject-template-auth.env: |
+          {{- with secret "nexus/kv/data/auth-service/config" -}}
+          JWT_ACCESS_EXPIRY={{ .Data.data.access_token_expiry }}
+          JWT_REFRESH_EXPIRY={{ .Data.data.refresh_token_expiry }}
+          MFA_ISSUER={{ .Data.data.mfa_issuer }}
+          {{- end }}
+
+---
+# Notification service — needs SMTP credentials
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: nexus
+spec:
+  template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/role: "notification-service"
+
+        vault.hashicorp.com/agent-inject-secret-smtp.env: "nexus/kv/data/shared/smtp-credentials"
+        vault.hashicorp.com/agent-inject-template-smtp.env: |
+          {{- with secret "nexus/kv/data/shared/smtp-credentials" -}}
+          SMTP_HOST={{ .Data.data.host }}
+          SMTP_PORT={{ .Data.data.port }}
+          SMTP_USER={{ .Data.data.username }}
+          SMTP_PASS={{ .Data.data.password }}
+          {{- end }}
+
+        vault.hashicorp.com/agent-inject-secret-kafka.env: "nexus/kv/data/shared/kafka"
+        vault.hashicorp.com/agent-inject-template-kafka.env: |
+          {{- with secret "nexus/kv/data/shared/kafka" -}}
+          KAFKA_BOOTSTRAP_SERVERS={{ .Data.data.bootstrap_servers }}
+          {{- end }}

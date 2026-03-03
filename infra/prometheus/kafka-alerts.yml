@@ -1,0 +1,119 @@
+# =============================================================================
+# Kafka Alert Rules for Nexus RTP Platform
+# Consumes metrics from kafka-exporter (danielqsj/kafka-exporter)
+# =============================================================================
+
+groups:
+  - name: kafka.broker
+    rules:
+      - alert: KafkaBrokerDown
+        expr: count(kafka_brokers) < 3
+        for: 1m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka broker count below minimum"
+          description: "Expected 3 brokers, currently {{ $value }}. This may cause data loss or unavailability."
+          runbook_url: "https://runbooks.nexus.internal/kafka/broker-down"
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_topic_partition_under_replicated_partition > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka under-replicated partitions detected"
+          description: "Topic {{ $labels.topic }} partition {{ $labels.partition }} is under-replicated."
+          runbook_url: "https://runbooks.nexus.internal/kafka/under-replicated"
+
+  - name: kafka.consumer
+    rules:
+      - alert: KafkaConsumerGroupLagHigh
+        expr: kafka_consumergroup_lag_sum{group=~"nexus-.*"} > 10000
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka consumer group lag is high"
+          description: "Consumer group {{ $labels.group }} has a lag of {{ $value }} on topic {{ $labels.topic }}."
+          runbook_url: "https://runbooks.nexus.internal/kafka/consumer-lag"
+
+      - alert: KafkaConsumerGroupLagCritical
+        expr: kafka_consumergroup_lag_sum{group=~"nexus-.*"} > 100000
+        for: 2m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka consumer group lag is critically high"
+          description: "Consumer group {{ $labels.group }} lag is {{ $value }} — consumers may be down or overwhelmed."
+          runbook_url: "https://runbooks.nexus.internal/kafka/consumer-lag-critical"
+
+      - alert: KafkaFraudDetectionLag
+        expr: kafka_consumergroup_lag_sum{group="nexus-fraud-detection"} > 5000
+        for: 3m
+        labels:
+          severity: critical
+          service: fraud-detection
+        annotations:
+          summary: "Fraud detection pipeline is falling behind"
+          description: "Fraud detection consumer lag is {{ $value }}. Payments may not be screened in real-time."
+          runbook_url: "https://runbooks.nexus.internal/kafka/fraud-detection-lag"
+
+      - alert: KafkaNotificationConsumerLag
+        expr: kafka_consumergroup_lag_sum{group="nexus-notification-service"} > 50000
+        for: 5m
+        labels:
+          severity: warning
+          service: notification-service
+        annotations:
+          summary: "Notification service consumer lag is high"
+          description: "Notification consumer lag is {{ $value }}. Users may not receive timely notifications."
+
+  - name: kafka.topics
+    rules:
+      - alert: KafkaTopicMessagesPerSecHigh
+        expr: rate(kafka_topic_partition_current_offset{topic="nexus.payments.initiated"}[5m]) > 500
+        for: 2m
+        labels:
+          severity: info
+          service: kafka
+        annotations:
+          summary: "High payment message rate"
+          description: "Payment topic is receiving {{ $value | humanize }} messages/sec which is above normal."
+
+      - alert: KafkaTopicSizeExceeded
+        expr: kafka_topic_partition_current_offset{topic=~"nexus\\..*"} - kafka_topic_partition_oldest_offset{topic=~"nexus\\..*"} > 10000000
+        for: 10m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka topic retention growing large"
+          description: "Topic {{ $labels.topic }} partition {{ $labels.partition }} has {{ $value | humanize }} unconsumed messages."
+
+  - name: kafka.fraud-detection
+    rules:
+      - alert: FraudAlertRateSpike
+        expr: rate(kafka_topic_partition_current_offset{topic="nexus.fraud.alerts"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: fraud-detection
+        annotations:
+          summary: "Elevated fraud alert rate"
+          description: "Fraud alerts are being generated at {{ $value | humanize }}/sec which is higher than normal."
+
+      - alert: CriticalFraudAlertGenerated
+        expr: increase(kafka_topic_partition_current_offset{topic="nexus.fraud.alerts.critical"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: fraud-detection
+        annotations:
+          summary: "Critical fraud alert generated"
+          description: "A critical severity fraud alert has been generated. Immediate investigation required."
+          runbook_url: "https://runbooks.nexus.internal/fraud/critical-alert"

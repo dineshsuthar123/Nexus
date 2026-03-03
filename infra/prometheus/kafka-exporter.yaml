@@ -1,0 +1,126 @@
+# =============================================================================
+# Kafka Exporter for Prometheus
+# Exposes Kafka broker, topic, and consumer group metrics
+# =============================================================================
+#
+# Deploy: docker run -d --name kafka-exporter \
+#   -p 9308:9308 \
+#   danielqsj/kafka-exporter:latest \
+#   --kafka.server=kafka:9092
+#
+# Or use this Kubernetes deployment below.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-exporter
+  namespace: nexus
+  labels:
+    app: kafka-exporter
+    component: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-exporter
+  template:
+    metadata:
+      labels:
+        app: kafka-exporter
+        component: monitoring
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9308"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: kafka-exporter
+          image: danielqsj/kafka-exporter:v1.7.0
+          args:
+            - --kafka.server=kafka-0.kafka-headless.nexus.svc.cluster.local:9092
+            - --kafka.server=kafka-1.kafka-headless.nexus.svc.cluster.local:9092
+            - --kafka.server=kafka-2.kafka-headless.nexus.svc.cluster.local:9092
+            - --topic.filter=nexus\..*
+            - --group.filter=nexus-.*
+            - --log.enable-sarama=false
+            - --web.listen-address=:9308
+            - --web.telemetry-path=/metrics
+            # mTLS to Kafka (when enabled)
+            # - --tls.enabled
+            # - --tls.ca-file=/etc/kafka-certs/ca.pem
+            # - --tls.cert-file=/etc/kafka-certs/client.pem
+            # - --tls.key-file=/etc/kafka-certs/client-key.pem
+          ports:
+            - containerPort: 9308
+              name: metrics
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9308
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9308
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # volumeMounts:
+          #   - name: kafka-certs
+          #     mountPath: /etc/kafka-certs
+          #     readOnly: true
+      # volumes:
+      #   - name: kafka-certs
+      #     secret:
+      #       secretName: kafka-client-tls
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-exporter
+  namespace: nexus
+  labels:
+    app: kafka-exporter
+    component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9308
+      targetPort: 9308
+      protocol: TCP
+      name: metrics
+  selector:
+    app: kafka-exporter
+
+---
+# ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kafka-exporter
+  namespace: nexus
+  labels:
+    app: kafka-exporter
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: kafka-exporter
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
+      scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+      - nexus

@@ -13,8 +13,6 @@ import {
   BarChart3,
   Shield,
   FileText,
-  Bell,
-  HelpCircle,
   Menu,
   X,
   ChevronDown,
@@ -28,13 +26,11 @@ import {
   Search,
   Building2,
   ChevronRight,
-  Wifi,
   WifiOff,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useSession, signOut } from 'next-auth/react';
 import {
-  Button,
   Avatar,
   AvatarImage,
   AvatarFallback,
@@ -44,7 +40,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Badge,
+  SimpleBreadcrumb,
+  type BreadcrumbItemData,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -52,6 +49,10 @@ import {
   cn,
 } from '@nexus/ui';
 import { useWebSocketContext } from '../websocket-provider';
+import { CommandPalette } from '@/components/CommandPalette';
+import { Toaster } from '@/components/Toaster';
+import { KeyboardShortcuts, useKeyboardShortcuts } from '@/components/KeyboardShortcuts';
+import { NotificationPopover } from '@/components/NotificationPopover';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -89,17 +90,32 @@ export default function DashboardLayout({
     : user?.email?.[0]?.toUpperCase() ?? 'U';
   const userRole = (user as any)?.role ?? 'Administrator';
 
+  // Notification center state
+  const [notificationsOpen, setNotificationsOpen] = React.useState(false);
+
+  // Keyboard shortcuts dialog state
+  const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
+
+  // Register global keyboard shortcuts
+  useKeyboardShortcuts({
+    onToggleSidebar: () => setCollapsed((c) => !c),
+    onToggleTheme: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
+    onToggleNotifications: () => setNotificationsOpen((o) => !o),
+    onShowShortcuts: () => setShortcutsOpen(true),
+  });
+
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
   // Breadcrumb from pathname
-  const breadcrumbs = React.useMemo(() => {
+  const breadcrumbItems: BreadcrumbItemData[] = React.useMemo(() => {
     const segments = pathname.split('/').filter(Boolean);
     return segments.map((segment, index) => ({
-      name: segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' '),
-      href: '/' + segments.slice(0, index + 1).join('/'),
-      current: index === segments.length - 1,
+      label: segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' '),
+      href: index < segments.length - 1
+        ? '/' + segments.slice(0, index + 1).join('/')
+        : undefined,
     }));
   }, [pathname]);
 
@@ -185,10 +201,13 @@ export default function DashboardLayout({
               </div>
             )}
 
-            {/* Search (expanded mode only) */}
+            {/* Search (expanded mode only) — opens Command Palette */}
             {!collapsed && (
               <div className="px-3 pt-3">
-                <button className="flex w-full items-center gap-2 rounded-lg border border-neutral-200/60 bg-neutral-50/50 px-3 py-2 text-sm text-neutral-400 transition-colors hover:bg-neutral-100 dark:border-neutral-700/40 dark:bg-neutral-800/30 dark:hover:bg-neutral-800/60">
+                <button
+                  onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+                  className="flex w-full items-center gap-2 rounded-lg border border-neutral-200/60 bg-neutral-50/50 px-3 py-2 text-sm text-neutral-400 transition-colors hover:bg-neutral-100 dark:border-neutral-700/40 dark:bg-neutral-800/30 dark:hover:bg-neutral-800/60"
+                >
                   <Search className="h-3.5 w-3.5" />
                   <span>Search...</span>
                   <kbd className="ml-auto rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-400">
@@ -370,25 +389,11 @@ export default function DashboardLayout({
               </button>
 
               {/* Breadcrumb */}
-              <nav className="hidden sm:flex items-center gap-1.5 text-sm" aria-label="Breadcrumb">
-                {breadcrumbs.map((crumb, index) => (
-                  <React.Fragment key={crumb.href}>
-                    {index > 0 && <span className="text-neutral-300 dark:text-neutral-600">/</span>}
-                    {crumb.current ? (
-                      <span className="font-medium text-neutral-900 dark:text-neutral-100">
-                        {crumb.name}
-                      </span>
-                    ) : (
-                      <Link
-                        href={crumb.href}
-                        className="text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                      >
-                        {crumb.name}
-                      </Link>
-                    )}
-                  </React.Fragment>
-                ))}
-              </nav>
+              <SimpleBreadcrumb
+                items={breadcrumbItems}
+                homeIcon
+                className="hidden sm:block"
+              />
             </div>
 
             <div className="flex items-center gap-2">
@@ -432,16 +437,10 @@ export default function DashboardLayout({
               )}
 
               {/* Notifications */}
-              <button
-                type="button"
-                className="relative rounded-lg p-2 text-neutral-500 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              >
-                <Bell className="h-4 w-4" />
-                <span className="absolute right-1.5 top-1.5 flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-danger-500" />
-                </span>
-              </button>
+              <NotificationPopover
+                open={notificationsOpen}
+                onOpenChange={setNotificationsOpen}
+              />
 
               {/* User menu (header - compact) */}
               <DropdownMenu>
@@ -497,6 +496,18 @@ export default function DashboardLayout({
           </motion.main>
         </div>
       </div>
+
+      {/* Command Palette (Cmd+K) */}
+      <CommandPalette
+        onShowShortcuts={() => setShortcutsOpen(true)}
+        onToggleNotifications={() => setNotificationsOpen((o) => !o)}
+      />
+
+      {/* Keyboard Shortcuts Help */}
+      <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+
+      {/* Toast Notifications */}
+      <Toaster />
     </TooltipProvider>
   );
 }

@@ -1,0 +1,96 @@
+# =============================================================================
+# Kubernetes NetworkPolicy — Enforce inter-service mTLS
+# Only allows traffic between Nexus services within the namespace.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-inter-service-mtls
+  namespace: nexus
+  labels:
+    app.kubernetes.io/part-of: nexus-rtp
+    security: mtls
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: nexus-rtp
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from other Nexus services
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: nexus-rtp
+      ports:
+        - protocol: TCP
+          port: 8443  # mTLS application port
+        - protocol: TCP
+          port: 9443  # mTLS gRPC port
+    # Allow traffic from ingress controller (Kong)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kong
+      ports:
+        - protocol: TCP
+          port: 8443
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090  # Metrics port
+  egress:
+    # Allow traffic to other Nexus services
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: nexus-rtp
+      ports:
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 9443
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Kafka, CockroachDB, Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - protocol: TCP
+          port: 9093  # Kafka TLS port
+    - to:
+        - podSelector:
+            matchLabels:
+              app: cockroachdb
+      ports:
+        - protocol: TCP
+          port: 26257
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6380  # Redis TLS port
+    # Allow Vault
+    - to:
+        - podSelector:
+            matchLabels:
+              app: vault
+      ports:
+        - protocol: TCP
+          port: 8200
