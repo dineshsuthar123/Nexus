@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/nexus-rtp/payment-service/internal/db"
-	"github.com/nexus-rtp/payment-service/internal/kafka"
 	"github.com/nexus-rtp/payment-service/internal/observability"
 	"github.com/nexus-rtp/payment-service/internal/sanctions"
 	"github.com/shopspring/decimal"
@@ -22,23 +21,23 @@ import (
 // PaymentService handles payment processing
 type PaymentService struct {
 	logger          *zap.Logger
-	pool            *db.Pool
-	accountRepo     *db.AccountRepository
-	transactionRepo *db.TransactionRepository
-	outboxRepo      *db.OutboxRepository
-	sanctionsClient *sanctions.Client
-	kafkaProducer   *kafka.Producer
+	pool            TxManager
+	accountRepo     AccountStore
+	transactionRepo TransactionStore
+	outboxRepo      OutboxStore
+	sanctionsClient SanctionsScreener
+	kafkaProducer   EventPublisher
 }
 
 // NewPaymentService creates a new payment service
 func NewPaymentService(
 	logger *zap.Logger,
-	pool *db.Pool,
-	accountRepo *db.AccountRepository,
-	transactionRepo *db.TransactionRepository,
-	outboxRepo *db.OutboxRepository,
-	sanctionsClient *sanctions.Client,
-	kafkaProducer *kafka.Producer,
+	pool TxManager,
+	accountRepo AccountStore,
+	transactionRepo TransactionStore,
+	outboxRepo OutboxStore,
+	sanctionsClient SanctionsScreener,
+	kafkaProducer EventPublisher,
 ) *PaymentService {
 	return &PaymentService{
 		logger:          logger,
@@ -85,22 +84,24 @@ type CreatePaymentResponse struct {
 
 // PaymentStatusResponse represents a payment status response (pacs.002)
 type PaymentStatusResponse struct {
-	TransactionID   string    `json:"transactionId"`
-	UETR            string    `json:"uetr"`
-	MessageID       string    `json:"messageId"`
-	Status          string    `json:"status"`
-	StatusReason    string    `json:"statusReason,omitempty"`
-	SanctionsStatus string    `json:"sanctionsStatus"`
-	FraudStatus     string    `json:"fraudStatus"`
-	Amount          string    `json:"amount"`
-	Currency        string    `json:"currency"`
-	DebtorName      string    `json:"debtorName"`
-	CreditorName    string    `json:"creditorName"`
-	BookingDate     string    `json:"bookingDate"`
-	ValueDate       string    `json:"valueDate,omitempty"`
-	SettlementDate  string    `json:"settlementDate,omitempty"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	TransactionID     string    `json:"transactionId"`
+	UETR              string    `json:"uetr"`
+	MessageID         string    `json:"messageId"`
+	Status            string    `json:"status"`
+	StatusReason      string    `json:"statusReason,omitempty"`
+	SanctionsStatus   string    `json:"sanctionsStatus"`
+	FraudStatus       string    `json:"fraudStatus"`
+	Amount            string    `json:"amount"`
+	Currency          string    `json:"currency"`
+	DebtorName        string    `json:"debtorName"`
+	CreditorName      string    `json:"creditorName"`
+	DebtorAccountId   string    `json:"debtorAccountId,omitempty"`
+	CreditorAccountId string    `json:"creditorAccountId,omitempty"`
+	BookingDate       string    `json:"bookingDate"`
+	ValueDate         string    `json:"valueDate,omitempty"`
+	SettlementDate    string    `json:"settlementDate,omitempty"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 // CreatePayment processes a new payment (pacs.008 flow)
@@ -373,6 +374,87 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 	}, nil
 }
 
+// ListPaymentsPagination matches the frontend PaginatedResponse.pagination shape
+type ListPaymentsPagination struct {
+	Page        int  `json:"page"`
+	PageSize    int  `json:"pageSize"`
+	TotalItems  int  `json:"totalItems"`
+	TotalPages  int  `json:"totalPages"`
+	HasNext     bool `json:"hasNext"`
+	HasPrevious bool `json:"hasPrevious"`
+}
+
+// ListPaymentsResponse contains paginated payment data matching frontend PaginatedResponse<T>
+type ListPaymentsResponse struct {
+	Data       []PaymentStatusResponse `json:"data"`
+	Pagination ListPaymentsPagination  `json:"pagination"`
+}
+
+// ListPayments returns a paginated list of payments
+func (s *PaymentService) ListPayments(ctx context.Context, page, pageSize int) (*ListPaymentsResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	transactions, total, err := s.transactionRepo.ListAll(ctx, pageSize, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list payments: %w", err)
+	}
+
+	items := make([]PaymentStatusResponse, 0, len(transactions))
+	for _, t := range transactions {
+		valueDate := ""
+		if t.ValueDate != nil {
+			valueDate = t.ValueDate.Format("2006-01-02")
+		}
+		settlementDate := ""
+		if t.SettlementDate != nil {
+			settlementDate = t.SettlementDate.Format("2006-01-02")
+		}
+		items = append(items, PaymentStatusResponse{
+			TransactionID:     t.ID.String(),
+			UETR:              t.UETR.String(),
+			MessageID:         t.MessageID,
+			Status:            string(t.Status),
+			StatusReason:      t.StatusReason,
+			SanctionsStatus:   t.SanctionsStatus,
+			FraudStatus:       t.FraudStatus,
+			Amount:            t.Amount.String(),
+			Currency:          t.Currency,
+			DebtorName:        t.DebtorName,
+			CreditorName:      t.CreditorName,
+			DebtorAccountId:   t.DebtorAccountID.String(),
+			CreditorAccountId: t.CreditorAccountID.String(),
+			BookingDate:       t.BookingDate.Format("2006-01-02"),
+			ValueDate:         valueDate,
+			SettlementDate:    settlementDate,
+			CreatedAt:         t.CreatedAt,
+			UpdatedAt:         t.UpdatedAt,
+		})
+	}
+
+	totalPages := total / pageSize
+	if total%pageSize > 0 {
+		totalPages++
+	}
+
+	return &ListPaymentsResponse{
+		Data: items,
+		Pagination: ListPaymentsPagination{
+			Page:        page,
+			PageSize:    pageSize,
+			TotalItems:  total,
+			TotalPages:  totalPages,
+			HasNext:     page < totalPages,
+			HasPrevious: page > 1,
+		},
+	}, nil
+}
+
 // GetPaymentStatus retrieves the status of a payment by UETR
 func (s *PaymentService) GetPaymentStatus(ctx context.Context, uetrStr string) (*PaymentStatusResponse, error) {
 	ctx, span := observability.StartSpan(ctx, "PaymentService.GetPaymentStatus")
@@ -392,20 +474,22 @@ func (s *PaymentService) GetPaymentStatus(ctx context.Context, uetrStr string) (
 	}
 
 	response := &PaymentStatusResponse{
-		TransactionID:   transaction.ID.String(),
-		UETR:            transaction.UETR.String(),
-		MessageID:       transaction.MessageID,
-		Status:          transaction.Status,
-		StatusReason:    transaction.StatusReason,
-		SanctionsStatus: transaction.SanctionsStatus,
-		FraudStatus:     transaction.FraudStatus,
-		Amount:          transaction.Amount.String(),
-		Currency:        transaction.Currency,
-		DebtorName:      transaction.DebtorName,
-		CreditorName:    transaction.CreditorName,
-		BookingDate:     transaction.BookingDate.Format("2006-01-02"),
-		CreatedAt:       transaction.CreatedAt,
-		UpdatedAt:       transaction.UpdatedAt,
+		TransactionID:     transaction.ID.String(),
+		UETR:              transaction.UETR.String(),
+		MessageID:         transaction.MessageID,
+		Status:            transaction.Status,
+		StatusReason:      transaction.StatusReason,
+		SanctionsStatus:   transaction.SanctionsStatus,
+		FraudStatus:       transaction.FraudStatus,
+		Amount:            transaction.Amount.String(),
+		Currency:          transaction.Currency,
+		DebtorName:        transaction.DebtorName,
+		CreditorName:      transaction.CreditorName,
+		DebtorAccountId:   transaction.DebtorAccountID.String(),
+		CreditorAccountId: transaction.CreditorAccountID.String(),
+		BookingDate:       transaction.BookingDate.Format("2006-01-02"),
+		CreatedAt:         transaction.CreatedAt,
+		UpdatedAt:         transaction.UpdatedAt,
 	}
 
 	if transaction.ValueDate != nil {
@@ -436,7 +520,7 @@ func (s *PaymentService) SettlePayment(ctx context.Context, uetrStr string) erro
 		}
 
 		// Validate status
-		if transaction.Status != "CLEARED" && transaction.Status != "PENDING" {
+		if transaction.Status != "CLEARED" && transaction.Status != "PENDING" && transaction.Status != "SANCTIONED" {
 			return fmt.Errorf("transaction cannot be settled in status: %s", transaction.Status)
 		}
 
@@ -507,10 +591,136 @@ func (s *PaymentService) SettlePayment(ctx context.Context, uetrStr string) erro
 	})
 }
 
+// ReturnPaymentResponse represents the result of a payment return.
+type ReturnPaymentResponse struct {
+	UETR        string    `json:"uetr"`
+	ReturnID    string    `json:"returnId"`
+	Status      string    `json:"status"`
+	ReasonCode  string    `json:"reasonCode"`
+	InitiatedAt time.Time `json:"initiatedAt"`
+}
+
+// ReturnPayment reverses a settled payment (pacs.004 flow).
+// It debits the creditor and credits the debtor, reversing the original legs.
+func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reasonCode string) (*ReturnPaymentResponse, error) {
+	ctx, span := observability.StartSpan(ctx, "PaymentService.ReturnPayment")
+	defer span.End()
+
+	uetr, err := uuid.Parse(uetrStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid UETR: %w", err)
+	}
+
+	var resp *ReturnPaymentResponse
+
+	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
+		transaction, err := s.transactionRepo.GetByUETR(ctx, uetr)
+		if err != nil {
+			return fmt.Errorf("transaction not found: %w", err)
+		}
+
+		// Only SETTLED or CLEARED transactions can be returned
+		if transaction.Status != "SETTLED" && transaction.Status != "CLEARED" {
+			return fmt.Errorf("transaction cannot be returned in status: %s (must be SETTLED or CLEARED)", transaction.Status)
+		}
+
+		// Reverse the ledger: debit creditor, credit debtor
+		debtorBalanceAfter, err := s.accountRepo.CreditAccount(ctx, tx, transaction.DebtorAccountID, transaction.Amount)
+		if err != nil {
+			return fmt.Errorf("failed to credit debtor (return): %w", err)
+		}
+
+		creditorBalanceAfter, err := s.accountRepo.DebitAccount(ctx, tx, transaction.CreditorAccountID, transaction.Amount)
+		if err != nil {
+			return fmt.Errorf("failed to debit creditor (return): %w", err)
+		}
+
+		// Create return legs
+		debitLeg := &db.TransactionLeg{
+			TransactionID:  transaction.ID,
+			AccountID:      transaction.CreditorAccountID,
+			LegType:        "DEBIT",
+			Amount:         transaction.Amount,
+			Currency:       transaction.Currency,
+			BalanceAfter:   creditorBalanceAfter,
+			Description:    fmt.Sprintf("Return of payment to %s (%s)", transaction.DebtorName, reasonCode),
+			SequenceNumber: 3,
+		}
+		if err := s.transactionRepo.CreateLeg(ctx, tx, debitLeg); err != nil {
+			return fmt.Errorf("failed to create return debit leg: %w", err)
+		}
+
+		creditLeg := &db.TransactionLeg{
+			TransactionID:  transaction.ID,
+			AccountID:      transaction.DebtorAccountID,
+			LegType:        "CREDIT",
+			Amount:         transaction.Amount,
+			Currency:       transaction.Currency,
+			BalanceAfter:   debtorBalanceAfter,
+			Description:    fmt.Sprintf("Return of payment from %s (%s)", transaction.CreditorName, reasonCode),
+			SequenceNumber: 4,
+		}
+		if err := s.transactionRepo.CreateLeg(ctx, tx, creditLeg); err != nil {
+			return fmt.Errorf("failed to create return credit leg: %w", err)
+		}
+
+		// Update transaction status to RETURNED
+		if err := s.transactionRepo.UpdateStatus(ctx, tx, transaction.ID, "RETURNED", reasonCode); err != nil {
+			return fmt.Errorf("failed to update transaction status: %w", err)
+		}
+
+		// Outbox event for downstream consumers
+		eventPayload, _ := json.Marshal(map[string]interface{}{
+			"transactionId": transaction.ID.String(),
+			"uetr":          transaction.UETR.String(),
+			"status":        "RETURNED",
+			"reasonCode":    reasonCode,
+		})
+
+		outboxEvent := &db.OutboxEvent{
+			AggregateType: "transaction",
+			AggregateID:   transaction.ID,
+			EventType:     "payment.returned",
+			Payload:       eventPayload,
+			Topic:         db.TopicPaymentsCompleted,
+			PartitionKey:  transaction.DebtorAccountID.String(),
+		}
+
+		if err := s.outboxRepo.Insert(ctx, tx, outboxEvent); err != nil {
+			return err
+		}
+
+		resp = &ReturnPaymentResponse{
+			UETR:        uetrStr,
+			ReturnID:    fmt.Sprintf("RTN-%s", transaction.ID.String()[:8]),
+			Status:      "RETURNED",
+			ReasonCode:  reasonCode,
+			InitiatedAt: time.Now(),
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // Helper functions
 func max(a, b float64) float64 {
 	if a > b {
 		return a
 	}
 	return b
+}
+
+// LookupAccountByIBAN resolves an IBAN to an account UUID string
+func (s *PaymentService) LookupAccountByIBAN(ctx context.Context, iban string) (string, error) {
+	id, err := s.accountRepo.GetIDByIBAN(ctx, iban)
+	if err != nil {
+		return "", fmt.Errorf("account not found for IBAN %s: %w", iban, err)
+	}
+	return id.String(), nil
 }

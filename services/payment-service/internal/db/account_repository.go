@@ -105,6 +105,22 @@ func (r *AccountRepository) GetByAccountNumber(ctx context.Context, accountNumbe
 	return &acc, nil
 }
 
+// GetIDByIBAN retrieves an account ID by IBAN
+func (r *AccountRepository) GetIDByIBAN(ctx context.Context, iban string) (uuid.UUID, error) {
+	query := `SELECT id FROM account WHERE iban = $1 AND status = 'ACTIVE' LIMIT 1`
+
+	var id uuid.UUID
+	err := r.pool.QueryRow(ctx, query, iban).Scan(&id)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return uuid.Nil, ErrNotFound
+		}
+		return uuid.Nil, fmt.Errorf("failed to get account by IBAN: %w", err)
+	}
+
+	return id, nil
+}
+
 // GetForUpdate retrieves an account with a row lock for update
 // Must be called within a transaction
 func (r *AccountRepository) GetForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*Account, error) {

@@ -12,7 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -103,10 +103,14 @@ func GinLogger(logger *zap.Logger) gin.HandlerFunc {
 // Tracing
 // ============================================================================
 
-// InitTracer initializes OpenTelemetry tracing with Jaeger
-func InitTracer(jaegerEndpoint, serviceName string) (func(context.Context) error, error) {
-	// Create Jaeger exporter
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(jaegerEndpoint)))
+// InitTracer initializes OpenTelemetry tracing with OTLP HTTP exporter.
+// otlpEndpoint should be host:port (e.g. "jaeger:4318").
+func InitTracer(otlpEndpoint, serviceName string) (func(context.Context) error, error) {
+	// Create OTLP HTTP exporter (Jaeger natively accepts OTLP on port 4318)
+	exp, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(otlpEndpoint),
+		otlptracehttp.WithInsecure(),
+	)
 	if err != nil {
 		return nil, err
 	}

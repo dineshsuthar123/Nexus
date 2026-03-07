@@ -22,14 +22,15 @@ import { cn } from '../../lib/utils';
  */
 
 const cardVariants = cva(
-  'rounded-lg border bg-card text-card-foreground shadow-sm',
+  'rounded-xl border bg-card text-card-foreground transition-all duration-300',
   {
     variants: {
       variant: {
-        default: 'border-border',
-        elevated: 'border-transparent shadow-md',
-        outlined: 'border-2 border-primary/20 shadow-none',
+        default: 'border-border shadow-sm hover:shadow-md',
+        elevated: 'border-transparent shadow-md hover:shadow-lg hover:-translate-y-0.5',
+        outlined: 'border-2 border-primary/20 shadow-none hover:border-primary/40',
         ghost: 'border-transparent bg-transparent shadow-none',
+        glass: 'border-white/20 bg-white/70 shadow-lg shadow-neutral-900/5 backdrop-blur-xl dark:border-neutral-700/30 dark:bg-neutral-800/60 dark:shadow-neutral-900/30 hover:shadow-xl',
       },
       padding: {
         none: '',

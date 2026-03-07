@@ -2,6 +2,8 @@
 -- Target: CockroachDB v23.2 (nexus_auth database)
 -- Description: Adds api_keys table for programmatic access tokens
 
+USE nexus_auth;
+
 CREATE TABLE IF NOT EXISTS api_keys (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

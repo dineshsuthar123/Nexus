@@ -15,6 +15,7 @@ import (
 	authpkg "github.com/nexus-rtp/auth-service/internal/auth"
 	"github.com/nexus-rtp/auth-service/internal/config"
 	"github.com/nexus-rtp/auth-service/internal/db"
+	"github.com/nexus-rtp/auth-service/internal/email"
 	"github.com/nexus-rtp/auth-service/internal/observability"
 	"github.com/nexus-rtp/auth-service/internal/service"
 	"go.uber.org/zap"
@@ -75,10 +76,29 @@ func main() {
 	resetRepo := db.NewPasswordResetRepository(dbPool)
 	apiKeyRepo := db.NewAPIKeyRepository(dbPool)
 
+	// Initialize email sender (SMTP if enabled, otherwise dev-mode NoopSender)
+	var emailSender email.Sender
+	if cfg.SMTP.Enabled {
+		emailSender = email.NewSMTPSender(email.SMTPConfig{
+			Host:        cfg.SMTP.Host,
+			Port:        cfg.SMTP.Port,
+			Username:    cfg.SMTP.Username,
+			Password:    cfg.SMTP.Password,
+			FromAddress: cfg.SMTP.FromAddress,
+			FromName:    cfg.SMTP.FromName,
+			BaseURL:     cfg.SMTP.BaseURL,
+		}, logger)
+		logger.Info("SMTP email sender initialized", zap.String("host", cfg.SMTP.Host))
+	} else {
+		emailSender = email.NewNoopSender(logger)
+		logger.Info("Using NoopSender — emails will be logged, not sent (set SMTP_ENABLED=true to enable)")
+	}
+
 	// Initialize auth service
 	authService := service.NewAuthService(
 		logger, userRepo, refreshTokenRepo, mfaRepo,
 		auditRepo, resetRepo, apiKeyRepo, tokenService, mfaService,
+		emailSender,
 	)
 
 	// Setup Gin router

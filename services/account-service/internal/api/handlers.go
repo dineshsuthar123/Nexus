@@ -2,12 +2,15 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nexus-rtp/account-service/internal/service"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -57,10 +60,28 @@ type ErrorResponse struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// FrontendCreateAccountRequest accepts both frontend and backend field names
+type FrontendCreateAccountRequest struct {
+	// Frontend fields
+	Name string `json:"name,omitempty"`
+	Type string `json:"type,omitempty"`
+
+	// Backend fields (also accepted)
+	CustomerID     string          `json:"customerId,omitempty"`
+	ExternalID     string          `json:"externalId,omitempty"`
+	AccountNumber  string          `json:"accountNumber,omitempty"`
+	IBAN           string          `json:"iban,omitempty"`
+	BIC            string          `json:"bic,omitempty"`
+	Currency       string          `json:"currency"`
+	AccountType    string          `json:"accountType,omitempty"`
+	InitialBalance json.Number     `json:"initialBalance,omitempty"`
+	Metadata       json.RawMessage `json:"metadata,omitempty"`
+}
+
 // CreateAccount handles POST /api/v1/accounts
 func (h *Handler) CreateAccount(c *gin.Context) {
-	var req service.CreateAccountRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var frontReq FrontendCreateAccountRequest
+	if err := c.ShouldBindJSON(&frontReq); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Code:      "INVALID_REQUEST",
 			Message:   "Invalid request body",
@@ -70,12 +91,86 @@ func (h *Handler) CreateAccount(c *gin.Context) {
 		return
 	}
 
+	// Map "type" -> "accountType" (frontend sends "type")
+	accountType := frontReq.AccountType
+	if accountType == "" && frontReq.Type != "" {
+		accountType = frontReq.Type
+	}
+	if accountType == "" {
+		accountType = "OPERATING"
+	}
+
+	// Map account types from frontend values to DB enum values
+	typeMapping := map[string]string{
+		"CHECKING":   "OPERATING",
+		"SAVINGS":    "OPERATING",
+		"TREASURY":   "OPERATING",
+		"SETTLEMENT": "OPERATING",
+		"MERCHANT":   "OPERATING",
+		"INTERNAL":   "OPERATING",
+		// These map directly
+		"OPERATING":   "OPERATING",
+		"NOSTRO":      "NOSTRO",
+		"VOSTRO":      "VOSTRO",
+		"SUSPENSE":    "SUSPENSE",
+		"FEE":         "FEE",
+		"FX_POSITION": "FX_POSITION",
+	}
+	if mapped, ok := typeMapping[accountType]; ok {
+		accountType = mapped
+	}
+
+	// Handle customerId - auto-generate UUID if "default" or empty
+	customerID := frontReq.CustomerID
+	if customerID == "" || customerID == "default" {
+		customerID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	parsedCustomerID, err := uuid.Parse(customerID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:      "INVALID_CUSTOMER_ID",
+			Message:   "Invalid customer ID format",
+			Details:   "Customer ID must be a valid UUID",
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
+	// Parse initialBalance
+	var initialBalance decimal.Decimal
+	if frontReq.InitialBalance != "" {
+		initialBalance, err = decimal.NewFromString(string(frontReq.InitialBalance))
+		if err != nil {
+			initialBalance = decimal.Zero
+		}
+	}
+
+	// Store name in metadata if provided
+	metadata := frontReq.Metadata
+	if frontReq.Name != "" && len(metadata) == 0 {
+		metadata = json.RawMessage(`{"name":"` + frontReq.Name + `"}`)
+	}
+
+	// Build the internal request
+	req := &service.CreateAccountRequest{
+		CustomerID:     parsedCustomerID,
+		ExternalID:     frontReq.ExternalID,
+		AccountNumber:  frontReq.AccountNumber,
+		IBAN:           frontReq.IBAN,
+		BIC:            frontReq.BIC,
+		Currency:       frontReq.Currency,
+		AccountType:    accountType,
+		InitialBalance: initialBalance,
+		Metadata:       metadata,
+	}
+
 	actorID := c.GetHeader("X-Actor-ID")
 	if actorID == "" {
 		actorID = "anonymous"
 	}
 
-	response, err := h.accountService.CreateAccount(c.Request.Context(), &req, actorID, c.ClientIP())
+	response, err := h.accountService.CreateAccount(c.Request.Context(), req, actorID, c.ClientIP())
 	if err != nil {
 		h.logger.Error("Failed to create account", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -154,12 +249,26 @@ func (h *Handler) GetBalance(c *gin.Context) {
 
 // ListAccounts handles GET /api/v1/accounts
 func (h *Handler) ListAccounts(c *gin.Context) {
+	// Support both page/pageSize (from frontend) and limit/offset (legacy)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "0"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	status := c.Query("status")
 
+	// If page/pageSize provided, convert to limit/offset
+	if page > 0 && pageSize > 0 {
+		limit = pageSize
+		offset = (page - 1) * pageSize
+	} else if page == 0 {
+		page = 1
+	}
+
 	if limit > 100 {
 		limit = 100
+	}
+	if pageSize == 0 {
+		pageSize = limit
 	}
 
 	accounts, total, err := h.accountService.ListAccounts(c.Request.Context(), limit, offset, status)
@@ -174,7 +283,22 @@ func (h *Handler) ListAccounts(c *gin.Context) {
 		return
 	}
 
+	totalPages := int(total) / pageSize
+	if int(total)%pageSize > 0 {
+		totalPages++
+	}
+
 	c.JSON(http.StatusOK, gin.H{
+		"data": accounts,
+		"pagination": gin.H{
+			"page":        page,
+			"pageSize":    pageSize,
+			"totalItems":  total,
+			"totalPages":  totalPages,
+			"hasNext":     page < totalPages,
+			"hasPrevious": page > 1,
+		},
+		// Also include legacy fields for backward compatibility
 		"accounts": accounts,
 		"total":    total,
 		"limit":    limit,

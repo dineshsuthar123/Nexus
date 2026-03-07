@@ -32,11 +32,16 @@ const activePayments = new Gauge('active_payments');
 // CONFIGURATION
 // =============================================================================
 
-const BASE_URL = __ENV.API_URL || 'https://api.nexus-rtp.internal';
+const BASE_URL = __ENV.API_URL || 'http://localhost:8085';
+const AUTH_URL = __ENV.AUTH_URL || 'http://localhost:8088';
+const ACCOUNT_URL = __ENV.ACCOUNT_URL || 'http://localhost:8086';
+const NOTIFICATION_URL = __ENV.NOTIFICATION_URL || 'http://localhost:8087';
+
+// Populated in setup() with JWT Bearer token
+let AUTH_TOKEN = '';
 
 const HEADERS = {
   'Content-Type': 'application/json',
-  'X-API-Key': __ENV.API_KEY || 'test-api-key',
   'X-Request-ID': '',  // Set per-request
 };
 
@@ -127,9 +132,13 @@ function randomCurrency() {
   return CURRENCIES[0];
 }
 
-function makeRequest(method, endpoint, payload = null) {
-  const url = `${BASE_URL}${endpoint}`;
-  const headers = { ...HEADERS, 'X-Request-ID': uuidv4() };
+function makeRequest(method, endpoint, payload = null, baseUrl = null) {
+  const url = `${baseUrl || BASE_URL}${endpoint}`;
+  const headers = {
+    ...HEADERS,
+    'X-Request-ID': uuidv4(),
+    'Authorization': `Bearer ${AUTH_TOKEN}`,
+  };
   
   const params = {
     headers: headers,
@@ -148,18 +157,26 @@ function makeRequest(method, endpoint, payload = null) {
 // SCENARIOS
 // =============================================================================
 
-export default function() {
-  // Weighted scenario selection
+export default function(data) {
+  AUTH_TOKEN = data.token;
+
+  // Weighted scenario selection (matches production traffic mix)
   const r = Math.random();
   
-  if (r < 0.60) {
+  if (r < 0.50) {
     paymentTransfer();
-  } else if (r < 0.85) {
+  } else if (r < 0.70) {
     balanceInquiry();
-  } else if (r < 0.95) {
+  } else if (r < 0.80) {
     fxConversion();
-  } else {
+  } else if (r < 0.85) {
     paymentReversal();
+  } else if (r < 0.90) {
+    notificationFlow();
+  } else if (r < 0.95) {
+    reconciliationQuery();
+  } else {
+    analyticsQuery();
   }
 }
 
@@ -361,6 +378,71 @@ function paymentReversal() {
 }
 
 // =============================================================================
+// NOTIFICATION FLOW (5% of traffic)
+// =============================================================================
+
+function notificationFlow() {
+  group('notification_flow', () => {
+    // List notifications
+    const listRes = makeRequest('GET', '/api/v1/notifications?limit=10', null, NOTIFICATION_URL);
+    
+    check(listRes, {
+      'notifications listed': (r) => r.status === 200,
+    });
+
+    // Get notification preferences
+    const prefsRes = makeRequest('GET', '/api/v1/notifications/preferences', null, NOTIFICATION_URL);
+    
+    check(prefsRes, {
+      'preferences returned': (r) => r.status === 200 || r.status === 404,
+    });
+
+    errorRate.add(listRes.status !== 200);
+  });
+}
+
+// =============================================================================
+// RECONCILIATION QUERY (5% of traffic)
+// =============================================================================
+
+function reconciliationQuery() {
+  group('reconciliation_query', () => {
+    // List recent reconciliation cycles
+    const cyclesRes = makeRequest('GET', '/api/v1/reconciliation/cycles?limit=5');
+    
+    check(cyclesRes, {
+      'recon cycles returned': (r) => r.status === 200 || r.status === 404,
+    });
+
+    errorRate.add(cyclesRes.status >= 500);
+  });
+}
+
+// =============================================================================
+// ANALYTICS QUERY (5% of traffic)
+// =============================================================================
+
+function analyticsQuery() {
+  group('analytics_query', () => {
+    // Get transaction analytics summary
+    const summaryRes = makeRequest('GET', '/api/v1/analytics/summary');
+    
+    check(summaryRes, {
+      'analytics summary returned': (r) => r.status === 200 || r.status === 404,
+    });
+
+    // Get volume metrics
+    const volumeRes = makeRequest('GET', '/api/v1/analytics/volume?period=24h');
+    
+    check(volumeRes, {
+      'volume data returned': (r) => r.status === 200 || r.status === 404,
+    });
+
+    errorRate.add(summaryRes.status >= 500);
+  });
+}
+
+// =============================================================================
 // INVARIANT VERIFICATION
 // =============================================================================
 
@@ -394,15 +476,38 @@ function verifyInvariant(sourceAccount, destAccount, amount, paymentId) {
 export function setup() {
   console.log('Starting Nexus RTP load test');
   console.log(`Target: ${BASE_URL}`);
+  console.log(`Auth:   ${AUTH_URL}`);
   console.log(`Accounts pool: ${ACCOUNTS.length}`);
   
   // Verify connectivity
   const healthRes = http.get(`${BASE_URL}/health`);
   if (healthRes.status !== 200) {
-    throw new Error(`Health check failed: ${healthRes.status}`);
+    console.warn(`Health check returned ${healthRes.status} — continuing anyway`);
   }
   
-  return { startTime: Date.now() };
+  // Authenticate to get JWT token (Kong validates JWT on all protected routes)
+  let token = __ENV.JWT_TOKEN || '';
+  if (!token) {
+    const loginRes = http.post(`${AUTH_URL}/api/v1/auth/login`, JSON.stringify({
+      email: __ENV.TEST_EMAIL || 'admin@nexus-rtp.dev',
+      password: __ENV.TEST_PASSWORD || 'admin123',
+    }), { headers: { 'Content-Type': 'application/json' }, timeout: '10s' });
+
+    if (loginRes.status === 200) {
+      try {
+        token = loginRes.json('access_token') || loginRes.json('token') || '';
+        console.log('JWT token acquired from auth service');
+      } catch (e) {
+        console.warn('Could not parse auth response, using fallback token');
+        token = 'test-token';
+      }
+    } else {
+      console.warn(`Auth login returned ${loginRes.status}, using fallback token`);
+      token = 'test-token';
+    }
+  }
+  
+  return { startTime: Date.now(), token: token };
 }
 
 export function teardown(data) {

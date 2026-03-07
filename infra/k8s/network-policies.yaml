@@ -1,0 +1,225 @@
+# Nexus RTP Platform — Network Policies
+# Zero-trust network segmentation: deny all, then allow specific paths
+# Apply: kubectl apply -f infra/k8s/network-policies.yaml
+---
+# =============================================================================
+# Default deny all ingress in nexus-system (zero-trust baseline)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: nexus-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# =============================================================================
+# Kong → backend services (all services accept traffic from Kong)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kong-to-services
+  namespace: nexus-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - payment-service
+          - account-service
+          - auth-service
+          - notification-service
+          - reconciliation-service
+          - analytics-service
+          - audit-service
+          - ws-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: kong
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+# =============================================================================
+# Services → CockroachDB (SQL port 26257)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-services-to-cockroachdb
+  namespace: nexus-data
+spec:
+  podSelector:
+    matchLabels:
+      app: cockroachdb
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: nexus-rtp
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - payment-service
+                  - account-service
+                  - auth-service
+                  - notification-service
+                  - reconciliation-service
+                  - analytics-service
+                  - audit-service
+      ports:
+        - protocol: TCP
+          port: 26257
+
+---
+# =============================================================================
+# Services → Kafka (broker port 9092)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-services-to-kafka
+  namespace: nexus-data
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: nexus-rtp
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - payment-service
+                  - notification-service
+                  - reconciliation-service
+                  - ws-gateway
+                  - fraud-detection
+      ports:
+        - protocol: TCP
+          port: 9092
+
+---
+# =============================================================================
+# Services → Redis (port 6379)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-services-to-redis
+  namespace: nexus-data
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: nexus-rtp
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - payment-service
+                  - auth-service
+                  - ws-gateway
+      ports:
+        - protocol: TCP
+          port: 6379
+
+---
+# =============================================================================
+# Prometheus → all services (metrics scraping, port 9102)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: nexus-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              tier: monitoring
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9102
+
+---
+# =============================================================================
+# Inter-service: payment-service → account-service (balance checks)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-payment-to-account
+  namespace: nexus-system
+spec:
+  podSelector:
+    matchLabels:
+      app: account-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: payment-service
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+# =============================================================================
+# Inter-service: payment-service → watchman (sanctions screening)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-payment-to-watchman
+  namespace: nexus-system
+spec:
+  podSelector:
+    matchLabels:
+      app: watchman
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: payment-service
+      ports:
+        - protocol: TCP
+          port: 8084

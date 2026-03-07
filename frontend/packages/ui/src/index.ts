@@ -34,6 +34,7 @@ export * from './components/PaymentWizard';
 export * from './components/NotificationCenter';
 export * from './components/ApiKeyManager';
 export * from './components/ChartWrapper';
+export * from './components/Sparkline';
 
 // Utilities
 export * from './lib/utils';

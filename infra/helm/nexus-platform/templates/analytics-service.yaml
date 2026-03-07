@@ -1,0 +1,108 @@
+{{- if .Values.analyticsService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus-platform.analyticsService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: analytics-service
+spec:
+  {{- if not .Values.analyticsService.autoscaling.enabled }}
+  replicas: {{ .Values.analyticsService.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nexus-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: analytics-service
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "nexus-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: analytics-service
+    spec:
+      serviceAccountName: {{ include "nexus-platform.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: analytics-service
+          image: "{{ .Values.analyticsService.image.repository }}:{{ .Values.analyticsService.image.tag }}"
+          imagePullPolicy: {{ .Values.analyticsService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              value: {{ include "nexus-platform.databaseUrl" . | quote }}
+            - name: REDIS_URL
+              value: {{ include "nexus-platform.redisUrl" . | quote }}
+            - name: JAEGER_ENDPOINT
+              value: "http://jaeger:14268/api/traces"
+            - name: ENVIRONMENT
+              value: "production"
+          {{- with .Values.analyticsService.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.analyticsService.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.analyticsService.resources | nindent 12 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: analytics-service
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nexus-platform.analyticsService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: analytics-service
+spec:
+  type: {{ .Values.analyticsService.service.type }}
+  ports:
+    - port: {{ .Values.analyticsService.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nexus-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: analytics-service
+{{- if .Values.analyticsService.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nexus-platform.analyticsService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nexus-platform.analyticsService.fullname" . }}
+  minReplicas: {{ .Values.analyticsService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.analyticsService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.analyticsService.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

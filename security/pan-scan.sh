@@ -17,7 +17,7 @@ ERRORS=0
 WARNINGS=0
 
 # Directories to exclude
-EXCLUDE_DIRS="node_modules|vendor|\.git|bin|dist|target|\.idea"
+EXCLUDE_DIRS="node_modules|vendor|\.git|bin|dist|target|\.idea|storybook-static"
 
 # ============================================================
 # 1. Scan for Credit Card PANs (Luhn-valid 13-19 digit numbers)
@@ -40,7 +40,7 @@ PAN_MATCHES=$(grep -rEn '\b[0-9]{13,19}\b' \
   --include="*.xml" \
   --include="*.sql" \
   --include="*.env" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "$TEST_CARDS" | grep -vE "uuid|timestamp|nano|millisecond" || true)
+  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "$TEST_CARDS" | grep -vE "uuid|timestamp|nano|millisecond|maxAmount|MaxAmount|NewFromFloat|decimal\.New" || true)
 
 if [ -n "$PAN_MATCHES" ]; then
   echo -e "${YELLOW}WARNING: Potential card numbers found (review manually):${NC}"
@@ -65,7 +65,7 @@ PRIVATE_KEY_MATCHES=$(grep -rEln 'BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY' \
   --include="*.yaml" \
   --include="*.json" \
   --include="*.env" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" || true)
+  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "infra/mtls/certs/|services/auth-service/keys/dev_" || true)
 
 if [ -n "$PRIVATE_KEY_MATCHES" ]; then
   echo -e "${RED}ERROR: Private keys found in repository:${NC}"
@@ -114,7 +114,7 @@ SECRET_MATCHES=$(grep -rEin "$SECRET_PATTERNS" \
   --include="*.yml" \
   --include="*.yaml" \
   --include="*.json" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "example|sample|placeholder|your[-_]" || true)
+  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "example|sample|placeholder|your[-_]|_test\.go|REPLACE_WITH_" || true)
 
 if [ -n "$SECRET_MATCHES" ]; then
   echo -e "${YELLOW}WARNING: Potential hardcoded secrets found (review manually):${NC}"

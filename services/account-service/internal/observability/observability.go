@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -80,6 +80,11 @@ var (
 
 var tracer trace.Tracer
 
+// InitNoop sets up a no-op tracer for unit testing.
+func InitNoop() {
+	tracer = otel.Tracer("test-noop")
+}
+
 // Initialize sets up observability stack
 func Initialize(serviceName, environment, jaegerEndpoint string) (*zap.Logger, func(), error) {
 	// Initialize logger
@@ -100,10 +105,13 @@ func Initialize(serviceName, environment, jaegerEndpoint string) (*zap.Logger, f
 		return nil, nil, err
 	}
 
-	// Initialize tracer
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(jaegerEndpoint)))
+	// Initialize tracer — OTLP HTTP exporter (Jaeger accepts OTLP on port 4318)
+	exp, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(jaegerEndpoint),
+		otlptracehttp.WithInsecure(),
+	)
 	if err != nil {
-		logger.Warn("Failed to create Jaeger exporter", zap.Error(err))
+		logger.Warn("Failed to create OTLP exporter", zap.Error(err))
 	}
 
 	tp := sdktrace.NewTracerProvider(

@@ -2,6 +2,8 @@
 -- Database: nexus_ledger
 -- Description: Creates notification and preference tables for the notification service
 
+USE nexus_ledger;
+
 -- =============================================================================
 -- Notifications table
 -- =============================================================================
@@ -16,13 +18,13 @@ CREATE TABLE IF NOT EXISTS notifications (
     channel      STRING NOT NULL DEFAULT 'IN_APP',
     reference_id STRING,
     metadata     JSONB DEFAULT '{}',
-    read         BOOL NOT NULL DEFAULT false,
+    "read"         BOOL NOT NULL DEFAULT false,
     read_at      TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     INDEX idx_notifications_user_id (user_id),
-    INDEX idx_notifications_user_read (user_id, read),
+    INDEX idx_notifications_user_read (user_id, "read"),
     INDEX idx_notifications_user_type (user_id, type),
     INDEX idx_notifications_created (created_at DESC)
 );

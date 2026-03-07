@@ -1,0 +1,114 @@
+{{- if .Values.notificationService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus-platform.notificationService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: notification-service
+spec:
+  {{- if not .Values.notificationService.autoscaling.enabled }}
+  replicas: {{ .Values.notificationService.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nexus-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: notification-service
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "nexus-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: notification-service
+    spec:
+      serviceAccountName: {{ include "nexus-platform.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: notification-service
+          image: "{{ .Values.notificationService.image.repository }}:{{ .Values.notificationService.image.tag }}"
+          imagePullPolicy: {{ .Values.notificationService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              value: {{ include "nexus-platform.databaseUrl" . | quote }}
+            - name: KAFKA_BROKERS
+              value: {{ include "nexus-platform.kafkaBrokers" . | quote }}
+            - name: KAFKA_TOPICS
+              value: {{ .Values.notificationService.env.KAFKA_TOPICS | quote }}
+            - name: KAFKA_GROUP_ID
+              value: {{ .Values.notificationService.env.KAFKA_GROUP_ID | quote }}
+            - name: REDIS_URL
+              value: {{ include "nexus-platform.redisUrl" . | quote }}
+            - name: JAEGER_ENDPOINT
+              value: "http://jaeger:14268/api/traces"
+            - name: ENVIRONMENT
+              value: "production"
+          {{- with .Values.notificationService.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.notificationService.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.notificationService.resources | nindent 12 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: notification-service
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nexus-platform.notificationService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: notification-service
+spec:
+  type: {{ .Values.notificationService.service.type }}
+  ports:
+    - port: {{ .Values.notificationService.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nexus-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: notification-service
+{{- if .Values.notificationService.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nexus-platform.notificationService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nexus-platform.notificationService.fullname" . }}
+  minReplicas: {{ .Values.notificationService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.notificationService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.notificationService.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

@@ -2,6 +2,7 @@
 package config
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -73,6 +74,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("jaeger.ENDPOINT", "http://localhost:14268/api/traces")
 
 	// Bind environment variables
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
 	// Try to read config file

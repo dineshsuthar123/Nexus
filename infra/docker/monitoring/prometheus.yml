@@ -8,14 +8,16 @@ global:
     cluster: 'nexus-local'
     env: 'development'
 
-# Alertmanager configuration (for future use)
+# Alertmanager configuration
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []
+        - targets: ['alertmanager:9093']
 
-# Rule files (for future use)
-rule_files: []
+# Alert and SLO rule files
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+  - '/etc/prometheus/slo-rules.yml'
 
 # Scrape configurations
 scrape_configs:
@@ -34,13 +36,13 @@ scrape_configs:
     metrics_path: '/_status/vars'
     scheme: 'http'
 
-  # Kafka brokers (JMX exporter would be needed in production)
-  - job_name: 'kafka'
-    static_configs:
-      - targets:
-          - 'kafka-1:9092'
-          - 'kafka-2:9093'
-          - 'kafka-3:9094'
+  # Kafka brokers — requires JMX exporter sidecar (not yet configured).
+  # Uncomment once kafka-exporter or JMX agent is added to docker-compose.
+  # See: https://github.com/danielqsj/kafka_exporter
+  # - job_name: 'kafka'
+  #   static_configs:
+  #     - targets:
+  #         - 'kafka-exporter:9308'
 
   # Kong API Gateway
   - job_name: 'kong'

@@ -122,12 +122,14 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: process.env.CI ? 'npx next start' : 'npx next dev',
+    command: process.env.CI
+      ? 'npx next start'
+      : 'npx next build && npx next start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
+    timeout: 180 * 1000,
     env: {
-      NODE_ENV: process.env.CI ? 'production' : 'development',
+      NODE_ENV: 'production',
       NEXT_PUBLIC_MOCK_MODE: 'true',
       NEXTAUTH_URL: 'http://localhost:3000',
       NEXTAUTH_SECRET: 'e2e-test-secret-not-a-real-secret-value-32chars',

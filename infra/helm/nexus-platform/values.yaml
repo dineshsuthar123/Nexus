@@ -36,7 +36,7 @@ paymentService:
     targetMemoryUtilizationPercentage: 80
   
   env:
-    DATABASE_URL: "postgres://root@cockroachdb:26257/nexus?sslmode=disable"
+    DATABASE_URL: "postgres://root@cockroachdb:26257/nexus?sslmode=verify-full"
     KAFKA_BROKERS: "kafka:9092"
     REDIS_URL: "redis-master:6379"
     WATCHMAN_URL: "http://watchman:8084"
@@ -116,6 +116,237 @@ reconciliationService:
     targetMemoryUtilizationPercentage: 80
 
 # ============================================================
+# Auth Service
+# ============================================================
+authService:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: nexus/auth-service
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 800m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+  env:
+    JWT_ISSUER: "nexus-rtp"
+    JWT_ACCESS_TOKEN_EXPIRY: "15m"
+    JWT_REFRESH_TOKEN_EXPIRY: "168h"
+    MFA_ISSUER: "NexusRTP"
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# ============================================================
+# WebSocket Gateway
+# ============================================================
+wsGateway:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/ws-gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+  env:
+    KAFKA_TOPICS: "nexus.payments.status,nexus.events.raw,nexus.notifications,nexus.reconciliation.events,nexus.fraud.alerts"
+    KAFKA_GROUP_ID: "ws-gateway"
+    WS_PING_INTERVAL: "30"
+    WS_PONG_TIMEOUT: "10"
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 15
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 3
+    periodSeconds: 5
+
+# ============================================================
+# Notification Service
+# ============================================================
+notificationService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/notification-service
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+  env:
+    KAFKA_TOPICS: "nexus.notifications"
+    KAFKA_GROUP_ID: "notification-service"
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# ============================================================
+# Analytics Service
+# ============================================================
+analyticsService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/analytics-service
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 800m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# ============================================================
+# Audit Service
+# ============================================================
+auditService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/audit-service
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# ============================================================
 # Fraud Detection (Flink)
 # ============================================================
 fraudDetection:
@@ -153,7 +384,7 @@ watchman:
   replicaCount: 2
   image:
     repository: moov/watchman
-    tag: v0.26.1
+    tag: v0.30.0
     pullPolicy: IfNotPresent
   
   service:

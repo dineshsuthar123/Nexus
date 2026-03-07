@@ -156,7 +156,7 @@ func NewRefreshTokenRepository(pool *Pool) *RefreshTokenRepository {
 // Create stores a new refresh token.
 func (r *RefreshTokenRepository) Create(ctx context.Context, token *models.RefreshToken) error {
 	query := `
-		INSERT INTO refresh_tokens (id, user_id, token_hash, family, expires_at, revoked, created_at)
+		INSERT INTO refresh_tokens (id, user_id, token_hash, "family", expires_at, revoked, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 	_, err := r.pool.Exec(ctx, query,
@@ -169,7 +169,7 @@ func (r *RefreshTokenRepository) Create(ctx context.Context, token *models.Refre
 // GetByTokenHash retrieves a refresh token by its hash.
 func (r *RefreshTokenRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
 	query := `
-		SELECT id, user_id, token_hash, family, expires_at, revoked, created_at
+		SELECT id, user_id, token_hash, "family", expires_at, revoked, created_at
 		FROM refresh_tokens WHERE token_hash = $1
 	`
 	t := &models.RefreshToken{}
@@ -187,7 +187,7 @@ func (r *RefreshTokenRepository) GetByTokenHash(ctx context.Context, tokenHash s
 
 // RevokeByFamily revokes all tokens in a token family (for rotation abuse detection).
 func (r *RefreshTokenRepository) RevokeByFamily(ctx context.Context, family string) error {
-	query := `UPDATE refresh_tokens SET revoked = true WHERE family = $1`
+	query := `UPDATE refresh_tokens SET revoked = true WHERE "family" = $1`
 	_, err := r.pool.Exec(ctx, query, family)
 	return err
 }

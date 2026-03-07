@@ -1,0 +1,76 @@
+# =============================================================================
+# Nexus RTP Fraud Detection — Flink Configuration
+# =============================================================================
+
+# Job Manager
+jobmanager.rpc.address: jobmanager
+jobmanager.rpc.port: 6123
+jobmanager.memory.process.size: 2048m
+jobmanager.execution.failover-strategy: region
+
+# Task Manager
+taskmanager.numberOfTaskSlots: 4
+taskmanager.memory.process.size: 4096m
+taskmanager.memory.managed.fraction: 0.4
+
+# Parallelism
+parallelism.default: 4
+
+# Checkpointing — Exactly-Once Semantics
+execution.checkpointing.interval: 60s
+execution.checkpointing.timeout: 120s
+execution.checkpointing.min-pause: 30s
+execution.checkpointing.mode: EXACTLY_ONCE
+execution.checkpointing.max-concurrent-checkpoints: 1
+execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+
+# State backend — RocksDB for large state
+state.backend: rocksdb
+state.backend.rocksdb.localdir: /tmp/flink-rocksdb
+state.checkpoints.dir: s3://nexus-flink-checkpoints/fraud-detection/
+state.savepoints.dir: s3://nexus-flink-savepoints/fraud-detection/
+state.backend.incremental: true
+
+# Restart strategy — Exponential delay for resilience
+restart-strategy: exponential-delay
+restart-strategy.exponential-delay.initial-backoff: 1s
+restart-strategy.exponential-delay.max-backoff: 60s
+restart-strategy.exponential-delay.backoff-multiplier: 2.0
+restart-strategy.exponential-delay.reset-backoff-threshold: 120s
+
+# Metrics — Prometheus reporter
+metrics.reporter.promgateway.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+metrics.reporter.promgateway.port: 9249
+
+# Metric scopes
+metrics.scope.jm: nexus.flink.jobmanager.<host>
+metrics.scope.jm.job: nexus.flink.jobmanager.<host>.<job_name>
+metrics.scope.tm: nexus.flink.taskmanager.<host>.<tm_id>
+metrics.scope.tm.job: nexus.flink.taskmanager.<host>.<tm_id>.<job_name>
+metrics.scope.task: nexus.flink.taskmanager.<host>.<tm_id>.<job_name>.<task_name>.<subtask_index>
+metrics.scope.operator: nexus.flink.taskmanager.<host>.<tm_id>.<job_name>.<operator_name>.<subtask_index>
+
+# Latency tracking
+metrics.latency.interval: 10000
+metrics.latency.granularity: operator
+
+# Network
+taskmanager.network.memory.fraction: 0.1
+taskmanager.network.memory.min: 64mb
+taskmanager.network.memory.max: 1gb
+
+# Web UI
+web.submit.enable: false
+web.cancel.enable: true
+web.timeout: 60000
+
+# High Availability (ZooKeeper)
+# high-availability: zookeeper
+# high-availability.zookeeper.quorum: zk1:2181,zk2:2181,zk3:2181
+# high-availability.zookeeper.path.root: /flink
+# high-availability.cluster-id: nexus-fraud-detection
+# high-availability.storageDir: s3://nexus-flink-ha/fraud-detection/
+
+# Logging
+env.log.dir: /opt/flink/log
+env.log.max: 5

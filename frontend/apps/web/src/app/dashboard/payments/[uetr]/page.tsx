@@ -121,7 +121,25 @@ const STATUS_CONFIG: Record<PaymentStatus, {
     icon: <CheckCircle2 className="h-4 w-4" />,
     description: 'Payment completed',
   },
-};
+  SANCTIONED: {
+    label: 'Sanctions Review',
+    color: 'warning',
+    icon: <Shield className="h-4 w-4" />,
+    description: 'Payment is under sanctions screening review',
+  },
+  FRAUD_REVIEW: {
+    label: 'Fraud Review',
+    color: 'warning',
+    icon: <AlertCircle className="h-4 w-4" />,
+    description: 'Payment is under fraud review',
+  },
+  CLEARED: {
+    label: 'Cleared',
+    color: 'secondary',
+    icon: <CheckCircle2 className="h-4 w-4" />,
+    description: 'Payment cleared and awaiting settlement',
+  },
+} as Record<string, { label: string; color: 'warning' | 'success' | 'danger' | 'default' | 'secondary'; icon: React.ReactNode; description: string }>;
 
 const TYPE_CONFIG: Record<PaymentType, {
   label: string;
@@ -403,10 +421,15 @@ export default function PaymentDetailPage() {
     );
   }
 
-  const statusConfig = STATUS_CONFIG[payment.status];
+  const statusConfig = STATUS_CONFIG[payment.status] ?? {
+    label: payment.status || 'Unknown',
+    color: 'default' as const,
+    icon: <Clock className="h-4 w-4" />,
+    description: `Status: ${payment.status}`,
+  };
   const paymentType = ((payment as unknown as Record<string, unknown>).type as PaymentType) || 'STANDARD';
   const typeConfig = TYPE_CONFIG[paymentType];
-  const canSettle = payment.status === 'PENDING' || payment.status === 'PROCESSING';
+  const canSettle = payment.status === 'PENDING' || payment.status === 'PROCESSING' || payment.status === 'SANCTIONED' || payment.status === 'CLEARED';
   const canReturn = payment.status === 'SETTLED';
   const canCancel = payment.status === 'PENDING';
 
@@ -446,7 +469,7 @@ export default function PaymentDetailPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => window.print()}>
               <Download className="mr-2 h-4 w-4" />
               Export PDF
             </Button>
@@ -507,10 +530,12 @@ export default function PaymentDetailPage() {
             <CardTitle className="text-base">Sender</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="font-medium">{payment.fromAccountName || 'N/A'}</p>
-            <p className="text-sm text-muted-foreground font-mono">
-              {payment.fromAccountId}
-            </p>
+            <p className="font-medium">{payment.debtorName || 'N/A'}</p>
+            {payment.debtorAccountId && (
+              <p className="text-sm text-muted-foreground font-mono">
+                {payment.debtorAccountId}
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -521,10 +546,12 @@ export default function PaymentDetailPage() {
             <CardTitle className="text-base">Recipient</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="font-medium">{payment.toAccountName || 'N/A'}</p>
-            <p className="text-sm text-muted-foreground font-mono">
-              {payment.toAccountId}
-            </p>
+            <p className="font-medium">{payment.creditorName || 'N/A'}</p>
+            {payment.creditorAccountId && (
+              <p className="text-sm text-muted-foreground font-mono">
+                {payment.creditorAccountId}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

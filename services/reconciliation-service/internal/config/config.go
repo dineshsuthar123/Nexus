@@ -2,6 +2,7 @@
 package config
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -96,6 +97,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("scheduler.REAL_TIME_CRON", "0 */5 * * * *") // Every 5 minutes
 	viper.SetDefault("scheduler.JOB_TIMEOUT", 2*time.Hour)
 
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {

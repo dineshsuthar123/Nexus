@@ -1,0 +1,136 @@
+{{- if .Values.authService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus-platform.authService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-service
+spec:
+  {{- if not .Values.authService.autoscaling.enabled }}
+  replicas: {{ .Values.authService.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nexus-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: auth-service
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "nexus-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: auth-service
+    spec:
+      serviceAccountName: {{ include "nexus-platform.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: auth-service
+          image: "{{ .Values.authService.image.repository }}:{{ .Values.authService.image.tag }}"
+          imagePullPolicy: {{ .Values.authService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nexus-platform.fullname" . }}-db-secrets
+                  key: auth-database-url
+            - name: REDIS_URL
+              value: {{ include "nexus-platform.redisUrl" . | quote }}
+            - name: JWT_PRIVATE_KEY_PATH
+              value: "/app/keys/private.pem"
+            - name: JWT_PUBLIC_KEY_PATH
+              value: "/app/keys/public.pem"
+            - name: JWT_ISSUER
+              value: {{ .Values.authService.env.JWT_ISSUER | quote }}
+            - name: JWT_ACCESS_TOKEN_EXPIRY
+              value: {{ .Values.authService.env.JWT_ACCESS_TOKEN_EXPIRY | quote }}
+            - name: JWT_REFRESH_TOKEN_EXPIRY
+              value: {{ .Values.authService.env.JWT_REFRESH_TOKEN_EXPIRY | quote }}
+            - name: MFA_ISSUER
+              value: {{ .Values.authService.env.MFA_ISSUER | quote }}
+            - name: MFA_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nexus-platform.fullname" . }}-auth-secrets
+                  key: mfa-encryption-key
+            - name: JAEGER_ENDPOINT
+              value: "http://jaeger:14268/api/traces"
+            - name: ENVIRONMENT
+              value: "production"
+          volumeMounts:
+            - name: jwt-keys
+              mountPath: /app/keys
+              readOnly: true
+          {{- with .Values.authService.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.authService.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.authService.resources | nindent 12 }}
+      volumes:
+        - name: jwt-keys
+          secret:
+            secretName: {{ include "nexus-platform.fullname" . }}-jwt-keys
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: auth-service
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nexus-platform.authService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-service
+spec:
+  type: {{ .Values.authService.service.type }}
+  ports:
+    - port: {{ .Values.authService.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nexus-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-service
+{{- if .Values.authService.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nexus-platform.authService.fullname" . }}
+  labels:
+    {{- include "nexus-platform.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nexus-platform.authService.fullname" . }}
+  minReplicas: {{ .Values.authService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.authService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.authService.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

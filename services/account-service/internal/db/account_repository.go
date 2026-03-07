@@ -301,7 +301,7 @@ func (r *AccountRepository) GetForUpdate(ctx context.Context, tx pgx.Tx, id uuid
 // GetAccountBalance retrieves the current and available balance
 func (r *AccountRepository) GetAccountBalance(ctx context.Context, id uuid.UUID) (*BalanceInfo, error) {
 	query := `
-		SELECT 
+		SELECT
 			balance,
 			pending_debits,
 			pending_credits,
@@ -338,24 +338,32 @@ func (r *AccountRepository) ListAccounts(ctx context.Context, limit, offset int,
 	var accounts []*Account
 	var total int
 
-	// Count query
-	countQuery := `SELECT COUNT(*) FROM account WHERE ($1 = '' OR status = $1)`
-	if err := r.pool.QueryRow(ctx, countQuery, status).Scan(&total); err != nil {
-		return nil, 0, err
+	// Count query — use separate queries for filtered vs unfiltered to avoid enum cast issues
+	if status == "" {
+		if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM account`).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+	} else {
+		if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM account WHERE status = $1`, status).Scan(&total); err != nil {
+			return nil, 0, err
+		}
 	}
 
 	// Data query
-	query := `
+	var rows pgx.Rows
+	var err error
+	baseSelect := `
 		SELECT id, external_id, customer_id, account_number, iban, bic,
 			currency, account_type, balance, pending_debits, pending_credits,
 			transaction_limit, daily_limit, daily_used, allow_negative,
 			status, kyc_status, risk_score, metadata, created_at, updated_at, version
-		FROM account
-		WHERE ($1 = '' OR status = $1)
-		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`
+		FROM account`
 
-	rows, err := r.pool.Query(ctx, query, status, limit, offset)
+	if status == "" {
+		rows, err = r.pool.Query(ctx, baseSelect+` ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
+	} else {
+		rows, err = r.pool.Query(ctx, baseSelect+` WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, status, limit, offset)
+	}
 	if err != nil {
 		return nil, 0, err
 	}

@@ -21,23 +21,20 @@ import (
 // AccountService handles account business logic
 type AccountService struct {
 	logger      *zap.Logger
-	pool        *db.Pool
-	accountRepo *db.AccountRepository
-	auditRepo   *db.AuditRepository
-	cache       *cache.Client
+	accountRepo AccountStore
+	auditRepo   AuditLogStore
+	cache       CacheProvider
 }
 
 // NewAccountService creates a new account service
 func NewAccountService(
 	logger *zap.Logger,
-	pool *db.Pool,
-	accountRepo *db.AccountRepository,
-	auditRepo *db.AuditRepository,
-	cacheClient *cache.Client,
+	accountRepo AccountStore,
+	auditRepo AuditLogStore,
+	cacheClient CacheProvider,
 ) *AccountService {
 	return &AccountService{
 		logger:      logger,
-		pool:        pool,
 		accountRepo: accountRepo,
 		auditRepo:   auditRepo,
 		cache:       cacheClient,

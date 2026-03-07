@@ -29,7 +29,7 @@ func (r *NotificationRepository) Create(ctx context.Context, n *models.Notificat
 	}
 
 	_, err = r.pool.Exec(ctx,
-		`INSERT INTO notifications (id, user_id, type, priority, title, message, channel, reference_id, metadata, read, created_at, updated_at)
+		`INSERT INTO notifications (id, user_id, type, priority, title, message, channel, reference_id, metadata, "read", created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		n.ID, n.UserID, n.Type, n.Priority, n.Title, n.Message, n.Channel, n.ReferenceID, metadataJSON, n.Read, n.CreatedAt, n.UpdatedAt,
 	)
@@ -41,7 +41,7 @@ func (r *NotificationRepository) GetByID(ctx context.Context, id string) (*model
 	n := &models.Notification{}
 	var metadataJSON []byte
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, type, priority, title, message, channel, reference_id, metadata, read, read_at, created_at, updated_at
+		`SELECT id, user_id, type, priority, title, message, channel, reference_id, metadata, "read", read_at, created_at, updated_at
 		 FROM notifications WHERE id = $1`, id,
 	).Scan(&n.ID, &n.UserID, &n.Type, &n.Priority, &n.Title, &n.Message, &n.Channel, &n.ReferenceID, &metadataJSON, &n.Read, &n.ReadAt, &n.CreatedAt, &n.UpdatedAt)
 	if err == pgx.ErrNoRows {
@@ -66,7 +66,7 @@ func (r *NotificationRepository) ListByUser(ctx context.Context, userID string, 
 	argIdx := 2
 
 	if readFilter != nil {
-		where += fmt.Sprintf(" AND read = $%d", argIdx)
+		where += fmt.Sprintf(" AND \"read\" = $%d", argIdx)
 		args = append(args, *readFilter)
 		argIdx++
 	}
@@ -87,13 +87,13 @@ func (r *NotificationRepository) ListByUser(ctx context.Context, userID string, 
 
 	// Count unread
 	var unreadCount int
-	err = r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND read = false", userID).Scan(&unreadCount)
+	err = r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND \"read\" = false", userID).Scan(&unreadCount)
 	if err != nil {
 		return nil, fmt.Errorf("unread count query failed: %w", err)
 	}
 
 	// Fetch page
-	query := fmt.Sprintf("SELECT id, user_id, type, priority, title, message, channel, reference_id, metadata, read, read_at, created_at, updated_at FROM notifications%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", where, argIdx, argIdx+1)
+	query := fmt.Sprintf("SELECT id, user_id, type, priority, title, message, channel, reference_id, metadata, \"read\", read_at, created_at, updated_at FROM notifications%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", where, argIdx, argIdx+1)
 	args = append(args, pageSize, offset)
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -134,7 +134,7 @@ func (r *NotificationRepository) ListByUser(ctx context.Context, userID string, 
 func (r *NotificationRepository) MarkRead(ctx context.Context, id, userID string) error {
 	now := time.Now().UTC()
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE notifications SET read = true, read_at = $1, updated_at = $1 WHERE id = $2 AND user_id = $3`,
+		`UPDATE notifications SET "read" = true, read_at = $1, updated_at = $1 WHERE id = $2 AND user_id = $3`,
 		now, id, userID,
 	)
 	if err != nil {
@@ -150,7 +150,7 @@ func (r *NotificationRepository) MarkRead(ctx context.Context, id, userID string
 func (r *NotificationRepository) MarkAllRead(ctx context.Context, userID string) (int64, error) {
 	now := time.Now().UTC()
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE notifications SET read = true, read_at = $1, updated_at = $1 WHERE user_id = $2 AND read = false`,
+		`UPDATE notifications SET "read" = true, read_at = $1, updated_at = $1 WHERE user_id = $2 AND "read" = false`,
 		now, userID,
 	)
 	if err != nil {
