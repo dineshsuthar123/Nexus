@@ -107,7 +107,7 @@ func (r *AccountRepository) GetByAccountNumber(ctx context.Context, accountNumbe
 
 // GetIDByIBAN retrieves an account ID by IBAN
 func (r *AccountRepository) GetIDByIBAN(ctx context.Context, iban string) (uuid.UUID, error) {
-	query := `SELECT id FROM account WHERE iban = $1 AND status = 'ACTIVE' LIMIT 1`
+	query := `SELECT id FROM account WHERE account_number = $1 AND status = 'ACTIVE' LIMIT 1`
 
 	var id uuid.UUID
 	err := r.pool.QueryRow(ctx, query, iban).Scan(&id)

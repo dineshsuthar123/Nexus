@@ -1,0 +1,26 @@
+go 1.25.6
+
+use (
+	./audit
+	./libs/iso20022
+	./pkg/idempotency
+	./pkg/mtls
+	./pkg/multitenancy
+	./pkg/vault
+	./proofs
+	./replay
+	./security
+	./services/account-service
+	./services/analytics-service
+	./services/audit-service
+	./services/auth-service
+	./services/notification-service
+	./services/payment-service
+	./services/reconciliation-service
+	./services/ws-gateway
+	./tests
+	./tests/chaos
+	./tests/contracts
+	./tests/e2e
+	./tests/integration
+)

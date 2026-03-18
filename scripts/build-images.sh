@@ -6,13 +6,13 @@
 #   ./scripts/build-images.sh v1.0.0 --push       # build + tag + push to registry
 #
 # Environment variables:
-#   REGISTRY  - Container registry (default: registry.nexus-rtp.internal)
+#   REGISTRY  - Container registry (default: ghcr.io)
 
 set -euo pipefail
 
 VERSION="${1:-latest}"
 PUSH="${2:-}"
-REGISTRY="${REGISTRY:-registry.nexus-rtp.internal}"
+REGISTRY="${REGISTRY:-ghcr.io}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

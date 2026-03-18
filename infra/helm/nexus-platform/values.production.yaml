@@ -8,7 +8,7 @@
 
 global:
   environment: production
-  imageRegistry: "registry.nexus-rtp.internal"
+  imageRegistry: "ghcr.io"
 
 # ============================================================
 # Canary Configuration (production gates — tighter than staging)

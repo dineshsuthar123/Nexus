@@ -10,7 +10,6 @@ dist/
 # Go
 *.test
 *.out
-go.work
 vendor/
 
 # Java / Maven / Gradle
@@ -57,6 +56,15 @@ secrets/
 logs/
 *.log
 npm-debug.log*
+
+# Test output artifacts (generated during test runs)
+init_logs*.txt
+tests/e2e/db_out*.txt
+tests/e2e/flow_out*.txt
+tests/e2e/out*.txt
+tests/integration/output.txt
+tests/integration/error.txt
+tests/integration/error.log
 
 # Dependencies
 node_modules/

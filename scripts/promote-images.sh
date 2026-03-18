@@ -7,7 +7,7 @@
 #   ./scripts/promote-images.sh staging-abc1234 v1.0.0
 #
 # Environment:
-#   REGISTRY - Container registry (default: registry.nexus-rtp.internal)
+#   REGISTRY - Container registry (default: ghcr.io)
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ fi
 
 STAGING_TAG="$1"
 RELEASE_VERSION="$2"
-REGISTRY="${REGISTRY:-registry.nexus-rtp.internal}"
+REGISTRY="${REGISTRY:-ghcr.io}"
 
 SERVICES=(
   payment-service

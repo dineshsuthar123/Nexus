@@ -23,21 +23,21 @@ import (
 // 4. Outbox pattern ensures exactly-once Kafka delivery
 
 const (
-	paymentServiceURL = "http://localhost:8080"
+	paymentServiceURL = "http://localhost:8085"
 	defaultTimeout    = 30 * time.Second
 )
 
 // PaymentRequest represents a payment initiation request
 type PaymentRequest struct {
-	IdempotencyKey    string  `json:"idempotency_key"`
-	DebtorAccount     string  `json:"debtor_account"`
-	CreditorAccount   string  `json:"creditor_account"`
-	Amount            float64 `json:"amount"`
-	Currency          string  `json:"currency"`
-	PaymentMethod     string  `json:"payment_method"`
-	EndToEndID        string  `json:"end_to_end_id"`
-	InstructionID     string  `json:"instruction_id"`
-	RemittanceInfo    string  `json:"remittance_info,omitempty"`
+	IdempotencyKey  string  `json:"idempotency_key"`
+	DebtorAccount   string  `json:"debtor_account"`
+	CreditorAccount string  `json:"creditor_account"`
+	Amount          float64 `json:"amount"`
+	Currency        string  `json:"currency"`
+	PaymentMethod   string  `json:"payment_method"`
+	EndToEndID      string  `json:"end_to_end_id"`
+	InstructionID   string  `json:"instruction_id"`
+	RemittanceInfo  string  `json:"remittance_info,omitempty"`
 }
 
 // PaymentResponse represents the API response

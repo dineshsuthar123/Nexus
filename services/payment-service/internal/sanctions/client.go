@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"time"
 
 	"go.uber.org/zap"
@@ -104,13 +105,13 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 		)
 	}()
 
-	// Build search URL
-	url := fmt.Sprintf("%s/search?name=%s&limit=5&minMatch=0.80", c.baseURL, req.Name)
+	// Build search URL (URL-encode user inputs to prevent parameter injection)
+	url := fmt.Sprintf("%s/search?name=%s&limit=5&minMatch=0.80", c.baseURL, neturl.QueryEscape(req.Name))
 	if req.Country != "" {
-		url += "&country=" + req.Country
+		url += "&country=" + neturl.QueryEscape(req.Country)
 	}
 	if req.SDNType != "" {
-		url += "&sdnType=" + req.SDNType
+		url += "&sdnType=" + neturl.QueryEscape(req.SDNType)
 	}
 
 	// Create request
