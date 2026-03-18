@@ -1,0 +1,509 @@
+# Nexus RTP — Production Docker Compose (Single-Node / Free-Tier VPS)
+#
+# Optimized for deployment on a free-tier VPS such as:
+#   - Oracle Cloud Free Tier (4 OCPU ARM, 24GB RAM)
+#   - Hetzner CX11 or similar (2 vCPU, 4GB RAM minimum)
+#
+# Differences from dev compose:
+#   - Single CockroachDB node (no 3-node cluster)
+#   - Single Kafka broker (no 3-broker cluster)
+#   - No Flink (fraud detection optional, can run separately)
+#   - Memory limits on all containers
+#   - Production log levels
+#   - TLS-ready configuration
+#
+# Usage:
+#   cp .env.production.example .env.production
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production up -d
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production --profile services up -d
+
+version: "3.9"
+
+x-common-variables: &common-env
+  TZ: UTC
+  LOG_LEVEL: info
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 30s
+
+services:
+  # ============================================================================
+  # CockroachDB — Single Node (sufficient for initial production)
+  # ============================================================================
+  cockroachdb:
+    image: cockroachdb/cockroach:v23.2.0
+    container_name: nexus-cockroachdb
+    hostname: cockroachdb
+    command: start-single-node --insecure --listen-addr=0.0.0.0:26257 --http-addr=0.0.0.0:8080 --max-sql-memory=512MiB --cache=256MiB
+    ports:
+      - "26257:26257"
+      - "127.0.0.1:8080:8080"  # DB UI only on localhost
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+    networks:
+      - nexus-network
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health?ready=1"]
+    restart: unless-stopped
+
+  cockroachdb-init:
+    image: cockroachdb/cockroach:v23.2.0
+    container_name: nexus-cockroachdb-init
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+        sleep 8 &&
+        cockroach sql --insecure --host=cockroachdb:26257 < /docker-entrypoint-initdb.d/001_init_schema.sql &&
+        cockroach sql --insecure --host=cockroachdb:26257 --database=nexus_ledger < /docker-entrypoint-initdb.d/002_cdc_setup.sql &&
+        echo 'Database initialized successfully'
+      "
+    volumes:
+      - ./cockroachdb/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - nexus-network
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+
+  # ============================================================================
+  # Kafka — Single Broker (KRaft mode, no Zookeeper)
+  # ============================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: nexus-kafka
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: "NexusRTPKafkaCluster001"
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - nexus-network
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+    restart: unless-stopped
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: nexus-kafka-init
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+        sleep 5 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic nexus.events.raw --partitions 6 --replication-factor 1 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic nexus.payments.initiated --partitions 6 --replication-factor 1 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic nexus.payments.completed --partitions 6 --replication-factor 1 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic nexus.fraud.alerts --partitions 3 --replication-factor 1 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic nexus.sanctions.results --partitions 3 --replication-factor 1 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic nexus.notifications --partitions 3 --replication-factor 1 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic nexus.outbox.events --partitions 6 --replication-factor 1 &&
+        echo 'Kafka topics created'
+      "
+    networks:
+      - nexus-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ============================================================================
+  # Redis — Cache & Idempotency Store
+  # ============================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: nexus-redis
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-NxR3d1sSecur3Pass}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - nexus-network
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-NxR3d1sSecur3Pass}", "ping"]
+    restart: unless-stopped
+
+  # ============================================================================
+  # Moov Watchman — OFAC Sanctions Screening
+  # ============================================================================
+  watchman:
+    image: moov/watchman:v0.26.1
+    container_name: nexus-watchman
+    ports:
+      - "127.0.0.1:8084:8084"
+    environment:
+      LOG_FORMAT: json
+    networks:
+      - nexus-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/ping"]
+    restart: unless-stopped
+
+  # ============================================================================
+  # Monitoring (lightweight)
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: nexus-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.size=1GB'
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ../prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    networks:
+      - nexus-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: nexus-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-NxGr4f4naAdm1n2026}
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    ports:
+      - "3002:3000"
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - nexus-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # ============================================================================
+  # Application Services
+  # ============================================================================
+  payment-service:
+    build:
+      context: ../../
+      dockerfile: services/payment-service/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY_OWNER:-nexus}/nexus-payment-service:${VERSION:-latest}
+    container_name: nexus-payment-service
+    profiles: [services]
+    environment:
+      <<: *common-env
+      SERVER_PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb:26257/nexus_ledger?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://:${REDIS_PASSWORD:-NxR3d1sSecur3Pass}@redis:6379
+      IDEMPOTENCY_TTL_SECONDS: "86400"
+      WATCHMAN_URL: http://watchman:8084
+    ports:
+      - "8085:8080"
+    networks:
+      - nexus-network
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      watchman:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+    restart: unless-stopped
+
+  account-service:
+    build:
+      context: ../../
+      dockerfile: services/account-service/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY_OWNER:-nexus}/nexus-account-service:${VERSION:-latest}
+    container_name: nexus-account-service
+    profiles: [services]
+    environment:
+      <<: *common-env
+      SERVER_PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb:26257/nexus_ledger?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://:${REDIS_PASSWORD:-NxR3d1sSecur3Pass}@redis:6379
+      IDEMPOTENCY_TTL_SECONDS: "86400"
+    ports:
+      - "8086:8080"
+    networks:
+      - nexus-network
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+    restart: unless-stopped
+
+  reconciliation-service:
+    build:
+      context: ../../
+      dockerfile: services/reconciliation-service/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY_OWNER:-nexus}/nexus-reconciliation-service:${VERSION:-latest}
+    container_name: nexus-reconciliation-service
+    profiles: [services]
+    environment:
+      <<: *common-env
+      SERVER_PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb:26257/nexus_ledger?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://:${REDIS_PASSWORD:-NxR3d1sSecur3Pass}@redis:6379
+    ports:
+      - "8087:8080"
+    networks:
+      - nexus-network
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ../../
+      dockerfile: services/auth-service/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY_OWNER:-nexus}/nexus-auth-service:${VERSION:-latest}
+    container_name: nexus-auth-service
+    profiles: [services]
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb:26257/nexus_auth?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD:-NxR3d1sSecur3Pass}@redis:6379
+      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      JWT_ACCESS_TOKEN_EXPIRY: "15m"
+      JWT_REFRESH_TOKEN_EXPIRY: "168h"
+      JWT_ISSUER: nexus-rtp-auth
+      MFA_ISSUER: NexusRTP
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-RTTz/WcQejvv6fupnEKOqvehQ+yDCqw4L1GQp/Svi4Y=}
+    ports:
+      - "8088:8080"
+    networks:
+      - nexus-network
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ../../
+      dockerfile: services/notification-service/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY_OWNER:-nexus}/nexus-notification-service:${VERSION:-latest}
+    container_name: nexus-notification-service
+    profiles: [services]
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb:26257/nexus_ledger?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD:-NxR3d1sSecur3Pass}@redis:6379
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: nexus.notifications
+    ports:
+      - "8092:8080"
+    networks:
+      - nexus-network
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+    restart: unless-stopped
+
+  ws-gateway:
+    build:
+      context: ../../
+      dockerfile: services/ws-gateway/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY_OWNER:-nexus}/nexus-ws-gateway:${VERSION:-latest}
+    container_name: nexus-ws-gateway
+    profiles: [services]
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPICS: nexus.payments.completed,nexus.fraud.alerts,nexus.notifications
+    ports:
+      - "8089:8080"
+    networks:
+      - nexus-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+    restart: unless-stopped
+
+  analytics-service:
+    build:
+      context: ../../
+      dockerfile: services/analytics-service/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY_OWNER:-nexus}/nexus-analytics-service:${VERSION:-latest}
+    container_name: nexus-analytics-service
+    profiles: [services]
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb:26257/nexus_ledger?sslmode=disable
+    ports:
+      - "8093:8080"
+    networks:
+      - nexus-network
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+    restart: unless-stopped
+
+  audit-service:
+    build:
+      context: ../../
+      dockerfile: services/audit-service/Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY_OWNER:-nexus}/nexus-audit-service:${VERSION:-latest}
+    container_name: nexus-audit-service
+    profiles: [services]
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      DATABASE_URL: postgresql://root@cockroachdb:26257/nexus_ledger?sslmode=disable
+    ports:
+      - "8091:8080"
+    networks:
+      - nexus-network
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+    restart: unless-stopped
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  cockroach-data:
+    driver: local
+  kafka-data:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  nexus-network:
+    driver: bridge

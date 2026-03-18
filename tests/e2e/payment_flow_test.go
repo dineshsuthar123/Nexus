@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -29,13 +30,20 @@ type TestConfig struct {
 // DefaultTestConfig returns default test config for local environment
 func DefaultTestConfig() *TestConfig {
 	return &TestConfig{
-		PaymentServiceURL:        "http://localhost:8080",
-		AccountServiceURL:        "http://localhost:8081",
-		ReconciliationServiceURL: "http://localhost:8082",
-		KafkaBrokers:             "localhost:9092",
-		DatabaseURL:              "postgres://root@localhost:26257/nexus?sslmode=disable",
+		PaymentServiceURL:        envOrDefault("PAYMENT_SERVICE_URL", "http://127.0.0.1:8085"),
+		AccountServiceURL:        envOrDefault("ACCOUNT_SERVICE_URL", "http://127.0.0.1:8086"),
+		ReconciliationServiceURL: envOrDefault("RECONCILIATION_SERVICE_URL", "http://127.0.0.1:8087"),
+		KafkaBrokers:             envOrDefault("KAFKA_BROKERS", "127.0.0.1:9092"),
+		DatabaseURL:              envOrDefault("DATABASE_URL", "postgres://root@127.0.0.1:26257/nexus_ledger?sslmode=disable"),
 		Timeout:                  30 * time.Second,
 	}
+}
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // ========================================================================
@@ -89,8 +97,10 @@ func TestPaymentEndToEnd(t *testing.T) {
 		ctx := context.Background()
 
 		// Create accounts
-		debtor, _ := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 5000.00)
-		creditor, _ := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 0.00)
+		debtor, err := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 5000.00)
+		require.NoError(t, err)
+		creditor, err := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 0.00)
+		require.NoError(t, err)
 
 		// Same UETR for both requests
 		uetr := uuid.New().String()
@@ -98,6 +108,8 @@ func TestPaymentEndToEnd(t *testing.T) {
 			UETR:            uetr,
 			DebtorAccount:   debtor.Number,
 			CreditorAccount: creditor.Number,
+			DebtorName:      "Test Debtor",
+			CreditorName:    "Test Creditor",
 			Amount:          500.00,
 			Currency:        "USD",
 		}
@@ -122,14 +134,18 @@ func TestPaymentEndToEnd(t *testing.T) {
 		ctx := context.Background()
 
 		// Create accounts with low balance
-		debtor, _ := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 100.00)
-		creditor, _ := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 0.00)
+		debtor, err := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 100.00)
+		require.NoError(t, err)
+		creditor, err := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 0.00)
+		require.NoError(t, err)
 
 		// Try to pay more than balance
-		_, err := initiatePayment(ctx, client, cfg.PaymentServiceURL, PaymentRequest{
+		_, err = initiatePayment(ctx, client, cfg.PaymentServiceURL, PaymentRequest{
 			UETR:            uuid.New().String(),
 			DebtorAccount:   debtor.Number,
 			CreditorAccount: creditor.Number,
+			DebtorName:      "Test Debtor",
+			CreditorName:    "Test Creditor",
 			Amount:          500.00,
 			Currency:        "USD",
 		})
@@ -142,14 +158,18 @@ func TestPaymentEndToEnd(t *testing.T) {
 		ctx := context.Background()
 
 		// Create accounts
-		debtor, _ := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 10000.00)
-		creditor, _ := createAccountWithName(ctx, client, cfg.AccountServiceURL, "USD", 0.00, "OFAC Sanctioned Entity")
+		debtor, err := createAccount(ctx, client, cfg.AccountServiceURL, "USD", 10000.00)
+		require.NoError(t, err)
+		creditor, err := createAccountWithName(ctx, client, cfg.AccountServiceURL, "USD", 0.00, "OFAC Sanctioned Entity")
+		require.NoError(t, err)
 
 		// Payment to sanctioned entity should be blocked
-		_, err := initiatePayment(ctx, client, cfg.PaymentServiceURL, PaymentRequest{
+		_, err = initiatePayment(ctx, client, cfg.PaymentServiceURL, PaymentRequest{
 			UETR:            uuid.New().String(),
 			DebtorAccount:   debtor.Number,
 			CreditorAccount: creditor.Number,
+			DebtorName:      "Test Debtor",
+			CreditorName:    "OFAC Sanctioned Entity",
 			Amount:          1000.00,
 			Currency:        "USD",
 		})
@@ -207,6 +227,8 @@ func TestPaymentLatency(t *testing.T) {
 			UETR:            uuid.New().String(),
 			DebtorAccount:   debtor.Number,
 			CreditorAccount: creditor.Number,
+			DebtorName:      "Test Debtor",
+			CreditorName:    "Test Creditor",
 			Amount:          1.00,
 			Currency:        "USD",
 		})
@@ -240,6 +262,8 @@ type PaymentRequest struct {
 	UETR            string  `json:"uetr"`
 	DebtorAccount   string  `json:"debtorAccount"`
 	CreditorAccount string  `json:"creditorAccount"`
+	DebtorName      string  `json:"debtorName"`
+	CreditorName    string  `json:"creditorName"`
 	Amount          float64 `json:"amount"`
 	Currency        string  `json:"currency"`
 }
@@ -262,10 +286,10 @@ func createAccount(ctx context.Context, client *http.Client, baseURL, currency s
 
 func createAccountWithName(ctx context.Context, client *http.Client, baseURL, currency string, balance float64, name string) (*Account, error) {
 	body, _ := json.Marshal(map[string]interface{}{
-		"accountNumber": fmt.Sprintf("ACCT%d", time.Now().UnixNano()),
-		"currency":      currency,
-		"balance":       balance,
-		"name":          name,
+		"accountNumber":  fmt.Sprintf("ACCT%d", time.Now().UnixNano()),
+		"currency":       currency,
+		"initialBalance": balance,
+		"name":           name,
 	})
 
 	req, _ := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/v1/accounts", bytes.NewReader(body))

@@ -3,7 +3,7 @@
 
 global:
   environment: staging
-  imageRegistry: "registry.nexus-rtp.internal"
+  imageRegistry: "ghcr.io"
 
 # ============================================================
 # Canary / Blue-Green Deployment Configuration

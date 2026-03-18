@@ -108,6 +108,13 @@ func main() {
 	router.Use(observability.GinLogger(logger))
 	router.Use(observability.TracingMiddleware())
 
+	// Limit request body size to 10MB to prevent memory exhaustion attacks
+	router.MaxMultipartMemory = 10 << 20 // 10 MB
+	router.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 10<<20)
+		c.Next()
+	})
+
 	// Idempotency middleware — applied to all POST routes
 	if rdb != nil {
 		idempCfg := idempotency.DefaultConfig("payment-service", logger)
@@ -125,13 +132,14 @@ func main() {
 	router.GET("/ready", readinessHandler(dbPool))
 	observability.RegisterMetricsHandler(router)
 
-	// Create HTTP server
+	// Create HTTP server with hardened timeouts
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:           fmt.Sprintf(":%d", cfg.Port),
+		Handler:        router,
+		ReadTimeout:    15 * time.Second,
+		WriteTimeout:   15 * time.Second,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1 MB max header size
 	}
 
 	// Start server in goroutine

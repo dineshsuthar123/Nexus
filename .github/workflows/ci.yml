@@ -181,48 +181,66 @@ jobs:
     runs-on: ubuntu-latest
     needs: [go-build, java-build]
     continue-on-error: true
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build payment-service image
-        run: |
-          docker build -t nexus/payment-service:${{ github.sha }} -f services/payment-service/Dockerfile .
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build account-service image
+      - name: Build and push payment-service image
         run: |
-          docker build -t nexus/account-service:${{ github.sha }} -f services/account-service/Dockerfile .
+          docker build -t ghcr.io/${{ github.repository_owner }}/nexus-payment-service:${{ github.sha }} -f services/payment-service/Dockerfile .
+          docker push ghcr.io/${{ github.repository_owner }}/nexus-payment-service:${{ github.sha }}
 
-      - name: Build reconciliation-service image
+      - name: Build and push account-service image
         run: |
-          docker build -t nexus/reconciliation-service:${{ github.sha }} -f services/reconciliation-service/Dockerfile .
+          docker build -t ghcr.io/${{ github.repository_owner }}/nexus-account-service:${{ github.sha }} -f services/account-service/Dockerfile .
+          docker push ghcr.io/${{ github.repository_owner }}/nexus-account-service:${{ github.sha }}
 
-      - name: Build auth-service image
+      - name: Build and push reconciliation-service image
         run: |
-          docker build -t nexus/auth-service:${{ github.sha }} -f services/auth-service/Dockerfile .
+          docker build -t ghcr.io/${{ github.repository_owner }}/nexus-reconciliation-service:${{ github.sha }} -f services/reconciliation-service/Dockerfile .
+          docker push ghcr.io/${{ github.repository_owner }}/nexus-reconciliation-service:${{ github.sha }}
 
-      - name: Build notification-service image
+      - name: Build and push auth-service image
         run: |
-          docker build -t nexus/notification-service:${{ github.sha }} -f services/notification-service/Dockerfile .
+          docker build -t ghcr.io/${{ github.repository_owner }}/nexus-auth-service:${{ github.sha }} -f services/auth-service/Dockerfile .
+          docker push ghcr.io/${{ github.repository_owner }}/nexus-auth-service:${{ github.sha }}
 
-      - name: Build ws-gateway image
+      - name: Build and push notification-service image
         run: |
-          docker build -t nexus/ws-gateway:${{ github.sha }} -f services/ws-gateway/Dockerfile .
+          docker build -t ghcr.io/${{ github.repository_owner }}/nexus-notification-service:${{ github.sha }} -f services/notification-service/Dockerfile .
+          docker push ghcr.io/${{ github.repository_owner }}/nexus-notification-service:${{ github.sha }}
 
-      - name: Build analytics-service image
+      - name: Build and push ws-gateway image
         run: |
-          docker build -t nexus/analytics-service:${{ github.sha }} -f services/analytics-service/Dockerfile .
+          docker build -t ghcr.io/${{ github.repository_owner }}/nexus-ws-gateway:${{ github.sha }} -f services/ws-gateway/Dockerfile .
+          docker push ghcr.io/${{ github.repository_owner }}/nexus-ws-gateway:${{ github.sha }}
 
-      - name: Build audit-service image
+      - name: Build and push analytics-service image
         run: |
-          docker build -t nexus/audit-service:${{ github.sha }} -f services/audit-service/Dockerfile .
+          docker build -t ghcr.io/${{ github.repository_owner }}/nexus-analytics-service:${{ github.sha }} -f services/analytics-service/Dockerfile .
+          docker push ghcr.io/${{ github.repository_owner }}/nexus-analytics-service:${{ github.sha }}
+
+      - name: Build and push audit-service image
+        run: |
+          docker build -t ghcr.io/${{ github.repository_owner }}/nexus-audit-service:${{ github.sha }} -f services/audit-service/Dockerfile .
+          docker push ghcr.io/${{ github.repository_owner }}/nexus-audit-service:${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'nexus/payment-service:${{ github.sha }}'
+          image-ref: 'ghcr.io/${{ github.repository_owner }}/nexus-payment-service:${{ github.sha }}'
           format: 'table'
           exit-code: '0'
           ignore-unfixed: true
@@ -232,7 +250,7 @@ jobs:
       - name: Run Trivy on account-service
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'nexus/account-service:${{ github.sha }}'
+          image-ref: 'ghcr.io/${{ github.repository_owner }}/nexus-account-service:${{ github.sha }}'
           format: 'table'
           exit-code: '0'
           ignore-unfixed: true

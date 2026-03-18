@@ -62,34 +62,34 @@ CREATE TYPE IF NOT EXISTS outbox_status AS ENUM (
 
 CREATE TABLE IF NOT EXISTS customer (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- Identification
     external_id STRING(64) UNIQUE NOT NULL,
     customer_type STRING(20) NOT NULL DEFAULT 'INDIVIDUAL', -- INDIVIDUAL, CORPORATE
-    
+
     -- Legal Name
     legal_name STRING(256) NOT NULL,
     display_name STRING(128),
-    
+
     -- KYC Information
     kyc_status STRING(20) NOT NULL DEFAULT 'PENDING',
     kyc_verified_at TIMESTAMPTZ,
     risk_rating STRING(10) DEFAULT 'MEDIUM', -- LOW, MEDIUM, HIGH
-    
+
     -- Address (for sanctions screening)
     country_code STRING(2) NOT NULL,
     address_line1 STRING(256),
     address_line2 STRING(256),
     city STRING(128),
     postal_code STRING(20),
-    
+
     -- Metadata
     metadata JSONB DEFAULT '{}',
-    
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-    
+
     -- Indexes
     INDEX idx_customer_country (country_code),
     INDEX idx_customer_risk (risk_rating),
@@ -103,60 +103,70 @@ CREATE TABLE IF NOT EXISTS customer (
 
 CREATE TABLE IF NOT EXISTS account (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- Ownership
     customer_id UUID NOT NULL REFERENCES customer(id),
-    
+    external_id STRING(64) DEFAULT '',
+
     -- Account Details
     account_number STRING(34) UNIQUE NOT NULL, -- IBAN-compatible length
-    account_type account_type NOT NULL DEFAULT 'OPERATING',
+    account_name STRING(256) DEFAULT '',
+    account_type STRING(20) NOT NULL DEFAULT 'OPERATING',
     currency STRING(3) NOT NULL,
-    
+    iban STRING(34) DEFAULT '',
+    bic STRING(11) DEFAULT '',
+
     -- Balance Management
     -- Using DECIMAL(19,4) for precision: max 999 trillion with 4 decimal places
     balance DECIMAL(19, 4) NOT NULL DEFAULT 0.0000,
     available_balance DECIMAL(19, 4) NOT NULL DEFAULT 0.0000,
     pending_credits DECIMAL(19, 4) NOT NULL DEFAULT 0.0000,
     pending_debits DECIMAL(19, 4) NOT NULL DEFAULT 0.0000,
-    
+
     -- Limits
     daily_limit DECIMAL(19, 4) DEFAULT 1000000.0000,
     transaction_limit DECIMAL(19, 4) DEFAULT 100000.0000,
+    daily_used DECIMAL(19, 4) DEFAULT 0.0000,
     allow_negative BOOLEAN DEFAULT FALSE,
     minimum_balance DECIMAL(19, 4) DEFAULT 0.0000,
-    
-    -- Status
-    status account_status NOT NULL DEFAULT 'ACTIVE',
-    
+
+    -- Status & KYC
+    status STRING(20) NOT NULL DEFAULT 'ACTIVE',
+    kyc_status STRING(20) DEFAULT 'PENDING',
+    risk_score DECIMAL(5, 4) DEFAULT 0.0000,
+
     -- Geo-partitioning: Computed column based on currency
     -- This determines which region the row resides in
     region STRING(20) AS (
-        CASE 
+        CASE
             WHEN currency IN ('USD', 'CAD', 'MXN') THEN 'us-east-1'
             WHEN currency IN ('EUR', 'GBP', 'CHF') THEN 'eu-central-1'
             WHEN currency IN ('JPY', 'SGD', 'AUD', 'HKD', 'INR') THEN 'ap-southeast-1'
             ELSE 'us-east-1'  -- Default region
         END
     ) STORED,
-    
+
     -- Metadata (ISO 20022 rich data)
+    description STRING(256) DEFAULT '',
+    holder_name STRING(256) DEFAULT '',
+    holder_type STRING(20) DEFAULT 'INDIVIDUAL',
     metadata JSONB DEFAULT '{}',
-    
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
     version INT NOT NULL DEFAULT 1,  -- Optimistic locking
-    
+
     -- Constraints
     CONSTRAINT check_positive_balance CHECK (balance >= 0 OR allow_negative = TRUE),
     CONSTRAINT check_valid_currency CHECK (length(currency) = 3),
-    CONSTRAINT check_limits CHECK (daily_limit >= transaction_limit),
-    
+
     -- Indexes
     INDEX idx_account_customer (customer_id),
     INDEX idx_account_currency (currency),
     INDEX idx_account_status (status),
-    INDEX idx_account_region (region)
+    INDEX idx_account_region (region),
+    INDEX idx_account_iban (iban) WHERE iban != ''
 );
 
 -- ============================================================================
@@ -166,69 +176,69 @@ CREATE TABLE IF NOT EXISTS account (
 
 CREATE TABLE IF NOT EXISTS transaction (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- ISO 20022 Identifiers
     uetr UUID UNIQUE NOT NULL,  -- Unique End-to-End Transaction Reference
     message_id STRING(35) NOT NULL,  -- GrpHdr.MsgId
     instruction_id STRING(35),  -- InstrId
     end_to_end_id STRING(35),  -- EndToEndId
-    
+
     -- Transaction Details
     transaction_type STRING(20) NOT NULL DEFAULT 'CREDIT_TRANSFER', -- CREDIT_TRANSFER, RETURN, FX
-    
+
     -- Amount (Instructed Amount)
     amount DECIMAL(19, 4) NOT NULL,
     currency STRING(3) NOT NULL,
-    
+
     -- Settlement Amount (may differ due to FX)
     settlement_amount DECIMAL(19, 4),
     settlement_currency STRING(3),
     exchange_rate DECIMAL(18, 8),
-    
+
     -- Fees
     fee_amount DECIMAL(19, 4) DEFAULT 0.0000,
     fee_currency STRING(3),
     charge_bearer STRING(4) DEFAULT 'SLEV', -- DEBT, CRED, SHAR, SLEV
-    
+
     -- Parties
     debtor_account_id UUID NOT NULL REFERENCES account(id),
     creditor_account_id UUID NOT NULL REFERENCES account(id),
-    
+
     -- Party Names (for sanctions screening)
     debtor_name STRING(140) NOT NULL,
     creditor_name STRING(140) NOT NULL,
-    
+
     -- Status Tracking
     status transaction_status NOT NULL DEFAULT 'PENDING',
     status_reason STRING(256),
-    
+
     -- Risk & Compliance
     sanctions_status STRING(20) DEFAULT 'PENDING', -- PENDING, CLEAR, BLOCKED, REVIEW
     sanctions_score DECIMAL(5, 4),  -- 0.0000 to 1.0000
     fraud_status STRING(20) DEFAULT 'PENDING', -- PENDING, CLEAR, ALERT, BLOCKED
     fraud_score DECIMAL(5, 4),
-    
+
     -- Timing
     requested_execution_date DATE,
     booking_date DATE NOT NULL DEFAULT current_date(),
     value_date DATE,
     settlement_date DATE,
-    
+
     -- Remittance Information (stored as JSON to prevent truncation)
     remittance_info JSONB DEFAULT '{}',
-    
+
     -- Full ISO 20022 payload
     original_message JSONB,
-    
+
     -- External Rail Information
     external_rail STRING(20),  -- FEDNOW, TIPS, SWIFT, INTERNAL
     external_reference STRING(64),
-    
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
     created_by STRING(64),
-    
+
     -- Indexes for common queries
     INDEX idx_transaction_status (status),
     INDEX idx_transaction_booking_date (booking_date DESC),
@@ -247,30 +257,31 @@ CREATE TABLE IF NOT EXISTS transaction (
 
 CREATE TABLE IF NOT EXISTS transaction_leg (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- Parent Reference
     transaction_id UUID NOT NULL REFERENCES transaction(id) ON DELETE CASCADE,
-    
+
     -- Account Reference
     account_id UUID NOT NULL REFERENCES account(id),
-    
+
     -- Leg Details
-    leg_type leg_type NOT NULL,
+    leg_type STRING(6) NOT NULL,
     amount DECIMAL(19, 4) NOT NULL,
     currency STRING(3) NOT NULL,
-    
-    -- Running Balance (snapshot after this leg applied)
+
+    -- Running Balance (snapshots before and after this leg applied)
+    balance_before DECIMAL(19, 4),
     balance_after DECIMAL(19, 4),
-    
+
     -- Description
-    description STRING(256),
-    
+    description STRING(256) DEFAULT '',
+
     -- Sequence within transaction (1 = first leg)
     sequence_number INT NOT NULL DEFAULT 1,
-    
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-    
+
     -- Indexes
     INDEX idx_leg_transaction (transaction_id),
     INDEX idx_leg_account (account_id),
@@ -285,25 +296,25 @@ CREATE TABLE IF NOT EXISTS transaction_leg (
 
 CREATE TABLE IF NOT EXISTS pending_credit (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- Target Account
     account_id UUID NOT NULL REFERENCES account(id),
-    
+
     -- Credit Details
     amount DECIMAL(19, 4) NOT NULL,
     currency STRING(3) NOT NULL,
-    
+
     -- Source Transaction
     transaction_id UUID NOT NULL REFERENCES transaction(id),
-    
+
     -- Processing Status
     aggregated BOOLEAN NOT NULL DEFAULT FALSE,
     aggregated_at TIMESTAMPTZ,
     batch_id UUID,
-    
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-    
+
     -- Index for efficient aggregation queries
     INDEX idx_pending_account_aggregated (account_id, aggregated) WHERE aggregated = FALSE
 );
@@ -316,30 +327,30 @@ CREATE TABLE IF NOT EXISTS pending_credit (
 
 CREATE TABLE IF NOT EXISTS outbox (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- Aggregate Information
     aggregate_type STRING(64) NOT NULL,  -- 'transaction', 'account', etc.
     aggregate_id UUID NOT NULL,
-    
+
     -- Event Information
     event_type STRING(64) NOT NULL,  -- 'PAYMENT_INITIATED', 'PAYMENT_COMPLETED', etc.
-    
+
     -- Payload (JSON event data)
     payload JSONB NOT NULL,
-    
+
     -- Routing
     topic STRING(128) NOT NULL DEFAULT 'nexus.events.raw',
-    partition_key STRING(64),  -- Usually account_id for ordering
-    
+    partition_key STRING(64) DEFAULT '',  -- Usually account_id for ordering
+
     -- Processing Status
-    status outbox_status NOT NULL DEFAULT 'PENDING',
+    status STRING(20) NOT NULL DEFAULT 'PENDING',
     published_at TIMESTAMPTZ,
-    error_message STRING(512),
+    error_message STRING(512) DEFAULT '',
     retry_count INT NOT NULL DEFAULT 0,
-    
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-    
+
     -- Indexes
     INDEX idx_outbox_status (status) WHERE status = 'PENDING',
     INDEX idx_outbox_created (created_at)
@@ -352,29 +363,29 @@ CREATE TABLE IF NOT EXISTS outbox (
 
 CREATE TABLE IF NOT EXISTS fx_rate (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- Currency Pair
     base_currency STRING(3) NOT NULL,
     quote_currency STRING(3) NOT NULL,
-    
+
     -- Rates
     bid_rate DECIMAL(18, 8) NOT NULL,  -- We buy at this rate
     ask_rate DECIMAL(18, 8) NOT NULL,  -- We sell at this rate
     mid_rate DECIMAL(18, 8) NOT NULL,  -- Mid-market rate
-    
+
     -- Validity
     valid_from TIMESTAMPTZ NOT NULL,
     valid_to TIMESTAMPTZ,
-    
+
     -- Source
     source STRING(32) NOT NULL DEFAULT 'ECB', -- ECB, BLOOMBERG, INTERNAL
-    
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-    
+
     -- Unique constraint per currency pair per time
     UNIQUE (base_currency, quote_currency, valid_from),
-    
+
     -- Indexes
     INDEX idx_fx_pair (base_currency, quote_currency),
     INDEX idx_fx_valid (valid_from DESC)
@@ -387,34 +398,54 @@ CREATE TABLE IF NOT EXISTS fx_rate (
 
 CREATE TABLE IF NOT EXISTS settlement_cycle (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- Cycle Identification
     cycle_date DATE NOT NULL,
     cycle_number INT NOT NULL,  -- Multiple cycles per day
     rail STRING(20) NOT NULL,   -- FEDNOW, TIPS, SWIFT
-    
+
     -- Timing
     opens_at TIMESTAMPTZ NOT NULL,
     closes_at TIMESTAMPTZ NOT NULL,
     settled_at TIMESTAMPTZ,
-    
+
     -- Position
     gross_credits DECIMAL(19, 4) NOT NULL DEFAULT 0.0000,
     gross_debits DECIMAL(19, 4) NOT NULL DEFAULT 0.0000,
     net_position DECIMAL(19, 4) NOT NULL DEFAULT 0.0000,
-    
+
     -- Status
     status STRING(20) NOT NULL DEFAULT 'OPEN', -- OPEN, CLOSED, SETTLING, SETTLED
-    
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-    
+
     -- Unique cycle per day per rail
     UNIQUE (cycle_date, cycle_number, rail),
-    
+
     -- Indexes
     INDEX idx_settlement_status (status),
     INDEX idx_settlement_date (cycle_date DESC)
+);
+
+-- ============================================================================
+-- RECONCILIATION CYCLE TABLE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS reconciliation_cycle (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cycle_date TIMESTAMPTZ NOT NULL,
+    status STRING(20) NOT NULL DEFAULT 'PENDING',
+    start_time TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
+    end_time TIMESTAMPTZ,
+    total_records INT DEFAULT 0,
+    matched_records INT DEFAULT 0,
+    discrepant_records INT DEFAULT 0,
+    auto_resolved INT DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
+    INDEX idx_recon_cycle_status (status),
+    INDEX idx_recon_cycle_date (cycle_date DESC)
 );
 
 -- ============================================================================
@@ -424,43 +455,32 @@ CREATE TABLE IF NOT EXISTS settlement_cycle (
 
 CREATE TABLE IF NOT EXISTS reconciliation_record (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
+    -- Cycle reference
+    cycle_id UUID NOT NULL REFERENCES reconciliation_cycle(id),
+
     -- Source References
     transaction_id UUID REFERENCES transaction(id),
-    uetr UUID,
-    
-    -- Match Data
-    internal_amount DECIMAL(19, 4),
-    internal_currency STRING(3),
-    
-    rail_amount DECIMAL(19, 4),
-    rail_currency STRING(3),
-    rail_reference STRING(64),
-    rail_timestamp TIMESTAMPTZ,
-    
-    statement_amount DECIMAL(19, 4),
-    statement_currency STRING(3),
-    statement_reference STRING(64),
-    statement_date DATE,
-    
+
     -- Match Result
-    match_status STRING(20) NOT NULL DEFAULT 'UNMATCHED', -- MATCHED, PARTIAL, UNMATCHED, EXCEPTION
-    match_score DECIMAL(5, 4),  -- Fuzzy match confidence
-    match_type STRING(20),     -- EXACT, FUZZY, MANUAL
-    
-    -- Exception Details
-    exception_reason STRING(256),
+    match_status STRING(20) NOT NULL DEFAULT 'UNMATCHED',
+    match_score DECIMAL(5, 4) DEFAULT 0.0000,
+    discrepancy_type STRING(64) DEFAULT '',
+    discrepancy_amount DECIMAL(19, 4) DEFAULT 0.0000,
+    details JSONB DEFAULT '{}',
+    resolution_type STRING(64) DEFAULT '',
+    resolved_by STRING(64) DEFAULT '',
     resolved_at TIMESTAMPTZ,
-    resolved_by STRING(64),
-    
+    resolution_notes STRING(512) DEFAULT '',
+
     -- Audit
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-    
+
     -- Indexes
-    INDEX idx_recon_status (match_status),
-    INDEX idx_recon_uetr (uetr),
-    INDEX idx_recon_transaction (transaction_id)
+    INDEX idx_recon_record_cycle (cycle_id),
+    INDEX idx_recon_record_status (match_status),
+    INDEX idx_recon_record_transaction (transaction_id)
 );
 
 -- ============================================================================
@@ -470,47 +490,32 @@ CREATE TABLE IF NOT EXISTS reconciliation_record (
 
 CREATE TABLE IF NOT EXISTS audit_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- What changed
     entity_type STRING(64) NOT NULL,
     entity_id UUID NOT NULL,
     action STRING(20) NOT NULL,  -- CREATE, UPDATE, DELETE
-    
+
     -- Change Details
     old_value JSONB,
     new_value JSONB,
     changed_fields STRING[],
-    
+
     -- Who changed it
     user_id STRING(64),
     ip_address STRING(45),
     user_agent STRING(256),
-    
+
     -- When
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-    
+
     -- Indexes
     INDEX idx_audit_entity (entity_type, entity_id),
     INDEX idx_audit_time (created_at DESC),
     INDEX idx_audit_user (user_id)
 );
 
--- ============================================================================
--- FUNCTIONS AND TRIGGERS
--- ============================================================================
 
--- Function to update the updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = current_timestamp();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Apply trigger to relevant tables
--- Note: CockroachDB doesn't support all PostgreSQL trigger features
--- In production, we handle this in application code
 
 -- ============================================================================
 -- VIEWS
@@ -518,7 +523,7 @@ $$ LANGUAGE plpgsql;
 
 -- View: Available balance including pending credits
 CREATE VIEW IF NOT EXISTS v_account_balance AS
-SELECT 
+SELECT
     a.id,
     a.account_number,
     a.customer_id,
@@ -538,7 +543,7 @@ LEFT JOIN (
 
 -- View: Transaction summary for reporting
 CREATE VIEW IF NOT EXISTS v_transaction_summary AS
-SELECT 
+SELECT
     t.id,
     t.uetr,
     t.amount,
@@ -558,7 +563,7 @@ JOIN account ca ON t.creditor_account_id = ca.id;
 
 -- View: Daily settlement position
 CREATE VIEW IF NOT EXISTS v_daily_settlement AS
-SELECT 
+SELECT
     booking_date,
     currency,
     external_rail,
@@ -575,7 +580,7 @@ GROUP BY booking_date, currency, external_rail;
 
 -- Insert system accounts (nostro/vostro for settlement)
 INSERT INTO customer (id, external_id, customer_type, legal_name, country_code, kyc_status)
-VALUES 
+VALUES
     ('00000000-0000-0000-0000-000000000001', 'SYSTEM', 'CORPORATE', 'Nexus Settlement System', 'US', 'VERIFIED')
 ON CONFLICT (external_id) DO NOTHING;
 
@@ -606,5 +611,3 @@ ON CONFLICT (base_currency, quote_currency, valid_from) DO NOTHING;
 -- CREATE USER nexus_app WITH PASSWORD 'secure_password';
 -- GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO nexus_app;
 -- GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO nexus_app;
-
-COMMIT;

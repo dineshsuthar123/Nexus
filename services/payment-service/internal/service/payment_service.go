@@ -298,7 +298,7 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 		}
 
 		// Create outbox event for downstream processing
-		eventPayload, _ := json.Marshal(map[string]interface{}{
+		eventPayload, err := json.Marshal(map[string]interface{}{
 			"transactionId":   transactionID.String(),
 			"uetr":            uetr.String(),
 			"amount":          req.Amount.String(),
@@ -307,6 +307,9 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 			"creditorName":    req.CreditorName,
 			"sanctionsStatus": sanctionsStatus,
 		})
+		if err != nil {
+			return fmt.Errorf("failed to marshal outbox event payload: %w", err)
+		}
 
 		outboxEvent := &db.OutboxEvent{
 			AggregateType: "transaction",
@@ -572,11 +575,14 @@ func (s *PaymentService) SettlePayment(ctx context.Context, uetrStr string) erro
 		}
 
 		// Create outbox event
-		eventPayload, _ := json.Marshal(map[string]interface{}{
+		eventPayload, err := json.Marshal(map[string]interface{}{
 			"transactionId": transaction.ID.String(),
 			"uetr":          transaction.UETR.String(),
 			"status":        "SETTLED",
 		})
+		if err != nil {
+			return fmt.Errorf("failed to marshal outbox event payload: %w", err)
+		}
 
 		outboxEvent := &db.OutboxEvent{
 			AggregateType: "transaction",
@@ -670,12 +676,15 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 		}
 
 		// Outbox event for downstream consumers
-		eventPayload, _ := json.Marshal(map[string]interface{}{
+		eventPayload, err := json.Marshal(map[string]interface{}{
 			"transactionId": transaction.ID.String(),
 			"uetr":          transaction.UETR.String(),
 			"status":        "RETURNED",
 			"reasonCode":    reasonCode,
 		})
+		if err != nil {
+			return fmt.Errorf("failed to marshal outbox event payload: %w", err)
+		}
 
 		outboxEvent := &db.OutboxEvent{
 			AggregateType: "transaction",
