@@ -185,6 +185,8 @@ func (r *ShardRepository) ReserveFundsShard(
 
 // CreditShard adds funds to shard 0 (default credit sink).
 // Credits always go to shard 0; rebalancing distributes them later.
+// Lazy-initialises shards if the account has none yet (accounts created after
+// migration 008 are not pre-seeded).
 func (r *ShardRepository) CreditShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
 	query := `
 		UPDATE account_shard
@@ -197,26 +199,69 @@ func (r *ShardRepository) CreditShard(ctx context.Context, tx pgx.Tx, accountID 
 		return fmt.Errorf("shard credit failed: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("shard credit: shard 0 not found for account %s", accountID)
+		// Account has no shard rows yet (created after migration 008).
+		// Initialise with zero balance so credits can be applied immediately.
+		if initErr := r.EnsureShardsExist(ctx, tx, accountID, decimal.Zero); initErr != nil {
+			return fmt.Errorf("shard credit: lazy init failed for account %s: %w", accountID, initErr)
+		}
+		result2, retryErr := tx.Exec(ctx, query, accountID, amount)
+		if retryErr != nil {
+			return fmt.Errorf("shard credit (post-init) failed: %w", retryErr)
+		}
+		if result2.RowsAffected() == 0 {
+			return fmt.Errorf("shard credit: shard 0 missing after init for account %s", accountID)
+		}
 	}
 	return nil
 }
 
-// DebitShard removes funds from shard 0 (inverse of CreditShard).
+// DebitShard removes funds from the creditor's shards (inverse of CreditShard).
 // Used by ReturnPayment to reverse a prior CreditShard on the creditor.
+//
+// Strategy:
+//  1. Try shard 0 first — the hot path; credits always land on shard 0.
+//  2. If shard 0 was drained by a rebalance, fall back to the richest shard
+//     that can cover the full amount (same strategy as ReserveFundsShard).
 func (r *ShardRepository) DebitShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
-	query := `
+	const debitQuery = `
 		UPDATE account_shard
-		SET balance = balance - $2,
+		SET balance = balance - $3,
 		    updated_at = current_timestamp()
-		WHERE account_id = $1 AND shard_id = 0
-		  AND balance >= $2
+		WHERE account_id = $1 AND shard_id = $2
+		  AND balance >= $3
 	`
-	result, err := tx.Exec(ctx, query, accountID, amount)
+	// ── Step 1: shard 0 (hot path) ──────────────────────────────────────────
+	result, err := tx.Exec(ctx, debitQuery, accountID, 0, amount)
 	if err != nil {
 		return fmt.Errorf("shard debit failed: %w", err)
 	}
+	if result.RowsAffected() == 1 {
+		return nil
+	}
+
+	// ── Step 2: fallback — find the richest shard that can cover it ─────────
+	// Triggered when the credit was rebalanced away from shard 0.
+	var fallbackShard int
+	err = tx.QueryRow(ctx,
+		`SELECT shard_id FROM account_shard
+		 WHERE account_id = $1 AND balance >= $2
+		 ORDER BY balance DESC
+		 LIMIT 1`,
+		accountID, amount,
+	).Scan(&fallbackShard)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return ErrInsufficientFunds
+		}
+		return fmt.Errorf("shard debit fallback query failed: %w", err)
+	}
+
+	result, err = tx.Exec(ctx, debitQuery, accountID, fallbackShard, amount)
+	if err != nil {
+		return fmt.Errorf("shard debit fallback exec failed: %w", err)
+	}
 	if result.RowsAffected() == 0 {
+		// Lost a race with another concurrent TX — treat as insufficient.
 		return ErrInsufficientFunds
 	}
 	return nil
