@@ -306,10 +306,11 @@ func (r *AccountRepository) Create(ctx context.Context, acc *Account) error {
 
 // Errors
 var (
-	ErrNotFound                = fmt.Errorf("entity not found")
-	ErrOptimisticLock          = fmt.Errorf("optimistic lock conflict")
-	ErrInsufficientFunds       = fmt.Errorf("insufficient funds")
-	ErrAccountInactive         = fmt.Errorf("account is not active")
-	ErrCurrencyMismatch        = fmt.Errorf("currency mismatch")
+	ErrNotFound                 = fmt.Errorf("entity not found")
+	ErrOptimisticLock           = fmt.Errorf("optimistic lock conflict")
+	ErrInsufficientFunds        = fmt.Errorf("insufficient funds")
+	ErrAccountInactive          = fmt.Errorf("account is not active")
+	ErrCurrencyMismatch         = fmt.Errorf("currency mismatch")
 	ErrTransactionLimitExceeded = fmt.Errorf("amount exceeds transaction limit")
+	ErrShardsNotInitialized     = fmt.Errorf("account shards not initialized")
 )

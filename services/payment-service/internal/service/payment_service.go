@@ -215,12 +215,12 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 	ledgerStart := time.Now()
 
 	// Use retry transaction for CockroachDB optimistic locking
-	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
+	err = s.pool.RetryTx(ctx, 5, func(tx pgx.Tx) error {
 		// Sharded fund reservation: debits a single shard row instead of the
 		// main account row, reducing write contention from N-on-1 to N/K-on-1.
 		// Validates account status, currency, and limit via read-only account lookup.
 		if err := s.shardRepo.ReserveFundsShard(ctx, tx, debtorAccountID, req.Amount, req.Currency); err != nil {
-			if err == db.ErrInsufficientFunds || err == db.ErrNotFound || err == db.ErrAccountInactive || err == db.ErrCurrencyMismatch || err == db.ErrTransactionLimitExceeded {
+			if err == db.ErrInsufficientFunds || err == db.ErrNotFound || err == db.ErrAccountInactive || err == db.ErrCurrencyMismatch || err == db.ErrTransactionLimitExceeded || err == db.ErrShardsNotInitialized {
 				return err
 			}
 			return fmt.Errorf("failed to reserve funds: %w", err)
@@ -328,7 +328,7 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 				ProcessingTime: time.Since(start).Milliseconds(),
 			}, nil
 		}
-		if err == db.ErrAccountInactive || err == db.ErrCurrencyMismatch || err == db.ErrTransactionLimitExceeded {
+		if err == db.ErrAccountInactive || err == db.ErrCurrencyMismatch || err == db.ErrTransactionLimitExceeded || err == db.ErrShardsNotInitialized {
 			return &CreatePaymentResponse{
 				UETR:           req.UETR,
 				Status:         "REJECTED",
@@ -357,6 +357,11 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 
 	// Async: check if debtor shards need rebalancing (non-blocking)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("shard rebalance panic", zap.Any("panic", r), zap.String("account_id", debtorAccountID.String()))
+			}
+		}()
 		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		needs, err := s.shardRepo.NeedsRebalance(bgCtx, debtorAccountID)

@@ -32,6 +32,12 @@ func NewPool(ctx context.Context, databaseURL string) (*Pool, error) {
 	// Connection timeout
 	config.ConnConfig.ConnectTimeout = 10 * time.Second
 
+	// SQL-level timeout: prevents runaway transactions from holding connections
+	if config.ConnConfig.RuntimeParams == nil {
+		config.ConnConfig.RuntimeParams = make(map[string]string)
+	}
+	config.ConnConfig.RuntimeParams["statement_timeout"] = "5000"
+
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)

@@ -337,8 +337,18 @@ func (c *Client) DownloadLatestLists(ctx context.Context) error {
 		return fmt.Errorf("download returned status %d", resp.StatusCode)
 	}
 
-	c.logger.Info("Triggered OFAC list download")
+	c.logger.Info("Triggered OFAC list download — clearing sanctions cache")
+	c.ClearCache()
 	return nil
+}
+
+// ClearCache invalidates all cached sanctions screening results.
+// Should be called after OFAC list updates.
+func (c *Client) ClearCache() {
+	c.cache.Range(func(key, _ interface{}) bool {
+		c.cache.Delete(key)
+		return true
+	})
 }
 
 // Sanctions status constants

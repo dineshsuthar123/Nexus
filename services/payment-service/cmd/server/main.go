@@ -144,6 +144,28 @@ func main() {
 		MaxHeaderBytes: 1 << 20, // 1 MB max header size
 	}
 
+	// Background: retry failed outbox events every 30 seconds
+	outboxStop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				retryCtx, retryCancel := context.WithTimeout(context.Background(), 10*time.Second)
+				n, err := outboxRepo.RetryFailed(retryCtx, 5)
+				retryCancel()
+				if err != nil {
+					logger.Warn("outbox retry sweep failed", zap.Error(err))
+				} else if n > 0 {
+					logger.Info("outbox retry: reset failed events", zap.Int("count", n))
+				}
+			case <-outboxStop:
+				return
+			}
+		}
+	}()
+
 	// Start server in goroutine
 	go func() {
 		logger.Info("Starting Payment Service", zap.Int("port", cfg.Port))
@@ -157,6 +179,9 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	logger.Info("Shutting down server...")
+
+	// Stop background outbox retry goroutine
+	close(outboxStop)
 
 	// Give outstanding requests 30 seconds to complete
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

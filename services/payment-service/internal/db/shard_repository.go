@@ -135,6 +135,14 @@ func (r *ShardRepository) ReserveFundsShard(
 	).Scan(&fallbackShard)
 	if err != nil {
 		if err == pgx.ErrNoRows {
+			// Cold path: distinguish "no shards" from "insufficient funds"
+			var exists bool
+			if checkErr := tx.QueryRow(ctx,
+				`SELECT EXISTS(SELECT 1 FROM account_shard WHERE account_id = $1)`,
+				accountID,
+			).Scan(&exists); checkErr == nil && !exists {
+				return ErrShardsNotInitialized
+			}
 			shardDebitAttempts.WithLabelValues("insufficient").Inc()
 			return ErrInsufficientFunds
 		}
