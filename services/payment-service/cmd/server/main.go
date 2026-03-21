@@ -68,6 +68,7 @@ func main() {
 
 	// Initialize repositories
 	accountRepo := db.NewAccountRepository(dbPool, logger)
+	shardRepo := db.NewShardRepository(dbPool, logger)
 	transactionRepo := db.NewTransactionRepository(dbPool, logger)
 	outboxRepo := db.NewOutboxRepository(dbPool, logger)
 
@@ -76,6 +77,7 @@ func main() {
 		logger,
 		dbPool,
 		accountRepo,
+		shardRepo,
 		transactionRepo,
 		outboxRepo,
 		sanctionsClient,

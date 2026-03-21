@@ -23,6 +23,7 @@ type PaymentService struct {
 	logger          *zap.Logger
 	pool            TxManager
 	accountRepo     AccountStore
+	shardRepo       ShardStore
 	transactionRepo TransactionStore
 	outboxRepo      OutboxStore
 	sanctionsClient SanctionsScreener
@@ -34,6 +35,7 @@ func NewPaymentService(
 	logger *zap.Logger,
 	pool TxManager,
 	accountRepo AccountStore,
+	shardRepo ShardStore,
 	transactionRepo TransactionStore,
 	outboxRepo OutboxStore,
 	sanctionsClient SanctionsScreener,
@@ -43,6 +45,7 @@ func NewPaymentService(
 		logger:          logger,
 		pool:            pool,
 		accountRepo:     accountRepo,
+		shardRepo:       shardRepo,
 		transactionRepo: transactionRepo,
 		outboxRepo:      outboxRepo,
 		sanctionsClient: sanctionsClient,
@@ -213,35 +216,17 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 
 	// Use retry transaction for CockroachDB optimistic locking
 	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
-		// Get and lock debtor account
-		debtorAccount, err := s.accountRepo.GetForUpdate(ctx, tx, debtorAccountID)
-		if err != nil {
-			if err == db.ErrNotFound {
-				return fmt.Errorf("debtor account not found")
+		// Sharded fund reservation: debits a single shard row instead of the
+		// main account row, reducing write contention from N-on-1 to N/K-on-1.
+		// Validates account status, currency, and limit via read-only account lookup.
+		if err := s.shardRepo.ReserveFundsShard(ctx, tx, debtorAccountID, req.Amount, req.Currency); err != nil {
+			if err == db.ErrInsufficientFunds || err == db.ErrNotFound || err == db.ErrAccountInactive || err == db.ErrCurrencyMismatch || err == db.ErrTransactionLimitExceeded {
+				return err
 			}
-			return fmt.Errorf("failed to get debtor account: %w", err)
+			return fmt.Errorf("failed to reserve funds: %w", err)
 		}
 
-		// Validate debtor account
-		if debtorAccount.Status != "ACTIVE" {
-			return fmt.Errorf("debtor account is not active")
-		}
-		if debtorAccount.Currency != req.Currency {
-			return fmt.Errorf("currency mismatch: account is %s, payment is %s", debtorAccount.Currency, req.Currency)
-		}
-
-		// Check available balance
-		availableBalance := debtorAccount.Balance.Add(debtorAccount.PendingCredits).Sub(debtorAccount.PendingDebits)
-		if availableBalance.LessThan(req.Amount) && !debtorAccount.AllowNegative {
-			return db.ErrInsufficientFunds
-		}
-
-		// Check transaction limit
-		if req.Amount.GreaterThan(debtorAccount.TransactionLimit) {
-			return fmt.Errorf("amount exceeds transaction limit")
-		}
-
-		// Get creditor account (no lock needed for credit)
+		// Get creditor account (read-only, no lock needed)
 		creditorAccount, err := s.accountRepo.GetByID(ctx, creditorAccountID)
 		if err != nil {
 			if err == db.ErrNotFound {
@@ -253,11 +238,6 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 		// Validate creditor account
 		if creditorAccount.Status != "ACTIVE" {
 			return fmt.Errorf("creditor account is not active")
-		}
-
-		// Reserve funds on debtor account
-		if err := s.accountRepo.ReserveFunds(ctx, tx, debtorAccountID, req.Amount); err != nil {
-			return fmt.Errorf("failed to reserve funds: %w", err)
 		}
 
 		// Determine initial status based on sanctions
@@ -348,6 +328,15 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 				ProcessingTime: time.Since(start).Milliseconds(),
 			}, nil
 		}
+		if err == db.ErrAccountInactive || err == db.ErrCurrencyMismatch || err == db.ErrTransactionLimitExceeded {
+			return &CreatePaymentResponse{
+				UETR:           req.UETR,
+				Status:         "REJECTED",
+				StatusReason:   err.Error(),
+				CreatedAt:      time.Now(),
+				ProcessingTime: time.Since(start).Milliseconds(),
+			}, nil
+		}
 
 		return nil, err
 	}
@@ -365,6 +354,22 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 		zap.String("status", finalStatus),
 		zap.Duration("processingTime", totalDuration),
 	)
+
+	// Async: check if debtor shards need rebalancing (non-blocking)
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		needs, err := s.shardRepo.NeedsRebalance(bgCtx, debtorAccountID)
+		if err != nil {
+			s.logger.Warn("shard rebalance check failed", zap.Error(err))
+			return
+		}
+		if needs {
+			if err := s.shardRepo.Rebalance(bgCtx, debtorAccountID); err != nil {
+				s.logger.Warn("shard rebalance failed", zap.Error(err))
+			}
+		}
+	}()
 
 	return &CreatePaymentResponse{
 		TransactionID:   transactionID.String(),

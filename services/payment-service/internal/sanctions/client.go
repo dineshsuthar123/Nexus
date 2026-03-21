@@ -9,16 +9,25 @@ import (
 	"io"
 	"net/http"
 	neturl "net/url"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+// cacheEntry holds a cached sanctions screening result with expiry.
+type cacheEntry struct {
+	result   *ScreeningResult
+	cachedAt time.Time
+}
 
 // Client provides sanctions screening via Moov Watchman
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	logger     *zap.Logger
+	cache      sync.Map
+	cacheTTL   time.Duration
 }
 
 // NewClient creates a new sanctions screening client
@@ -26,9 +35,15 @@ func NewClient(baseURL string, logger *zap.Logger) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second, // Budget: 100ms but allow buffer
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 25,
+				IdleConnTimeout:     90 * time.Second,
+			},
 		},
-		logger: logger,
+		logger:   logger,
+		cacheTTL: 5 * time.Minute,
 	}
 }
 
@@ -105,6 +120,16 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 		)
 	}()
 
+	// Check in-memory cache (5-min TTL)
+	cacheKey := req.Name + "|" + req.Country
+	if entry, ok := c.cache.Load(cacheKey); ok {
+		ce := entry.(*cacheEntry)
+		if time.Since(ce.cachedAt) < c.cacheTTL {
+			return ce.result, nil
+		}
+		c.cache.Delete(cacheKey)
+	}
+
 	// Build search URL (URL-encode user inputs to prevent parameter injection)
 	url := fmt.Sprintf("%s/search?name=%s&limit=5&minMatch=0.80", c.baseURL, neturl.QueryEscape(req.Name))
 	if req.Country != "" {
@@ -146,6 +171,9 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 
 	// Analyze results
 	result := c.analyzeResults(req.Name, searchResp.SDNs)
+
+	// Store in cache
+	c.cache.Store(cacheKey, &cacheEntry{result: result, cachedAt: time.Now()})
 
 	c.logger.Info("Sanctions screening result",
 		zap.String("name", req.Name),
@@ -236,24 +264,33 @@ func (c *Client) analyzeResults(searchName string, sdns []SDNEntry) *ScreeningRe
 	return result
 }
 
-// ScreenParties screens both debtor and creditor
+// ScreenParties screens both debtor and creditor in parallel
 func (c *Client) ScreenParties(ctx context.Context, debtorName, creditorName, debtorCountry, creditorCountry string) (debtorResult, creditorResult *ScreeningResult, err error) {
-	// Screen debtor
-	debtorResult, err = c.Screen(ctx, &ScreeningRequest{
-		Name:    debtorName,
-		Country: debtorCountry,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to screen debtor: %w", err)
-	}
+	var wg sync.WaitGroup
+	var dErr, cErr error
 
-	// Screen creditor
-	creditorResult, err = c.Screen(ctx, &ScreeningRequest{
-		Name:    creditorName,
-		Country: creditorCountry,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to screen creditor: %w", err)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		debtorResult, dErr = c.Screen(ctx, &ScreeningRequest{
+			Name:    debtorName,
+			Country: debtorCountry,
+		})
+	}()
+	go func() {
+		defer wg.Done()
+		creditorResult, cErr = c.Screen(ctx, &ScreeningRequest{
+			Name:    creditorName,
+			Country: creditorCountry,
+		})
+	}()
+	wg.Wait()
+
+	if dErr != nil {
+		return nil, nil, fmt.Errorf("failed to screen debtor: %w", dErr)
+	}
+	if cErr != nil {
+		return nil, nil, fmt.Errorf("failed to screen creditor: %w", cErr)
 	}
 
 	return debtorResult, creditorResult, nil

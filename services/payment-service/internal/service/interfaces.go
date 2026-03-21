@@ -35,6 +35,14 @@ type AccountStore interface {
 	AddPendingCredit(ctx context.Context, tx pgx.Tx, accountID, transactionID uuid.UUID, amount decimal.Decimal, currency string) error
 }
 
+// ShardStore abstracts sharded balance operations for testability.
+type ShardStore interface {
+	ReserveFundsShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error
+	CreditShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error
+	NeedsRebalance(ctx context.Context, accountID uuid.UUID) (bool, error)
+	Rebalance(ctx context.Context, accountID uuid.UUID) error
+}
+
 // OutboxStore abstracts outbox persistence for testability.
 type OutboxStore interface {
 	Insert(ctx context.Context, tx pgx.Tx, event *db.OutboxEvent) error
