@@ -202,6 +202,26 @@ func (r *ShardRepository) CreditShard(ctx context.Context, tx pgx.Tx, accountID 
 	return nil
 }
 
+// DebitShard removes funds from shard 0 (inverse of CreditShard).
+// Used by ReturnPayment to reverse a prior CreditShard on the creditor.
+func (r *ShardRepository) DebitShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
+	query := `
+		UPDATE account_shard
+		SET balance = balance - $2,
+		    updated_at = current_timestamp()
+		WHERE account_id = $1 AND shard_id = 0
+		  AND balance >= $2
+	`
+	result, err := tx.Exec(ctx, query, accountID, amount)
+	if err != nil {
+		return fmt.Errorf("shard debit failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrInsufficientFunds
+	}
+	return nil
+}
+
 // TotalBalance returns the sum of all shard balances for an account.
 // Used for reconciliation and balance queries (not on the debit hot path).
 func (r *ShardRepository) TotalBalance(ctx context.Context, accountID uuid.UUID) (decimal.Decimal, error) {

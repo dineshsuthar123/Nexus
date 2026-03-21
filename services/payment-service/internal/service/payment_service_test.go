@@ -70,6 +70,13 @@ func (m *mockTransactionStore) GetByUETR(ctx context.Context, uetr uuid.UUID) (*
 	return nil, db.ErrNotFound
 }
 
+func (m *mockTransactionStore) GetByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (*db.Transaction, error) {
+	if m.getByUETRFn != nil {
+		return m.getByUETRFn(ctx, uetr)
+	}
+	return nil, db.ErrNotFound
+}
+
 func (m *mockTransactionStore) GetByID(ctx context.Context, id uuid.UUID) (*db.Transaction, error) {
 	if m.getByIDFn != nil {
 		return m.getByIDFn(ctx, id)
@@ -243,6 +250,9 @@ func (m *mockShardStore) ReserveFundsShard(ctx context.Context, tx pgx.Tx, accou
 	return nil
 }
 func (m *mockShardStore) CreditShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
+	return nil
+}
+func (m *mockShardStore) DebitShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
 	return nil
 }
 func (m *mockShardStore) NeedsRebalance(ctx context.Context, accountID uuid.UUID) (bool, error) {
@@ -626,7 +636,7 @@ func TestSettlePayment_Success(t *testing.T) {
 			return &db.Transaction{
 				ID:                txnID,
 				UETR:              uetr,
-				Status:            "PENDING",
+				Status:            "CLEARED",
 				Amount:            decimal.NewFromFloat(100.00),
 				Currency:          "USD",
 				DebtorAccountID:   debtorID,
@@ -648,8 +658,9 @@ func TestSettlePayment_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if txnStore.createLegCalls != 2 {
-		t.Errorf("expected 2 leg creates (debit+credit), got %d", txnStore.createLegCalls)
+	// Legs are created in CreatePayment, not SettlePayment
+	if txnStore.createLegCalls != 0 {
+		t.Errorf("expected 0 leg creates in SettlePayment, got %d", txnStore.createLegCalls)
 	}
 	if outbox.insertCalls != 1 {
 		t.Errorf("expected 1 outbox insert, got %d", outbox.insertCalls)
@@ -715,8 +726,8 @@ func TestSettlePayment_SanctionedStatusAllowed(t *testing.T) {
 
 	svc := newTestPaymentService(withTransactionStore(txnStore))
 	err := svc.SettlePayment(context.Background(), uuid.New().String())
-	if err != nil {
-		t.Fatalf("SANCTIONED status should be settleable, got error: %v", err)
+	if err == nil {
+		t.Fatal("SANCTIONED status should NOT be directly settleable (must go through CLEARED first)")
 	}
 }
 

@@ -198,6 +198,53 @@ func (r *TransactionRepository) GetByUETR(ctx context.Context, uetr uuid.UUID) (
 	return &t, nil
 }
 
+// GetByUETRTx retrieves a transaction by UETR within an existing transaction.
+// This eliminates the TOCTOU race present when using pool-level reads.
+func (r *TransactionRepository) GetByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (*Transaction, error) {
+	query := `
+		SELECT id, uetr, message_id, instruction_id, end_to_end_id,
+		       transaction_type, amount, currency,
+		       settlement_amount, settlement_currency, exchange_rate,
+		       fee_amount, fee_currency, charge_bearer,
+		       debtor_account_id, creditor_account_id,
+		       debtor_name, creditor_name,
+		       status, status_reason,
+		       sanctions_status, sanctions_score,
+		       fraud_status, fraud_score,
+		       requested_execution_date, booking_date, value_date, settlement_date,
+		       remittance_info, original_message,
+		       external_rail, external_reference,
+		       created_at, updated_at, created_by
+		FROM transaction
+		WHERE uetr = $1
+	`
+
+	var t Transaction
+	err := tx.QueryRow(ctx, query, uetr).Scan(
+		&t.ID, &t.UETR, &t.MessageID, &t.InstructionID, &t.EndToEndID,
+		&t.TransactionType, &t.Amount, &t.Currency,
+		&t.SettlementAmount, &t.SettlementCurrency, &t.ExchangeRate,
+		&t.FeeAmount, &t.FeeCurrency, &t.ChargeBearer,
+		&t.DebtorAccountID, &t.CreditorAccountID,
+		&t.DebtorName, &t.CreditorName,
+		&t.Status, &t.StatusReason,
+		&t.SanctionsStatus, &t.SanctionsScore,
+		&t.FraudStatus, &t.FraudScore,
+		&t.RequestedExecutionDt, &t.BookingDate, &t.ValueDate, &t.SettlementDate,
+		&t.RemittanceInfo, &t.OriginalMessage,
+		&t.ExternalRail, &t.ExternalReference,
+		&t.CreatedAt, &t.UpdatedAt, &t.CreatedBy,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get transaction by UETR: %w", err)
+	}
+
+	return &t, nil
+}
+
 // GetByID retrieves a transaction by ID
 func (r *TransactionRepository) GetByID(ctx context.Context, id uuid.UUID) (*Transaction, error) {
 	query := `

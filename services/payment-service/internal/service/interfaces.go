@@ -15,6 +15,7 @@ type TransactionStore interface {
 	Create(ctx context.Context, tx pgx.Tx, t *db.Transaction) error
 	CreateLeg(ctx context.Context, tx pgx.Tx, leg *db.TransactionLeg) error
 	GetByUETR(ctx context.Context, uetr uuid.UUID) (*db.Transaction, error)
+	GetByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (*db.Transaction, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*db.Transaction, error)
 	UpdateStatus(ctx context.Context, tx pgx.Tx, id uuid.UUID, status, reason string) error
 	UpdateSanctionsStatus(ctx context.Context, tx pgx.Tx, id uuid.UUID, status string, score decimal.Decimal) error
@@ -39,6 +40,7 @@ type AccountStore interface {
 type ShardStore interface {
 	ReserveFundsShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error
 	CreditShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error
+	DebitShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error
 	NeedsRebalance(ctx context.Context, accountID uuid.UUID) (bool, error)
 	Rebalance(ctx context.Context, accountID uuid.UUID) error
 }

@@ -62,6 +62,13 @@ func (m *mockTransactionStore) GetByUETR(ctx context.Context, uetr uuid.UUID) (*
 	return nil, db.ErrNotFound
 }
 
+func (m *mockTransactionStore) GetByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (*db.Transaction, error) {
+	if m.getByUETRFn != nil {
+		return m.getByUETRFn(ctx, uetr)
+	}
+	return nil, db.ErrNotFound
+}
+
 func (m *mockTransactionStore) GetByID(ctx context.Context, id uuid.UUID) (*db.Transaction, error) {
 	if m.getByIDFn != nil {
 		return m.getByIDFn(ctx, id)
@@ -204,6 +211,9 @@ func (m *mockShardStore) ReserveFundsShard(ctx context.Context, tx pgx.Tx, accou
 	return nil
 }
 func (m *mockShardStore) CreditShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
+	return nil
+}
+func (m *mockShardStore) DebitShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
 	return nil
 }
 func (m *mockShardStore) NeedsRebalance(ctx context.Context, accountID uuid.UUID) (bool, error) {
@@ -463,7 +473,7 @@ func TestSettlePayment_Success(t *testing.T) {
 	txnStore := &mockTransactionStore{
 		getByUETRFn: func(ctx context.Context, u uuid.UUID) (*db.Transaction, error) {
 			return &db.Transaction{
-				ID: txnID, UETR: u, Status: "PENDING",
+				ID: txnID, UETR: u, Status: "CLEARED",
 				Amount: decimal.NewFromInt(100), Currency: "USD",
 				DebtorAccountID: uuid.New(), CreditorAccountID: uuid.New(),
 			}, nil

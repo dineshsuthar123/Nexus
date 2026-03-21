@@ -286,7 +286,7 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 			AccountID:      debtorAccountID,
 			LegType:        "DEBIT",
 			Amount:         req.Amount,
-			Currency:        req.Currency,
+			Currency:       req.Currency,
 			Description:    fmt.Sprintf("Debit for UETR %s", uetr),
 			SequenceNumber: 1,
 		}
@@ -299,7 +299,7 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 			AccountID:      creditorAccountID,
 			LegType:        "CREDIT",
 			Amount:         req.Amount,
-			Currency:        req.Currency,
+			Currency:       req.Currency,
 			Description:    fmt.Sprintf("Credit for UETR %s", uetr),
 			SequenceNumber: 2,
 		}
@@ -572,7 +572,9 @@ func (s *PaymentService) GetPaymentStatus(ctx context.Context, uetrStr string) (
 	return response, nil
 }
 
-// SettlePayment settles a pending payment
+// SettlePayment settles a cleared payment by crediting the creditor's shards.
+// The debtor shard was already debited in CreatePayment; no further debtor
+// balance operations are needed. Legs were already created in CreatePayment.
 func (s *PaymentService) SettlePayment(ctx context.Context, uetrStr string) error {
 	ctx, span := observability.StartSpan(ctx, "PaymentService.SettlePayment")
 	defer span.End()
@@ -583,57 +585,20 @@ func (s *PaymentService) SettlePayment(ctx context.Context, uetrStr string) erro
 	}
 
 	return s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
-		// Get transaction
-		transaction, err := s.transactionRepo.GetByUETR(ctx, uetr)
+		// Read inside the TX to eliminate TOCTOU race
+		transaction, err := s.transactionRepo.GetByUETRTx(ctx, tx, uetr)
 		if err != nil {
 			return fmt.Errorf("failed to get transaction: %w", err)
 		}
 
-		// Validate status
-		if transaction.Status != "CLEARED" && transaction.Status != "PENDING" && transaction.Status != "SANCTIONED" {
-			return fmt.Errorf("transaction cannot be settled in status: %s", transaction.Status)
+		// Enforce state machine: only CLEARED → SETTLED is valid
+		if err := db.ValidateTransition(transaction.Status, "SETTLED"); err != nil {
+			return err
 		}
 
-		// Perform double-entry bookkeeping
-		// Debit the debtor
-		debtorBalanceAfter, err := s.accountRepo.DebitAccount(ctx, tx, transaction.DebtorAccountID, transaction.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to debit debtor: %w", err)
-		}
-
-		// Credit the creditor
-		creditorBalanceAfter, err := s.accountRepo.CreditAccount(ctx, tx, transaction.CreditorAccountID, transaction.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to credit creditor: %w", err)
-		}
-
-		// Create transaction legs
-		debitLeg := &db.TransactionLeg{
-			TransactionID:  transaction.ID,
-			AccountID:      transaction.DebtorAccountID,
-			LegType:        "DEBIT",
-			Amount:         transaction.Amount,
-			Currency:       transaction.Currency,
-			BalanceAfter:   debtorBalanceAfter,
-			Description:    fmt.Sprintf("Payment to %s", transaction.CreditorName),
-			SequenceNumber: 1,
-		}
-		if err := s.transactionRepo.CreateLeg(ctx, tx, debitLeg); err != nil {
-			return fmt.Errorf("failed to create debit leg: %w", err)
-		}
-
-		creditLeg := &db.TransactionLeg{
-			TransactionID:  transaction.ID,
-			AccountID:      transaction.CreditorAccountID,
-			LegType:        "CREDIT",
-			Amount:         transaction.Amount,
-			Currency:       transaction.Currency,
-			BalanceAfter:   creditorBalanceAfter,
-			Description:    fmt.Sprintf("Payment from %s", transaction.DebtorName),
-			SequenceNumber: 2,
-		}
-		if err := s.transactionRepo.CreateLeg(ctx, tx, creditLeg); err != nil {
-			return fmt.Errorf("failed to create credit leg: %w", err)
+		// Credit the creditor's shards (debtor was already debited in CreatePayment)
+		if err := s.shardRepo.CreditShard(ctx, tx, transaction.CreditorAccountID, transaction.Amount); err != nil {
+			return fmt.Errorf("failed to credit creditor shards: %w", err)
 		}
 
 		// Update transaction status
@@ -674,7 +639,7 @@ type ReturnPaymentResponse struct {
 }
 
 // ReturnPayment reverses a settled payment (pacs.004 flow).
-// It debits the creditor and credits the debtor, reversing the original legs.
+// It reverses shard operations: credits debtor shards, debits creditor shards.
 func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reasonCode string) (*ReturnPaymentResponse, error) {
 	ctx, span := observability.StartSpan(ctx, "PaymentService.ReturnPayment")
 	defer span.End()
@@ -687,35 +652,35 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 	var resp *ReturnPaymentResponse
 
 	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
-		transaction, err := s.transactionRepo.GetByUETR(ctx, uetr)
+		// Read inside the TX to eliminate TOCTOU race
+		transaction, err := s.transactionRepo.GetByUETRTx(ctx, tx, uetr)
 		if err != nil {
 			return fmt.Errorf("transaction not found: %w", err)
 		}
 
-		// Only SETTLED or CLEARED transactions can be returned
-		if transaction.Status != "SETTLED" && transaction.Status != "CLEARED" {
-			return fmt.Errorf("transaction cannot be returned in status: %s (must be SETTLED or CLEARED)", transaction.Status)
+		// Enforce state machine: SETTLED → RETURNED or CLEARED → RETURNED
+		if err := db.ValidateTransition(transaction.Status, "RETURNED"); err != nil {
+			return err
 		}
 
-		// Reverse the ledger: debit creditor, credit debtor
-		debtorBalanceAfter, err := s.accountRepo.CreditAccount(ctx, tx, transaction.DebtorAccountID, transaction.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to credit debtor (return): %w", err)
+		// Reverse shard operations:
+		// 1. Credit debtor shards (reverses the debit from CreatePayment)
+		if err := s.shardRepo.CreditShard(ctx, tx, transaction.DebtorAccountID, transaction.Amount); err != nil {
+			return fmt.Errorf("failed to reverse debtor shard debit: %w", err)
 		}
 
-		creditorBalanceAfter, err := s.accountRepo.DebitAccount(ctx, tx, transaction.CreditorAccountID, transaction.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to debit creditor (return): %w", err)
+		// 2. Debit creditor shards (reverses the credit from SettlePayment)
+		if err := s.shardRepo.DebitShard(ctx, tx, transaction.CreditorAccountID, transaction.Amount); err != nil {
+			return fmt.Errorf("failed to reverse creditor shard credit: %w", err)
 		}
 
-		// Create return legs
+		// Create return legs (seq 3, 4 — genuinely new legs for the reversal)
 		debitLeg := &db.TransactionLeg{
 			TransactionID:  transaction.ID,
 			AccountID:      transaction.CreditorAccountID,
 			LegType:        "DEBIT",
 			Amount:         transaction.Amount,
 			Currency:       transaction.Currency,
-			BalanceAfter:   creditorBalanceAfter,
 			Description:    fmt.Sprintf("Return of payment to %s (%s)", transaction.DebtorName, reasonCode),
 			SequenceNumber: 3,
 		}
@@ -729,7 +694,6 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 			LegType:        "CREDIT",
 			Amount:         transaction.Amount,
 			Currency:       transaction.Currency,
-			BalanceAfter:   debtorBalanceAfter,
 			Description:    fmt.Sprintf("Return of payment from %s (%s)", transaction.CreditorName, reasonCode),
 			SequenceNumber: 4,
 		}
@@ -756,7 +720,7 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 		outboxEvent := &db.OutboxEvent{
 			AggregateType: "transaction",
 			AggregateID:   transaction.ID,
-			EventType:     "payment.returned",
+			EventType:     db.EventPaymentReturned,
 			Payload:       eventPayload,
 			Topic:         db.TopicPaymentsCompleted,
 			PartitionKey:  transaction.DebtorAccountID.String(),
