@@ -232,6 +232,26 @@ func (m *mockEventPublisher) Publish(ctx context.Context, topic, key string, val
 
 func (m *mockEventPublisher) Close() error { return nil }
 
+type mockShardStore struct {
+	reserveFundsShardFn func(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error
+}
+
+func (m *mockShardStore) ReserveFundsShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error {
+	if m.reserveFundsShardFn != nil {
+		return m.reserveFundsShardFn(ctx, tx, accountID, amount, currency)
+	}
+	return nil
+}
+func (m *mockShardStore) CreditShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
+	return nil
+}
+func (m *mockShardStore) NeedsRebalance(ctx context.Context, accountID uuid.UUID) (bool, error) {
+	return false, nil
+}
+func (m *mockShardStore) Rebalance(ctx context.Context, accountID uuid.UUID) error {
+	return nil
+}
+
 // ============================================================================
 // Test helpers
 // ============================================================================
@@ -244,6 +264,7 @@ func newTestLogger() *zap.Logger {
 func newTestPaymentService(opts ...func(*testServiceOpts)) *PaymentService {
 	o := &testServiceOpts{
 		txManager:   &mockTxManager{},
+		shardStore:  &mockShardStore{},
 		txnStore:    &mockTransactionStore{},
 		acctStore:   &mockAccountStore{},
 		outboxStore: &mockOutboxStore{},
@@ -257,6 +278,7 @@ func newTestPaymentService(opts ...func(*testServiceOpts)) *PaymentService {
 		newTestLogger(),
 		o.txManager,
 		o.acctStore,
+		o.shardStore,
 		o.txnStore,
 		o.outboxStore,
 		o.sanctions,
@@ -266,6 +288,7 @@ func newTestPaymentService(opts ...func(*testServiceOpts)) *PaymentService {
 
 type testServiceOpts struct {
 	txManager   TxManager
+	shardStore  ShardStore
 	txnStore    TransactionStore
 	acctStore   AccountStore
 	outboxStore OutboxStore
@@ -283,6 +306,10 @@ func withTransactionStore(m TransactionStore) func(*testServiceOpts) {
 
 func withAccountStore(m AccountStore) func(*testServiceOpts) {
 	return func(o *testServiceOpts) { o.acctStore = m }
+}
+
+func withShardStore(m ShardStore) func(*testServiceOpts) {
+	return func(o *testServiceOpts) { o.shardStore = m }
 }
 
 func withOutboxStore(m OutboxStore) func(*testServiceOpts) {
@@ -470,24 +497,15 @@ func TestCreatePayment_SanctionsServiceDown_FallsBackToReview(t *testing.T) {
 }
 
 func TestCreatePayment_InsufficientFunds(t *testing.T) {
-	acctStore := &mockAccountStore{
-		getForUpdateFn: func(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*db.Account, error) {
-			return &db.Account{
-				ID:               id,
-				Status:           "ACTIVE",
-				Currency:         "USD",
-				Balance:          decimal.NewFromFloat(10.00), // Less than request amount
-				PendingCredits:   decimal.Zero,
-				PendingDebits:    decimal.Zero,
-				TransactionLimit: decimal.NewFromInt(100000),
-				AllowNegative:    false,
-			}, nil
+	shards := &mockShardStore{
+		reserveFundsShardFn: func(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error {
+			return db.ErrInsufficientFunds
 		},
 	}
 
-	svc := newTestPaymentService(withAccountStore(acctStore))
+	svc := newTestPaymentService(withShardStore(shards))
 	req := newValidPaymentRequest()
-	req.Amount = decimal.NewFromFloat(500.00) // More than balance
+	req.Amount = decimal.NewFromFloat(500.00)
 
 	resp, err := svc.CreatePayment(context.Background(), req)
 	if err != nil {
@@ -502,67 +520,60 @@ func TestCreatePayment_InsufficientFunds(t *testing.T) {
 }
 
 func TestCreatePayment_InactiveDebtorAccount(t *testing.T) {
-	acctStore := &mockAccountStore{
-		getForUpdateFn: func(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*db.Account, error) {
-			return &db.Account{
-				ID:       id,
-				Status:   "SUSPENDED",
-				Currency: "USD",
-			}, nil
+	shards := &mockShardStore{
+		reserveFundsShardFn: func(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error {
+			return db.ErrAccountInactive
 		},
 	}
 
-	svc := newTestPaymentService(withAccountStore(acctStore))
+	svc := newTestPaymentService(withShardStore(shards))
 	req := newValidPaymentRequest()
 
-	_, err := svc.CreatePayment(context.Background(), req)
-	if err == nil {
-		t.Fatal("expected error for inactive debtor account")
+	resp, err := svc.CreatePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Status != "REJECTED" {
+		t.Errorf("expected status REJECTED, got %s", resp.Status)
 	}
 }
 
 func TestCreatePayment_CurrencyMismatch(t *testing.T) {
-	acctStore := &mockAccountStore{
-		getForUpdateFn: func(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*db.Account, error) {
-			return &db.Account{
-				ID:               id,
-				Status:           "ACTIVE",
-				Currency:         "EUR", // Mismatch with USD request
-				Balance:          decimal.NewFromInt(10000),
-				TransactionLimit: decimal.NewFromInt(100000),
-			}, nil
+	shards := &mockShardStore{
+		reserveFundsShardFn: func(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error {
+			return db.ErrCurrencyMismatch
 		},
 	}
 
-	svc := newTestPaymentService(withAccountStore(acctStore))
+	svc := newTestPaymentService(withShardStore(shards))
 	req := newValidPaymentRequest()
 
-	_, err := svc.CreatePayment(context.Background(), req)
-	if err == nil {
-		t.Fatal("expected error for currency mismatch")
+	resp, err := svc.CreatePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Status != "REJECTED" {
+		t.Errorf("expected status REJECTED, got %s", resp.Status)
 	}
 }
 
 func TestCreatePayment_ExceedsTransactionLimit(t *testing.T) {
-	acctStore := &mockAccountStore{
-		getForUpdateFn: func(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*db.Account, error) {
-			return &db.Account{
-				ID:               id,
-				Status:           "ACTIVE",
-				Currency:         "USD",
-				Balance:          decimal.NewFromInt(1000000),
-				TransactionLimit: decimal.NewFromFloat(50.00), // Low limit
-			}, nil
+	shards := &mockShardStore{
+		reserveFundsShardFn: func(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error {
+			return db.ErrTransactionLimitExceeded
 		},
 	}
 
-	svc := newTestPaymentService(withAccountStore(acctStore))
+	svc := newTestPaymentService(withShardStore(shards))
 	req := newValidPaymentRequest()
-	req.Amount = decimal.NewFromFloat(100.00) // Exceeds 50.00 limit
+	req.Amount = decimal.NewFromFloat(100.00)
 
-	_, err := svc.CreatePayment(context.Background(), req)
-	if err == nil {
-		t.Fatal("expected error for exceeding transaction limit")
+	resp, err := svc.CreatePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Status != "REJECTED" {
+		t.Errorf("expected status REJECTED, got %s", resp.Status)
 	}
 }
 

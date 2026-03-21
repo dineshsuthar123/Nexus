@@ -313,4 +313,5 @@ var (
 	ErrCurrencyMismatch         = fmt.Errorf("currency mismatch")
 	ErrTransactionLimitExceeded = fmt.Errorf("amount exceeds transaction limit")
 	ErrShardsNotInitialized     = fmt.Errorf("account shards not initialized")
+	ErrInvalidTransition        = fmt.Errorf("invalid status transition")
 )

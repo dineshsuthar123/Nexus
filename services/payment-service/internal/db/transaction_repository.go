@@ -245,20 +245,53 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id uuid.UUID) (*Tra
 }
 
 // UpdateStatus updates the transaction status
+// validTransitions defines the allowed state machine transitions for transaction status.
+var validTransitions = map[string][]string{
+	"PENDING":      {"SANCTIONED", "CLEARED", "REJECTED", "CANCELLED"},
+	"SANCTIONED":   {"FRAUD_REVIEW", "CLEARED", "REJECTED"},
+	"FRAUD_REVIEW": {"CLEARED", "REJECTED"},
+	"CLEARED":      {"SETTLED", "RETURNED"},
+	"SETTLED":      {"RETURNED"},
+	// Terminal states: REJECTED, RETURNED, CANCELLED — no outgoing transitions
+}
+
+// ValidateTransition checks whether a status transition is permitted.
+func ValidateTransition(from, to string) error {
+	allowed, ok := validTransitions[from]
+	if !ok {
+		return fmt.Errorf("%w: no transitions from %s", ErrInvalidTransition, from)
+	}
+	for _, s := range allowed {
+		if s == to {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s -> %s", ErrInvalidTransition, from, to)
+}
+
 func (r *TransactionRepository) UpdateStatus(ctx context.Context, tx pgx.Tx, id uuid.UUID, status, reason string) error {
+	// Fetch current status and validate transition
+	var currentStatus string
+	err := tx.QueryRow(ctx, `SELECT status FROM transaction WHERE id = $1`, id).Scan(&currentStatus)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to read current status: %w", err)
+	}
+	if err := ValidateTransition(currentStatus, status); err != nil {
+		return err
+	}
+
 	query := `
 		UPDATE transaction
 		SET status = $2, status_reason = $3, updated_at = current_timestamp()
 		WHERE id = $1
 	`
 
-	result, err := tx.Exec(ctx, query, id, status, reason)
-	if err != nil {
-		return fmt.Errorf("failed to update transaction status: %w", err)
-	}
-
-	if result.RowsAffected() == 0 {
-		return ErrNotFound
+	_, execErr := tx.Exec(ctx, query, id, status, reason)
+	if execErr != nil {
+		return fmt.Errorf("failed to update transaction status: %w", execErr)
 	}
 
 	return nil

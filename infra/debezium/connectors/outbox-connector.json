@@ -15,7 +15,7 @@
         "slot.name": "outbox_slot",
         "publication.name": "outbox_publication",
 
-        "table.include.list": "public.outbox_events",
+        "table.include.list": "public.outbox",
 
         "tombstones.on.delete": "false",
         "column.exclude.list": "",

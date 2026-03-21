@@ -4,11 +4,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nexus-rtp/payment-service/internal/db"
 	"github.com/nexus-rtp/payment-service/internal/observability"
 	"github.com/nexus-rtp/payment-service/internal/sanctions"
@@ -277,6 +280,33 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 			return fmt.Errorf("failed to create transaction: %w", err)
 		}
 
+		// Double-entry ledger: record debit leg (debtor) and credit leg (creditor)
+		debitLeg := &db.TransactionLeg{
+			TransactionID:  transactionID,
+			AccountID:      debtorAccountID,
+			LegType:        "DEBIT",
+			Amount:         req.Amount,
+			Currency:        req.Currency,
+			Description:    fmt.Sprintf("Debit for UETR %s", uetr),
+			SequenceNumber: 1,
+		}
+		if err := s.transactionRepo.CreateLeg(ctx, tx, debitLeg); err != nil {
+			return fmt.Errorf("failed to create debit leg: %w", err)
+		}
+
+		creditLeg := &db.TransactionLeg{
+			TransactionID:  transactionID,
+			AccountID:      creditorAccountID,
+			LegType:        "CREDIT",
+			Amount:         req.Amount,
+			Currency:        req.Currency,
+			Description:    fmt.Sprintf("Credit for UETR %s", uetr),
+			SequenceNumber: 2,
+		}
+		if err := s.transactionRepo.CreateLeg(ctx, tx, creditLeg); err != nil {
+			return fmt.Errorf("failed to create credit leg: %w", err)
+		}
+
 		// Create outbox event for downstream processing
 		eventPayload, err := json.Marshal(map[string]interface{}{
 			"transactionId":   transactionID.String(),
@@ -336,6 +366,33 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 				CreatedAt:      time.Now(),
 				ProcessingTime: time.Since(start).Milliseconds(),
 			}, nil
+		}
+
+		// UETR duplicate: if Redis idempotency failed open and two concurrent
+		// requests created the same UETR, the DB UNIQUE constraint catches it.
+		// Return the existing transaction instead of a 500 error.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "uetr") {
+			existing, lookupErr := s.transactionRepo.GetByUETR(ctx, uetr)
+			if lookupErr == nil {
+				s.logger.Warn("UETR duplicate detected, returning existing transaction",
+					zap.String("uetr", req.UETR),
+					zap.String("existingTxId", existing.ID.String()),
+				)
+				return &CreatePaymentResponse{
+					TransactionID:   existing.ID.String(),
+					UETR:            req.UETR,
+					Status:          existing.Status,
+					StatusReason:    existing.StatusReason,
+					SanctionsStatus: existing.SanctionsStatus,
+					CreatedAt:       existing.CreatedAt,
+					ProcessingTime:  time.Since(start).Milliseconds(),
+				}, nil
+			}
+			s.logger.Error("UETR duplicate detected but lookup failed",
+				zap.Error(lookupErr),
+				zap.String("uetr", req.UETR),
+			)
 		}
 
 		return nil, err

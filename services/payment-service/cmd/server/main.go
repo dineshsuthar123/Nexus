@@ -169,6 +169,68 @@ func main() {
 		}
 	}()
 
+	// Background: reconcile account.balance = SUM(shard.balance) every 5 minutes
+	reconStop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				reconCtx, reconCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				var driftCount int
+				err := dbPool.QueryRow(reconCtx,
+					`SELECT count(*) FROM account a
+					 WHERE EXISTS (SELECT 1 FROM account_shard WHERE account_id = a.id)
+					   AND a.balance != (SELECT COALESCE(SUM(balance), 0) FROM account_shard WHERE account_id = a.id)`,
+				).Scan(&driftCount)
+				if err != nil {
+					logger.Warn("balance reconciliation check failed", zap.Error(err))
+				} else {
+					observability.BalanceDriftCount.Set(float64(driftCount))
+					if driftCount > 0 {
+						logger.Warn("balance drift detected", zap.Int("driftedAccounts", driftCount))
+						// Fix the drift: set master balance = SUM(shard balances)
+						_, fixErr := dbPool.Exec(reconCtx,
+							`UPDATE account SET balance = sub.shard_sum, updated_at = current_timestamp()
+							 FROM (SELECT account_id, SUM(balance) AS shard_sum FROM account_shard GROUP BY account_id) sub
+							 WHERE account.id = sub.account_id AND account.balance != sub.shard_sum`)
+						if fixErr != nil {
+							logger.Error("balance reconciliation fix failed", zap.Error(fixErr))
+						} else {
+							logger.Info("balance drift corrected", zap.Int("accounts", driftCount))
+						}
+					}
+				}
+				reconCancel()
+			case <-reconStop:
+				return
+			}
+		}
+	}()
+
+	// Background: refresh sanctions lists every 6 hours
+	sanctionsStop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				refreshCtx, refreshCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				if err := sanctionsClient.DownloadLatestLists(refreshCtx); err != nil {
+					logger.Error("sanctions list refresh failed", zap.Error(err))
+				} else {
+					logger.Info("sanctions lists refreshed successfully")
+					observability.SanctionsLastRefresh.Set(float64(time.Now().Unix()))
+				}
+				refreshCancel()
+			case <-sanctionsStop:
+				return
+			}
+		}
+	}()
+
 	// Start server in goroutine
 	go func() {
 		logger.Info("Starting Payment Service", zap.Int("port", cfg.Port))
@@ -183,8 +245,10 @@ func main() {
 	<-quit
 	logger.Info("Shutting down server...")
 
-	// Stop background outbox retry goroutine
+	// Stop background goroutines
 	close(outboxStop)
+	close(reconStop)
+	close(sanctionsStop)
 
 	// Give outstanding requests 30 seconds to complete
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

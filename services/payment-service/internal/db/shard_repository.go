@@ -141,7 +141,27 @@ func (r *ShardRepository) ReserveFundsShard(
 				`SELECT EXISTS(SELECT 1 FROM account_shard WHERE account_id = $1)`,
 				accountID,
 			).Scan(&exists); checkErr == nil && !exists {
-				return ErrShardsNotInitialized
+				// Lazy initialization: create shard rows from the account's master balance.
+				var acctBalance decimal.Decimal
+				if balErr := tx.QueryRow(ctx,
+					`SELECT balance FROM account WHERE id = $1`, accountID,
+				).Scan(&acctBalance); balErr != nil {
+					return fmt.Errorf("shard lazy init: read balance: %w", balErr)
+				}
+				if initErr := r.EnsureShardsExist(ctx, tx, accountID, acctBalance); initErr != nil {
+					return fmt.Errorf("shard lazy init: %w", initErr)
+				}
+				// Retry the debit on the freshly-created shards.
+				ok2, retryErr := r.ReserveFromShard(ctx, tx, accountID, 0, amount)
+				if retryErr != nil {
+					return retryErr
+				}
+				if ok2 {
+					shardDebitAttempts.WithLabelValues("lazy_init").Inc()
+					return nil
+				}
+				shardDebitAttempts.WithLabelValues("insufficient").Inc()
+				return ErrInsufficientFunds
 			}
 			shardDebitAttempts.WithLabelValues("insufficient").Inc()
 			return ErrInsufficientFunds
