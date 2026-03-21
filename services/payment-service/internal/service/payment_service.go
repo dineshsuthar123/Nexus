@@ -669,9 +669,14 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 			return fmt.Errorf("failed to reverse debtor shard debit: %w", err)
 		}
 
-		// 2. Debit creditor shards (reverses the credit from SettlePayment)
-		if err := s.shardRepo.DebitShard(ctx, tx, transaction.CreditorAccountID, transaction.Amount); err != nil {
-			return fmt.Errorf("failed to reverse creditor shard credit: %w", err)
+		// 2. Debit creditor shards (reverses the credit from SettlePayment).
+		// Guard: a CLEARED payment was never settled, so the creditor shards were
+		// never credited from this payment. Debiting them would incorrectly drain
+		// pre-existing creditor balance. Only debit when status == SETTLED.
+		if transaction.Status == "SETTLED" {
+			if err := s.shardRepo.DebitShard(ctx, tx, transaction.CreditorAccountID, transaction.Amount); err != nil {
+				return fmt.Errorf("failed to reverse creditor shard credit: %w", err)
+			}
 		}
 
 		// Create return legs (seq 3, 4 — genuinely new legs for the reversal)

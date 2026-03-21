@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	idempotency "github.com/nexus-rtp/idempotency"
 	"github.com/nexus-rtp/payment-service/internal/api"
 	"github.com/nexus-rtp/payment-service/internal/config"
@@ -178,29 +179,36 @@ func main() {
 			select {
 			case <-ticker.C:
 				reconCtx, reconCancel := context.WithTimeout(context.Background(), 30*time.Second)
-				var driftCount int
-				err := dbPool.QueryRow(reconCtx,
-					`SELECT count(*) FROM account a
-					 WHERE EXISTS (SELECT 1 FROM account_shard WHERE account_id = a.id)
-					   AND a.balance != (SELECT COALESCE(SUM(balance), 0) FROM account_shard WHERE account_id = a.id)`,
-				).Scan(&driftCount)
-				if err != nil {
-					logger.Warn("balance reconciliation check failed", zap.Error(err))
-				} else {
+				// Wrap the check+fix in a single serializable TX so the drift count
+				// and the UPDATE always see the same consistent shard snapshot.
+				reconErr := dbPool.RetryTx(reconCtx, 3, func(tx pgx.Tx) error {
+					var driftCount int
+					if err := tx.QueryRow(reconCtx,
+						`SELECT count(*) FROM account a
+						 WHERE EXISTS (SELECT 1 FROM account_shard WHERE account_id = a.id)
+						   AND a.balance != (SELECT COALESCE(SUM(balance), 0) FROM account_shard WHERE account_id = a.id)`,
+					).Scan(&driftCount); err != nil {
+						return fmt.Errorf("balance reconciliation check: %w", err)
+					}
 					observability.BalanceDriftCount.Set(float64(driftCount))
 					if driftCount > 0 {
 						logger.Warn("balance drift detected", zap.Int("driftedAccounts", driftCount))
-						// Fix the drift: set master balance = SUM(shard balances)
-						_, fixErr := dbPool.Exec(reconCtx,
+						// Fix the drift: set master balance = SUM(shard balances).
+						// Both the count query above and this UPDATE share the same TX
+						// snapshot, so no concurrent payment can slip between them.
+						_, fixErr := tx.Exec(reconCtx,
 							`UPDATE account SET balance = sub.shard_sum, updated_at = current_timestamp()
 							 FROM (SELECT account_id, SUM(balance) AS shard_sum FROM account_shard GROUP BY account_id) sub
 							 WHERE account.id = sub.account_id AND account.balance != sub.shard_sum`)
 						if fixErr != nil {
-							logger.Error("balance reconciliation fix failed", zap.Error(fixErr))
-						} else {
-							logger.Info("balance drift corrected", zap.Int("accounts", driftCount))
+							return fmt.Errorf("balance reconciliation fix: %w", fixErr)
 						}
+						logger.Info("balance drift corrected", zap.Int("accounts", driftCount))
 					}
+					return nil
+				})
+				if reconErr != nil {
+					logger.Error("balance reconciliation failed", zap.Error(reconErr))
 				}
 				reconCancel()
 			case <-reconStop:

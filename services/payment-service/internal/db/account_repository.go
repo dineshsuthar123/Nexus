@@ -12,14 +12,28 @@ import (
 	"go.uber.org/zap"
 )
 
-// Account represents an account in the ledger
+// Account represents an account in the ledger.
+//
+// Balance model
+// ─────────────
+//   - account_shard.balance is the SOURCE OF TRUTH for all real-time financial
+//     operations. Every debit and credit goes through account_shard rows.
+//   - Account.Balance is a DERIVED CACHE that is refreshed periodically (every
+//     5 minutes) by the reconciliation goroutine in main.go.
+//     It MUST NOT be read for payment decisions; use SUM(account_shard.balance).
+//   - Account.AvailableBalance is similarly stale and is provided only for
+//     display purposes (e.g., account management UIs).
 type Account struct {
 	ID               uuid.UUID       `json:"id"`
 	CustomerID       uuid.UUID       `json:"customerId"`
 	AccountNumber    string          `json:"accountNumber"`
 	AccountType      string          `json:"accountType"`
 	Currency         string          `json:"currency"`
+	// Balance is a stale denormalised cache of SUM(account_shard.balance).
+	// Updated every ~5 min by the reconciliation goroutine. Do NOT use for
+	// payment authorisation — use ShardRepository methods instead.
 	Balance          decimal.Decimal `json:"balance"`
+	// AvailableBalance is maintained for display only. Not authoritative.
 	AvailableBalance decimal.Decimal `json:"availableBalance"`
 	PendingCredits   decimal.Decimal `json:"pendingCredits"`
 	PendingDebits    decimal.Decimal `json:"pendingDebits"`

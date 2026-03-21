@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/nexus-rtp/payment-service/internal/db"
 	"github.com/nexus-rtp/payment-service/internal/service"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -63,6 +65,62 @@ type ErrorResponse struct {
 	Details   string    `json:"details,omitempty"`
 	TraceID   string    `json:"traceId,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+// handleServiceError maps well-known service-layer errors to structured HTTP
+// responses with the correct status code. Unknown errors become 500.
+func (h *Handler) handleServiceError(c *gin.Context, operation string, err error) {
+	switch {
+	case errors.Is(err, db.ErrNotFound):
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Code:      "NOT_FOUND",
+			Message:   "Payment not found",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrInvalidTransition):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "INVALID_STATE_TRANSITION",
+			Message:   "Payment is not in a valid state for this operation",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrInsufficientFunds):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "INSUFFICIENT_FUNDS",
+			Message:   "Account has insufficient funds for this operation",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrAccountInactive):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "ACCOUNT_INACTIVE",
+			Message:   "One or more accounts are not active",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrCurrencyMismatch):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "CURRENCY_MISMATCH",
+			Message:   "Payment currency does not match account currency",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrTransactionLimitExceeded):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "TRANSACTION_LIMIT_EXCEEDED",
+			Message:   "Amount exceeds the account transaction limit",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	default:
+		h.logger.Error(operation+" failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:      "INTERNAL_ERROR",
+			Message:   "An unexpected error occurred. Please try again later.",
+			Timestamp: time.Now(),
+		})
+	}
 }
 
 // ListPayments handles GET /api/v1/payments
@@ -337,13 +395,8 @@ func (h *Handler) SettlePayment(c *gin.Context) {
 
 	err := h.paymentService.SettlePayment(c.Request.Context(), uetr)
 	if err != nil {
-		h.logger.Error("Failed to settle payment", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:      "SETTLEMENT_ERROR",
-			Message:   "Failed to settle payment",
-			Details:   err.Error(),
-			Timestamp: time.Now(),
-		})
+		h.logger.Error("Failed to settle payment", zap.String("uetr", uetr), zap.Error(err))
+		h.handleServiceError(c, "SettlePayment", err)
 		return
 	}
 
@@ -392,12 +445,7 @@ func (h *Handler) ReturnPayment(c *gin.Context) {
 	result, err := h.paymentService.ReturnPayment(c.Request.Context(), uetr, req.ReasonCode)
 	if err != nil {
 		h.logger.Error("Failed to return payment", zap.String("uetr", uetr), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:      "RETURN_FAILED",
-			Message:   "Failed to process payment return",
-			Details:   err.Error(),
-			Timestamp: time.Now(),
-		})
+		h.handleServiceError(c, "ReturnPayment", err)
 		return
 	}
 
