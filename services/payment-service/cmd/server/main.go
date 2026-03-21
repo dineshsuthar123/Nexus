@@ -154,12 +154,15 @@ func main() {
 			case <-ticker.C:
 				retryCtx, retryCancel := context.WithTimeout(context.Background(), 10*time.Second)
 				n, err := outboxRepo.RetryFailed(retryCtx, 5)
-				retryCancel()
 				if err != nil {
 					logger.Warn("outbox retry sweep failed", zap.Error(err))
 				} else if n > 0 {
 					logger.Info("outbox retry: reset failed events", zap.Int("count", n))
 				}
+				if pending, pErr := outboxRepo.CountPending(retryCtx); pErr == nil {
+					observability.OutboxEventsPending.Set(float64(pending))
+				}
+				retryCancel()
 			case <-outboxStop:
 				return
 			}

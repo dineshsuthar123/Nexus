@@ -303,6 +303,15 @@ var (
 		},
 		[]string{"type"},
 	)
+
+	// Outbox pending gauge
+	OutboxEventsPending = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "outbox_events_pending",
+			Help: "Number of pending/failed outbox events",
+		},
+	)
+
 )
 
 // RegisterMetricsHandler registers the Prometheus metrics endpoint

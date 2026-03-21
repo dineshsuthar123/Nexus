@@ -12,7 +12,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+)
+
+var (
+	sanctionsCacheHits = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sanctions_cache_hits_total",
+		Help: "Sanctions cache hits",
+	})
+	sanctionsCacheMisses = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sanctions_cache_misses_total",
+		Help: "Sanctions cache misses",
+	})
 )
 
 // cacheEntry holds a cached sanctions screening result with expiry.
@@ -125,10 +138,12 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 	if entry, ok := c.cache.Load(cacheKey); ok {
 		ce := entry.(*cacheEntry)
 		if time.Since(ce.cachedAt) < c.cacheTTL {
+			sanctionsCacheHits.Inc()
 			return ce.result, nil
 		}
 		c.cache.Delete(cacheKey)
 	}
+	sanctionsCacheMisses.Inc()
 
 	// Build search URL (URL-encode user inputs to prevent parameter injection)
 	url := fmt.Sprintf("%s/search?name=%s&limit=5&minMatch=0.80", c.baseURL, neturl.QueryEscape(req.Name))

@@ -176,6 +176,15 @@ func (r *OutboxRepository) Cleanup(ctx context.Context, olderThan time.Duration)
 	return int(result.RowsAffected()), nil
 }
 
+// CountPending returns the number of pending or failed outbox events.
+func (r *OutboxRepository) CountPending(ctx context.Context) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx,
+		`SELECT count(*) FROM outbox WHERE status IN ('PENDING', 'FAILED')`,
+	).Scan(&n)
+	return n, err
+}
+
 // Event types
 const (
 	EventPaymentInitiated    = "PAYMENT_INITIATED"
