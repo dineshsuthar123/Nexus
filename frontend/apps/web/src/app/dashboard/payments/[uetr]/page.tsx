@@ -429,7 +429,13 @@ export default function PaymentDetailPage() {
   };
   const paymentType = ((payment as unknown as Record<string, unknown>).type as PaymentType) || 'STANDARD';
   const typeConfig = TYPE_CONFIG[paymentType];
-  const canSettle = payment.status === 'PENDING' || payment.status === 'PROCESSING' || payment.status === 'SANCTIONED' || payment.status === 'CLEARED';
+  const amountValue =
+    typeof payment.amount === 'number'
+      ? payment.amount
+      : typeof payment.amount === 'string'
+        ? Number(payment.amount)
+        : payment.amount.value;
+  const canSettle = payment.status === 'CLEARED';
   const canReturn = payment.status === 'SETTLED';
   const canCancel = payment.status === 'PENDING';
 
@@ -512,7 +518,7 @@ export default function PaymentDetailPage() {
           </CardHeader>
           <CardContent>
             <CurrencyDisplay
-              amount={payment.amount}
+              amount={amountValue}
               currency={payment.currency}
               size="lg"
             />
@@ -654,7 +660,7 @@ export default function PaymentDetailPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Amount</p>
                 <CurrencyDisplay
-                  amount={payment.amount}
+                  amount={amountValue}
                   currency={payment.currency}
                   size="lg"
                 />

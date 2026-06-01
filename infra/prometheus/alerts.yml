@@ -250,3 +250,68 @@ groups:
         annotations:
           summary: "Sanctions screening latency high"
           description: "Sanctions screening P95 latency is {{ $value }}ms."
+
+  - name: nexus-correctness-alerts
+    rules:
+      # ================================================================
+      # Balance & Ledger Integrity Alerts
+      # ================================================================
+      - alert: BalanceDriftDetected
+        expr: balance_drift_accounts_total > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: payment-service
+        annotations:
+          summary: "Account balance drift detected"
+          description: "{{ $value }} accounts have master balance != SUM(shard balances). Auto-reconciliation attempted."
+
+      - alert: OutboxBacklogHigh
+        expr: outbox_events_pending > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: payment-service
+        annotations:
+          summary: "Outbox backlog growing"
+          description: "{{ $value }} outbox events pending. Debezium CDC may be lagging."
+
+      - alert: OutboxBacklogCritical
+        expr: outbox_events_pending > 1000
+        for: 2m
+        labels:
+          severity: critical
+          service: payment-service
+        annotations:
+          summary: "Outbox backlog critical"
+          description: "{{ $value }} outbox events pending. Check Debezium connector status immediately."
+
+      - alert: SanctionsListsStale
+        expr: (time() - sanctions_last_refresh_timestamp) > 86400
+        for: 0m
+        labels:
+          severity: critical
+          service: payment-service
+        annotations:
+          summary: "Sanctions lists not refreshed in 24+ hours"
+          description: "Last sanctions refresh was {{ $value | humanizeDuration }} ago. OFAC compliance at risk."
+
+      - alert: ShardLazyInitSpike
+        expr: rate(account_shard_debit_attempts_total{outcome="lazy_init"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: payment-service
+        annotations:
+          summary: "High rate of shard lazy initialization"
+          description: "Accounts are being created without pre-initialized shards at {{ $value }}/sec."
+
+      - alert: DBPoolSaturated
+        expr: pgx_pool_acquired_conns / 50 > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: payment-service
+        annotations:
+          summary: "DB connection pool >80% utilized"
+          description: "{{ $value | humanizePercentage }} of pool connections in use."

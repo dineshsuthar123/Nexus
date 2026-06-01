@@ -8,7 +8,19 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
+
+var paymentRetryTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "payment_retry_total",
+	Help: "Transaction retries by attempt number",
+}, []string{"attempt"})
+
+var dbPoolAcquiredConns = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "db_pool_acquired_conns",
+	Help: "Number of currently acquired DB pool connections",
+})
 
 // Pool wraps pgxpool.Pool with additional functionality
 type Pool struct {
@@ -31,6 +43,12 @@ func NewPool(ctx context.Context, databaseURL string) (*Pool, error) {
 
 	// Connection timeout
 	config.ConnConfig.ConnectTimeout = 10 * time.Second
+
+	// SQL-level timeout: prevents runaway transactions from holding connections
+	if config.ConnConfig.RuntimeParams == nil {
+		config.ConnConfig.RuntimeParams = make(map[string]string)
+	}
+	config.ConnConfig.RuntimeParams["statement_timeout"] = "5000"
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -61,6 +79,7 @@ func (p *Pool) BeginTx(ctx context.Context) (pgx.Tx, error) {
 // WithTx executes a function within a transaction
 // Automatically commits on success, rolls back on error
 func (p *Pool) WithTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	dbPoolAcquiredConns.Set(float64(p.Stat().AcquiredConns()))
 	tx, err := p.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -100,6 +119,7 @@ func (p *Pool) RetryTx(ctx context.Context, maxRetries int, fn func(tx pgx.Tx) e
 		// Check if it's a retryable error (CockroachDB conflict)
 		if isRetryableError(err) {
 			lastErr = err
+			paymentRetryTotal.WithLabelValues(fmt.Sprintf("%d", i+1)).Inc()
 			// Exponential backoff: 10ms, 20ms, 40ms, 80ms, 160ms
 			backoff := time.Duration(10*(1<<i)) * time.Millisecond
 			time.Sleep(backoff)
@@ -121,7 +141,8 @@ func isRetryableError(err error) bool {
 	errStr := err.Error()
 	return contains(errStr, "40001") || // Serialization failure
 		contains(errStr, "retry transaction") ||
-		contains(errStr, "TransactionRetryWithProtoRefreshError")
+		contains(errStr, "TransactionRetryWithProtoRefreshError") ||
+		contains(errStr, "remote wall time")
 }
 
 func contains(s, substr string) bool {

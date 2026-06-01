@@ -303,6 +303,30 @@ var (
 		},
 		[]string{"type"},
 	)
+
+	// Outbox pending gauge
+	OutboxEventsPending = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "outbox_events_pending",
+			Help: "Number of pending/failed outbox events",
+		},
+	)
+
+	// Balance drift gauge — tracks accounts where account.balance != SUM(shard.balance)
+	BalanceDriftCount = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "balance_drift_accounts_total",
+			Help: "Number of accounts where master balance drifts from shard sum",
+		},
+	)
+
+	// Sanctions refresh gauge — last successful refresh timestamp
+	SanctionsLastRefresh = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "sanctions_last_refresh_timestamp",
+			Help: "Unix timestamp of the last successful sanctions list refresh",
+		},
+	)
 )
 
 // RegisterMetricsHandler registers the Prometheus metrics endpoint

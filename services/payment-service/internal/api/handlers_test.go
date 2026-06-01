@@ -31,6 +31,7 @@ func (m *mockTxManager) RetryTx(ctx context.Context, maxRetries int, fn func(tx 
 
 type mockTransactionStore struct {
 	existsFn     func(ctx context.Context, uetr uuid.UUID) (bool, error)
+	existsTxFn   func(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error)
 	createFn     func(ctx context.Context, tx pgx.Tx, txn *db.Transaction) error
 	getByUETRFn  func(ctx context.Context, uetr uuid.UUID) (*db.Transaction, error)
 	getByIDFn    func(ctx context.Context, id uuid.UUID) (*db.Transaction, error)
@@ -48,6 +49,13 @@ func (m *mockTransactionStore) ExistsByUETR(ctx context.Context, uetr uuid.UUID)
 	return false, nil
 }
 
+func (m *mockTransactionStore) ExistsByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error) {
+	if m.existsTxFn != nil {
+		return m.existsTxFn(ctx, tx, uetr)
+	}
+	return false, nil
+}
+
 func (m *mockTransactionStore) Create(ctx context.Context, tx pgx.Tx, txn *db.Transaction) error {
 	if m.createFn != nil {
 		return m.createFn(ctx, tx, txn)
@@ -56,6 +64,13 @@ func (m *mockTransactionStore) Create(ctx context.Context, tx pgx.Tx, txn *db.Tr
 }
 
 func (m *mockTransactionStore) GetByUETR(ctx context.Context, uetr uuid.UUID) (*db.Transaction, error) {
+	if m.getByUETRFn != nil {
+		return m.getByUETRFn(ctx, uetr)
+	}
+	return nil, db.ErrNotFound
+}
+
+func (m *mockTransactionStore) GetByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (*db.Transaction, error) {
 	if m.getByUETRFn != nil {
 		return m.getByUETRFn(ctx, uetr)
 	}
@@ -198,6 +213,24 @@ func (m *mockEventPublisher) Publish(ctx context.Context, topic, key string, val
 
 func (m *mockEventPublisher) Close() error { return nil }
 
+type mockShardStore struct{}
+
+func (m *mockShardStore) ReserveFundsShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, currency string) error {
+	return nil
+}
+func (m *mockShardStore) CreditShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
+	return nil
+}
+func (m *mockShardStore) DebitShard(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
+	return nil
+}
+func (m *mockShardStore) NeedsRebalance(ctx context.Context, accountID uuid.UUID) (bool, error) {
+	return false, nil
+}
+func (m *mockShardStore) Rebalance(ctx context.Context, accountID uuid.UUID) error {
+	return nil
+}
+
 // ============================================================================
 // Test setup helper
 // ============================================================================
@@ -207,19 +240,20 @@ func setupRouter(opts ...func(*testOpts)) *gin.Engine {
 	logger, _ := zap.NewDevelopment()
 
 	o := &testOpts{
-		txMgr:     &mockTxManager{},
-		txnStore:  &mockTransactionStore{},
-		acctStore: &mockAccountStore{},
-		outbox:    &mockOutboxStore{},
-		sanctions: &mockSanctionsScreener{},
-		publisher: &mockEventPublisher{},
+		txMgr:      &mockTxManager{},
+		shardStore: &mockShardStore{},
+		txnStore:   &mockTransactionStore{},
+		acctStore:  &mockAccountStore{},
+		outbox:     &mockOutboxStore{},
+		sanctions:  &mockSanctionsScreener{},
+		publisher:  &mockEventPublisher{},
 	}
 	for _, fn := range opts {
 		fn(o)
 	}
 
 	svc := service.NewPaymentService(
-		logger, o.txMgr, o.acctStore, o.txnStore, o.outbox, o.sanctions, o.publisher,
+		logger, o.txMgr, o.acctStore, o.shardStore, o.txnStore, o.outbox, o.sanctions, o.publisher,
 	)
 
 	router := gin.New()
@@ -228,12 +262,13 @@ func setupRouter(opts ...func(*testOpts)) *gin.Engine {
 }
 
 type testOpts struct {
-	txMgr     service.TxManager
-	txnStore  service.TransactionStore
-	acctStore service.AccountStore
-	outbox    service.OutboxStore
-	sanctions service.SanctionsScreener
-	publisher service.EventPublisher
+	txMgr      service.TxManager
+	shardStore service.ShardStore
+	txnStore   service.TransactionStore
+	acctStore  service.AccountStore
+	outbox     service.OutboxStore
+	sanctions  service.SanctionsScreener
+	publisher  service.EventPublisher
 }
 
 func withTxnStore(m service.TransactionStore) func(*testOpts) {
@@ -446,7 +481,7 @@ func TestSettlePayment_Success(t *testing.T) {
 	txnStore := &mockTransactionStore{
 		getByUETRFn: func(ctx context.Context, u uuid.UUID) (*db.Transaction, error) {
 			return &db.Transaction{
-				ID: txnID, UETR: u, Status: "PENDING",
+				ID: txnID, UETR: u, Status: "CLEARED",
 				Amount: decimal.NewFromInt(100), Currency: "USD",
 				DebtorAccountID: uuid.New(), CreditorAccountID: uuid.New(),
 			}, nil

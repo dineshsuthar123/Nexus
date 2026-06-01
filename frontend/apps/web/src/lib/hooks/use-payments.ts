@@ -7,7 +7,7 @@
 import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
-import { get, post, postIdempotent, put, PAYMENT_ENDPOINTS, buildQueryParams } from '@/lib/api';
+import { get, post, postIdempotent, PAYMENT_ENDPOINTS, buildQueryParams } from '@/lib/api';
 import type {
   Payment,
   CreatePaymentRequest,
@@ -173,7 +173,10 @@ export function useReturnPayment() {
 
   return useMutation({
     mutationFn: async ({ uetr, reason }: { uetr: string; reason: string }) => {
-      const response = await post<Payment>(PAYMENT_ENDPOINTS.RETURN(uetr), { reason });
+      const response = await post<Payment>(PAYMENT_ENDPOINTS.RETURN(uetr), {
+        reasonCode: reason,
+        reasonText: reason,
+      });
       return response.data;
     },
     onSuccess: (updatedPayment) => {
@@ -191,7 +194,10 @@ export function useCancelPayment() {
 
   return useMutation({
     mutationFn: async ({ uetr, reason }: { uetr: string; reason: string }) => {
-      const response = await post<Payment>(PAYMENT_ENDPOINTS.CANCEL(uetr), { reason });
+      const response = await post<Payment>(PAYMENT_ENDPOINTS.CANCEL(uetr), {
+        reasonCode: reason,
+        reasonText: reason,
+      });
       return response.data;
     },
     onSuccess: (updatedPayment) => {

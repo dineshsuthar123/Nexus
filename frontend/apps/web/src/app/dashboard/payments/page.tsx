@@ -67,6 +67,21 @@ function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
       variant: 'default',
       icon: <RefreshCw className="h-3 w-3 animate-spin" />
     },
+    SANCTIONED: {
+      label: 'Sanctions Review',
+      variant: 'warning',
+      icon: <AlertCircle className="h-3 w-3" />
+    },
+    FRAUD_REVIEW: {
+      label: 'Fraud Review',
+      variant: 'warning',
+      icon: <AlertCircle className="h-3 w-3" />
+    },
+    CLEARED: {
+      label: 'Cleared',
+      variant: 'default',
+      icon: <CheckCircle2 className="h-3 w-3" />
+    },
     SETTLED: {
       label: 'Settled',
       variant: 'success',
@@ -166,6 +181,8 @@ export default function PaymentsPage() {
 
   const totalPages = data?.pagination?.totalPages || 1;
   const payments = data?.data || [];
+  const moneyValue = (amount: Payment['amount']) =>
+    typeof amount === 'number' ? amount : typeof amount === 'string' ? Number(amount) : amount.value;
 
   return (
     <div className="space-y-6">
@@ -430,7 +447,7 @@ export default function PaymentsPage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <CurrencyDisplay
-                          amount={payment.amount}
+                          amount={moneyValue(payment.amount)}
                           currency={payment.currency}
                           size="sm"
                         />

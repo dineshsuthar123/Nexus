@@ -198,6 +198,64 @@ func (r *TransactionRepository) GetByUETR(ctx context.Context, uetr uuid.UUID) (
 	return &t, nil
 }
 
+// GetByUETRTx retrieves a transaction by UETR within an existing transaction.
+// This eliminates the TOCTOU race present when using pool-level reads.
+func (r *TransactionRepository) GetByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (*Transaction, error) {
+	query := `
+		SELECT id, uetr, message_id, instruction_id, end_to_end_id,
+		       transaction_type, amount, currency,
+		       settlement_amount, settlement_currency, exchange_rate,
+		       fee_amount, fee_currency, charge_bearer,
+		       debtor_account_id, creditor_account_id,
+		       debtor_name, creditor_name,
+		       status, status_reason,
+		       sanctions_status, sanctions_score,
+		       fraud_status, fraud_score,
+		       requested_execution_date, booking_date, value_date, settlement_date,
+		       remittance_info, original_message,
+		       external_rail, external_reference,
+		       created_at, updated_at, created_by
+		FROM transaction
+		WHERE uetr = $1
+	`
+
+	var t Transaction
+	err := tx.QueryRow(ctx, query, uetr).Scan(
+		&t.ID, &t.UETR, &t.MessageID, &t.InstructionID, &t.EndToEndID,
+		&t.TransactionType, &t.Amount, &t.Currency,
+		&t.SettlementAmount, &t.SettlementCurrency, &t.ExchangeRate,
+		&t.FeeAmount, &t.FeeCurrency, &t.ChargeBearer,
+		&t.DebtorAccountID, &t.CreditorAccountID,
+		&t.DebtorName, &t.CreditorName,
+		&t.Status, &t.StatusReason,
+		&t.SanctionsStatus, &t.SanctionsScore,
+		&t.FraudStatus, &t.FraudScore,
+		&t.RequestedExecutionDt, &t.BookingDate, &t.ValueDate, &t.SettlementDate,
+		&t.RemittanceInfo, &t.OriginalMessage,
+		&t.ExternalRail, &t.ExternalReference,
+		&t.CreatedAt, &t.UpdatedAt, &t.CreatedBy,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get transaction by UETR: %w", err)
+	}
+
+	return &t, nil
+}
+
+// ExistsByUETRTx checks if a transaction with the given UETR exists using the provided transaction.
+func (r *TransactionRepository) ExistsByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM transaction WHERE uetr = $1)`
+	var exists bool
+	err := tx.QueryRow(ctx, query, uetr).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check transaction existence: %w", err)
+	}
+	return exists, nil
+}
+
 // GetByID retrieves a transaction by ID
 func (r *TransactionRepository) GetByID(ctx context.Context, id uuid.UUID) (*Transaction, error) {
 	query := `
@@ -245,20 +303,53 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id uuid.UUID) (*Tra
 }
 
 // UpdateStatus updates the transaction status
+// validTransitions defines the allowed state machine transitions for transaction status.
+var validTransitions = map[string][]string{
+	"PENDING":      {"SANCTIONED", "CLEARED", "REJECTED", "CANCELLED"},
+	"SANCTIONED":   {"FRAUD_REVIEW", "CLEARED", "REJECTED", "CANCELLED"},
+	"FRAUD_REVIEW": {"CLEARED", "REJECTED", "CANCELLED"},
+	"CLEARED":      {"SETTLED", "RETURNED", "CANCELLED"},
+	"SETTLED":      {"RETURNED"},
+	// Terminal states: REJECTED, RETURNED, CANCELLED — no outgoing transitions
+}
+
+// ValidateTransition checks whether a status transition is permitted.
+func ValidateTransition(from, to string) error {
+	allowed, ok := validTransitions[from]
+	if !ok {
+		return fmt.Errorf("%w: no transitions from %s", ErrInvalidTransition, from)
+	}
+	for _, s := range allowed {
+		if s == to {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s -> %s", ErrInvalidTransition, from, to)
+}
+
 func (r *TransactionRepository) UpdateStatus(ctx context.Context, tx pgx.Tx, id uuid.UUID, status, reason string) error {
+	// Fetch current status and validate transition
+	var currentStatus string
+	err := tx.QueryRow(ctx, `SELECT status FROM transaction WHERE id = $1`, id).Scan(&currentStatus)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to read current status: %w", err)
+	}
+	if err := ValidateTransition(currentStatus, status); err != nil {
+		return err
+	}
+
 	query := `
 		UPDATE transaction
 		SET status = $2, status_reason = $3, updated_at = current_timestamp()
 		WHERE id = $1
 	`
 
-	result, err := tx.Exec(ctx, query, id, status, reason)
-	if err != nil {
-		return fmt.Errorf("failed to update transaction status: %w", err)
-	}
-
-	if result.RowsAffected() == 0 {
-		return ErrNotFound
+	_, execErr := tx.Exec(ctx, query, id, status, reason)
+	if execErr != nil {
+		return fmt.Errorf("failed to update transaction status: %w", execErr)
 	}
 
 	return nil

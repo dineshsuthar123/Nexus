@@ -5,20 +5,61 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	neturl "net/url"
+	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 )
+
+var (
+	sanctionsCacheHits = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sanctions_cache_hits_total",
+		Help: "Sanctions cache hits",
+	})
+	sanctionsCacheMisses = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sanctions_cache_misses_total",
+		Help: "Sanctions cache misses",
+	})
+	sanctionsCircuitOpenTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sanctions_circuit_open_total",
+		Help: "Sanctions requests skipped because the remote screening circuit is open",
+	})
+)
+
+const (
+	defaultHTTPTimeout             = 750 * time.Millisecond
+	defaultCircuitFailureThreshold = 2
+	defaultCircuitCooldown         = 30 * time.Second
+)
+
+var ErrCircuitOpen = errors.New("sanctions screening circuit open")
+
+// cacheEntry holds a cached sanctions screening result with expiry.
+type cacheEntry struct {
+	result   *ScreeningResult
+	cachedAt time.Time
+}
 
 // Client provides sanctions screening via Moov Watchman
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	logger     *zap.Logger
+	cache      sync.Map
+	cacheTTL   time.Duration
+
+	failureMu        sync.Mutex
+	failureCount     int
+	failureThreshold int
+	circuitOpenUntil time.Time
+	circuitCooldown  time.Duration
 }
 
 // NewClient creates a new sanctions screening client
@@ -26,9 +67,17 @@ func NewClient(baseURL string, logger *zap.Logger) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second, // Budget: 100ms but allow buffer
+			Timeout: defaultHTTPTimeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 25,
+				IdleConnTimeout:     90 * time.Second,
+			},
 		},
-		logger: logger,
+		logger:           logger,
+		cacheTTL:         5 * time.Minute,
+		failureThreshold: defaultCircuitFailureThreshold,
+		circuitCooldown:  defaultCircuitCooldown,
 	}
 }
 
@@ -105,6 +154,27 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 		)
 	}()
 
+	// Check in-memory cache (5-min TTL)
+	cacheKey := req.Name + "|" + req.Country
+	if entry, ok := c.cache.Load(cacheKey); ok {
+		ce := entry.(*cacheEntry)
+		if time.Since(ce.cachedAt) < c.cacheTTL {
+			sanctionsCacheHits.Inc()
+			return ce.result, nil
+		}
+		c.cache.Delete(cacheKey)
+	}
+	sanctionsCacheMisses.Inc()
+
+	if openUntil, ok := c.isCircuitOpen(time.Now()); ok {
+		sanctionsCircuitOpenTotal.Inc()
+		c.logger.Warn("Sanctions circuit open, sending payment to review",
+			zap.String("name", req.Name),
+			zap.Time("openUntil", openUntil),
+		)
+		return nil, fmt.Errorf("%w until %s", ErrCircuitOpen, openUntil.Format(time.RFC3339))
+	}
+
 	// Build search URL (URL-encode user inputs to prevent parameter injection)
 	url := fmt.Sprintf("%s/search?name=%s&limit=5&minMatch=0.80", c.baseURL, neturl.QueryEscape(req.Name))
 	if req.Country != "" {
@@ -124,6 +194,7 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 	// Execute request
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
+		c.recordFailure()
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -131,21 +202,28 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.recordFailure()
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		c.recordFailure()
 		return nil, fmt.Errorf("sanctions API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
 	var searchResp SDNSearchResponse
 	if err := json.Unmarshal(body, &searchResp); err != nil {
+		c.recordFailure()
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
+	c.recordSuccess()
 
 	// Analyze results
 	result := c.analyzeResults(req.Name, searchResp.SDNs)
+
+	// Store in cache
+	c.cache.Store(cacheKey, &cacheEntry{result: result, cachedAt: time.Now()})
 
 	c.logger.Info("Sanctions screening result",
 		zap.String("name", req.Name),
@@ -155,6 +233,53 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 	)
 
 	return result, nil
+}
+
+func (c *Client) isCircuitOpen(now time.Time) (time.Time, bool) {
+	c.failureMu.Lock()
+	defer c.failureMu.Unlock()
+
+	if c.circuitOpenUntil.IsZero() {
+		return time.Time{}, false
+	}
+	if now.Before(c.circuitOpenUntil) {
+		return c.circuitOpenUntil, true
+	}
+
+	c.circuitOpenUntil = time.Time{}
+	c.failureCount = 0
+	return time.Time{}, false
+}
+
+func (c *Client) recordFailure() {
+	c.failureMu.Lock()
+	defer c.failureMu.Unlock()
+
+	threshold := c.failureThreshold
+	if threshold <= 0 {
+		threshold = defaultCircuitFailureThreshold
+	}
+	cooldown := c.circuitCooldown
+	if cooldown <= 0 {
+		cooldown = defaultCircuitCooldown
+	}
+
+	c.failureCount++
+	if c.failureCount >= threshold {
+		c.circuitOpenUntil = time.Now().Add(cooldown)
+		c.logger.Warn("Sanctions circuit opened",
+			zap.Int("failureCount", c.failureCount),
+			zap.Duration("cooldown", cooldown),
+		)
+	}
+}
+
+func (c *Client) recordSuccess() {
+	c.failureMu.Lock()
+	defer c.failureMu.Unlock()
+
+	c.failureCount = 0
+	c.circuitOpenUntil = time.Time{}
 }
 
 // ScreenBatch performs batch sanctions screening
@@ -236,24 +361,33 @@ func (c *Client) analyzeResults(searchName string, sdns []SDNEntry) *ScreeningRe
 	return result
 }
 
-// ScreenParties screens both debtor and creditor
+// ScreenParties screens both debtor and creditor in parallel
 func (c *Client) ScreenParties(ctx context.Context, debtorName, creditorName, debtorCountry, creditorCountry string) (debtorResult, creditorResult *ScreeningResult, err error) {
-	// Screen debtor
-	debtorResult, err = c.Screen(ctx, &ScreeningRequest{
-		Name:    debtorName,
-		Country: debtorCountry,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to screen debtor: %w", err)
-	}
+	var wg sync.WaitGroup
+	var dErr, cErr error
 
-	// Screen creditor
-	creditorResult, err = c.Screen(ctx, &ScreeningRequest{
-		Name:    creditorName,
-		Country: creditorCountry,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to screen creditor: %w", err)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		debtorResult, dErr = c.Screen(ctx, &ScreeningRequest{
+			Name:    debtorName,
+			Country: debtorCountry,
+		})
+	}()
+	go func() {
+		defer wg.Done()
+		creditorResult, cErr = c.Screen(ctx, &ScreeningRequest{
+			Name:    creditorName,
+			Country: creditorCountry,
+		})
+	}()
+	wg.Wait()
+
+	if dErr != nil {
+		return nil, nil, fmt.Errorf("failed to screen debtor: %w", dErr)
+	}
+	if cErr != nil {
+		return nil, nil, fmt.Errorf("failed to screen creditor: %w", cErr)
 	}
 
 	return debtorResult, creditorResult, nil
@@ -300,8 +434,18 @@ func (c *Client) DownloadLatestLists(ctx context.Context) error {
 		return fmt.Errorf("download returned status %d", resp.StatusCode)
 	}
 
-	c.logger.Info("Triggered OFAC list download")
+	c.logger.Info("Triggered OFAC list download — clearing sanctions cache")
+	c.ClearCache()
 	return nil
+}
+
+// ClearCache invalidates all cached sanctions screening results.
+// Should be called after OFAC list updates.
+func (c *Client) ClearCache() {
+	c.cache.Range(func(key, _ interface{}) bool {
+		c.cache.Delete(key)
+		return true
+	})
 }
 
 // Sanctions status constants

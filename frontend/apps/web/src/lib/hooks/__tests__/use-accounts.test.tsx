@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Account Hooks Tests
- * 
+ *
  * Tests for account-related React Query hooks.
  */
 
@@ -9,9 +9,9 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
 
-import { 
-  useAccounts, 
-  useAccount, 
+import {
+  useAccounts,
+  useAccount,
   useAccountBalance,
   useCreateAccount,
   useUpdateAccountStatus,
@@ -271,7 +271,7 @@ describe('Account Hooks', () => {
   describe('useCreateAccount', () => {
     it('should create account successfully', async () => {
       const newAccount = { ...mockAccount, id: 'acc-new-12345' };
-      
+
       vi.mocked(api.post).mockResolvedValueOnce({
         data: newAccount,
         status: 201,
@@ -287,7 +287,7 @@ describe('Account Hooks', () => {
       const createData = {
         name: 'Test Account',
         type: 'OPERATING' as const,
-        currency: 'EUR',
+        currency: 'EUR' as const,
         iban: 'DE89370400440532013000',
         bic: 'COBADEFFXXX',
       };
@@ -309,7 +309,7 @@ describe('Account Hooks', () => {
         result.current.mutateAsync({
           name: 'Duplicate Account',
           type: 'OPERATING',
-          currency: 'EUR',
+          currency: 'EUR' as const,
           iban: 'DE89370400440532013000',
           bic: 'COBADEFFXXX',
         })
@@ -324,7 +324,7 @@ describe('Account Hooks', () => {
   describe('useUpdateAccountStatus', () => {
     it('should activate account', async () => {
       const activatedAccount = { ...mockAccount, status: 'ACTIVE' };
-      
+
       vi.mocked(api.put).mockResolvedValueOnce({
         data: activatedAccount,
         status: 200,
@@ -351,7 +351,7 @@ describe('Account Hooks', () => {
 
     it('should suspend account with reason', async () => {
       const suspendedAccount = { ...mockAccount, status: 'SUSPENDED' };
-      
+
       vi.mocked(api.put).mockResolvedValueOnce({
         data: suspendedAccount,
         status: 200,
@@ -410,7 +410,7 @@ describe('Account Hooks', () => {
     it('should include filters in list key', () => {
       const filters = { type: 'SETTLEMENT' as const, status: 'ACTIVE' as const };
       const pagination = { page: 1, pageSize: 20 };
-      
+
       expect(accountKeys.list(filters, pagination)).toEqual([
         'accounts',
         'list',

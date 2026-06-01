@@ -190,15 +190,34 @@
 
   /* Glass effect */
   .glass {
-    @apply bg-white/70 backdrop-blur-xl border border-white/20 dark:bg-neutral-900/70 dark:border-neutral-700/30;
+    @apply bg-white/70 backdrop-blur-xl border border-white/20;
+  }
+
+  .dark .glass {
+    background-color: rgb(var(--color-neutral-900) / 0.7);
+    border-color: rgb(var(--color-neutral-700) / 0.3);
   }
 
   .glass-card {
-    @apply bg-white/80 backdrop-blur-xl border border-neutral-200/60 shadow-lg shadow-neutral-900/5 dark:bg-neutral-800/60 dark:border-neutral-700/40 dark:shadow-neutral-900/30;
+    @apply bg-white/80 backdrop-blur-xl border shadow-lg;
+    border-color: rgb(var(--color-neutral-200) / 0.6);
+    --tw-shadow-color: rgb(var(--color-neutral-900) / 0.05);
+    --tw-shadow: var(--tw-shadow-colored);
+  }
+
+  .dark .glass-card {
+    background-color: rgb(var(--color-neutral-800) / 0.6);
+    border-color: rgb(var(--color-neutral-700) / 0.4);
   }
 
   .glass-sidebar {
-    @apply bg-white/90 backdrop-blur-2xl border-r border-neutral-200/50 dark:bg-neutral-900/90 dark:border-neutral-800/50;
+    @apply bg-white/90 backdrop-blur-2xl border-r;
+    border-color: rgb(var(--color-neutral-200) / 0.5);
+  }
+
+  .dark .glass-sidebar {
+    background-color: rgb(var(--color-neutral-900) / 0.9);
+    border-color: rgb(var(--color-neutral-800) / 0.5);
   }
 
   /* Gradient text */
@@ -212,7 +231,16 @@
 
   /* Premium card hover effect */
   .card-hover {
-    @apply transition-all duration-300 ease-out hover:shadow-lg hover:-translate-y-0.5 hover:shadow-primary-500/5 dark:hover:shadow-primary-400/5;
+    @apply transition-all duration-300 ease-out hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .card-hover:hover {
+    --tw-shadow-color: rgb(var(--color-primary-500) / 0.05);
+    --tw-shadow: var(--tw-shadow-colored);
+  }
+
+  .dark .card-hover:hover {
+    --tw-shadow-color: rgb(var(--color-primary-400) / 0.05);
   }
 
   /* Gradient border card */
@@ -240,19 +268,35 @@
     @apply flex items-center justify-center rounded-xl;
   }
   .icon-pill-primary {
-    @apply icon-pill bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400;
+    @apply icon-pill bg-primary-50 text-primary-600 dark:text-primary-400;
+  }
+
+  .dark .icon-pill-primary {
+    background-color: rgb(var(--color-primary-950) / 0.5);
   }
   .icon-pill-secondary {
-    @apply icon-pill bg-secondary-50 text-secondary-600 dark:bg-secondary-950/50 dark:text-secondary-400;
+    @apply icon-pill bg-secondary-50 text-secondary-600 dark:text-secondary-400;
+  }
+
+  .dark .icon-pill-secondary {
+    background-color: rgb(var(--color-secondary-950) / 0.5);
   }
   .icon-pill-accent {
     @apply icon-pill bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400;
   }
   .icon-pill-success {
-    @apply icon-pill bg-success-50 text-success-600 dark:bg-success-100/10 dark:text-success-500;
+    @apply icon-pill bg-success-50 text-success-600 dark:text-success-500;
+  }
+
+  .dark .icon-pill-success {
+    background-color: rgb(var(--color-success-100) / 0.1);
   }
   .icon-pill-danger {
-    @apply icon-pill bg-danger-50 text-danger-600 dark:bg-danger-100/10 dark:text-danger-500;
+    @apply icon-pill bg-danger-50 text-danger-600 dark:text-danger-500;
+  }
+
+  .dark .icon-pill-danger {
+    background-color: rgb(var(--color-danger-100) / 0.1);
   }
 
   /* Stats grid */

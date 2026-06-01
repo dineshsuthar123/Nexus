@@ -87,7 +87,8 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
       throw new Error('Failed to refresh token');
     }
 
-    const refreshedTokens = await response.json();
+    const data = await response.json();
+    const refreshedTokens = data.tokens ?? data;
 
     return {
       ...token,
@@ -179,6 +180,18 @@ export const authOptions: AuthOptions = {
           }
 
           const loginResponse = data as LoginResponse;
+          const tokens = loginResponse.tokens ?? {
+            accessToken: loginResponse.accessToken,
+            refreshToken: loginResponse.refreshToken,
+            expiresIn: loginResponse.expiresIn,
+          };
+
+          if (!tokens.accessToken || !tokens.refreshToken || !tokens.expiresIn) {
+            if (loginResponse.mfaRequired || loginResponse.requiresMfa) {
+              throw new Error('MFA_REQUIRED');
+            }
+            throw new Error('Authentication response did not include tokens');
+          }
 
           // Return user object for NextAuth
           return {
@@ -189,9 +202,9 @@ export const authOptions: AuthOptions = {
             lastName: loginResponse.user.lastName,
             role: loginResponse.user.role,
             permissions: loginResponse.user.permissions || [],
-            accessToken: loginResponse.accessToken,
-            refreshToken: loginResponse.refreshToken,
-            accessTokenExpires: Date.now() + loginResponse.expiresIn * 1000,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            accessTokenExpires: Date.now() + tokens.expiresIn * 1000,
             mfaEnabled: loginResponse.user.mfaEnabled,
             emailVerified: loginResponse.user.emailVerified,
             avatar: loginResponse.user.avatar,

@@ -70,7 +70,8 @@ services:
         cockroach init --insecure --host=cockroachdb-1:26257 || true &&
         sleep 5 &&
         cockroach sql --insecure --host=cockroachdb-1:26257 < /docker-entrypoint-initdb.d/001_init_schema.sql &&
-        cockroach sql --insecure --host=cockroachdb-1:26257 --database=nexus_ledger < /docker-entrypoint-initdb.d/002_cdc_setup.sql
+        cockroach sql --insecure --host=cockroachdb-1:26257 --database=nexus_ledger < /docker-entrypoint-initdb.d/002_cdc_setup.sql &&
+        cockroach sql --insecure --host=cockroachdb-1:26257 --database=nexus_ledger < /docker-entrypoint-initdb.d/003_seed_local.sql
       "
     volumes:
       - ./cockroachdb/init:/docker-entrypoint-initdb.d:ro
@@ -537,10 +538,12 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - cockroachdb-1
-      - kafka-1
-      - redis
-      - watchman
+      cockroachdb-1:
+        condition: service_healthy
+      kafka-1:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   account-service:
     build:
@@ -565,9 +568,12 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - cockroachdb-1
-      - kafka-1
-      - redis
+      cockroachdb-1:
+        condition: service_healthy
+      kafka-1:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   reconciliation-service:
     build:
@@ -592,9 +598,12 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - cockroachdb-1
-      - kafka-1
-      - redis
+      cockroachdb-1:
+        condition: service_healthy
+      kafka-1:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # ============================================================================
   # Auth Service - JWT, MFA, Password Reset
@@ -620,7 +629,7 @@ services:
       JWT_ACCESS_TOKEN_EXPIRY: 15m
       JWT_REFRESH_TOKEN_EXPIRY: 168h
       MFA_ISSUER: NexusRTP
-      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-RTTz/WcQejvv6fupnEKOqvehQ+yDCqw4L1GQp/Svi4Y=}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-01234567890123456789012345678901}
       JAEGER_ENDPOINT: jaeger:4318
       # SMTP email transport (disabled in dev — uses NoopSender that logs)
       SMTP_ENABLED: "false"
@@ -634,8 +643,10 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - cockroachdb-1
-      - redis
+      cockroachdb-1:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # ============================================================================
   # WebSocket Gateway - Real-time event streaming
@@ -665,8 +676,10 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - kafka-1
-      - auth-service
+      kafka-1:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
 
   # ============================================================================
   # Analytics Service - Platform metrics and trends
@@ -688,7 +701,8 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - cockroachdb-1
+      cockroachdb-1:
+        condition: service_healthy
 
   # ============================================================================
   # Audit Service - Cryptographic audit bundle generation
@@ -710,7 +724,8 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - cockroachdb-1
+      cockroachdb-1:
+        condition: service_healthy
 
   # ============================================================================
   # Notification Service - Notification management & delivery
@@ -737,9 +752,12 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - cockroachdb-1
-      - redis
-      - kafka-1
+      cockroachdb-1:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-1:
+        condition: service_healthy
 
   # ============================================================================
   # Kong Route Init - Configures API gateway routes
@@ -806,15 +824,24 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - kong
-      - auth-service
-      - payment-service
-      - account-service
-      - reconciliation-service
-      - analytics-service
-      - audit-service
-      - notification-service
-      - ws-gateway
+      kong:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      account-service:
+        condition: service_healthy
+      reconciliation-service:
+        condition: service_healthy
+      analytics-service:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      ws-gateway:
+        condition: service_healthy
 
   # ============================================================================
   # Frontend - Next.js Web Application
@@ -837,7 +864,8 @@ services:
     networks:
       - nexus-network
     depends_on:
-      - kong
+      kong:
+        condition: service_healthy
 
 # ============================================================================
 # Networks

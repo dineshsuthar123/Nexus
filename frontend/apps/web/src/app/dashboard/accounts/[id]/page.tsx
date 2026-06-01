@@ -65,6 +65,7 @@ const TYPE_CONFIG: Record<AccountType, { label: string; icon: React.ReactNode; c
   NOSTRO: { label: 'Nostro Account', icon: <TrendingUp className="h-5 w-5" />, color: 'bg-green-500' },
   VOSTRO: { label: 'Vostro Account', icon: <TrendingDown className="h-5 w-5" />, color: 'bg-amber-500' },
   INTERNAL: { label: 'Internal Account', icon: <Building2 className="h-5 w-5" />, color: 'bg-purple-500' },
+  OPERATING: { label: 'Operating Account', icon: <Wallet className="h-5 w-5" />, color: 'bg-slate-500' },
 };
 
 const STATUS_CONFIG: Record<AccountStatus, { label: string; color: 'success' | 'default' | 'warning' | 'danger' }> = {

@@ -1,16 +1,16 @@
 /**
  * Nexus RTP Platform - React Query Hooks for Auth
- * 
+ *
  * Custom hooks for authentication operations using React Query.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { get, post, AUTH_ENDPOINTS } from '@/lib/api';
-import type { 
-  User, 
-  MfaSetupResponse, 
-  MfaVerifyRequest 
+import type {
+  User,
+  MfaSetupResponse,
+  MfaVerifyRequest
 } from '@/lib/api/types';
 
 // =============================================================================
@@ -56,8 +56,9 @@ export function useRegister() {
     mutationFn: async (data: {
       email: string;
       password: string;
-      firstName: string;
-      lastName: string;
+      name?: string;
+      firstName?: string;
+      lastName?: string;
       organization?: string;
     }) => {
       const response = await post<{ message: string }>(AUTH_ENDPOINTS.REGISTER, data);

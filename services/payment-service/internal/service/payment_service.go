@@ -4,11 +4,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nexus-rtp/payment-service/internal/db"
 	"github.com/nexus-rtp/payment-service/internal/observability"
 	"github.com/nexus-rtp/payment-service/internal/sanctions"
@@ -23,6 +26,7 @@ type PaymentService struct {
 	logger          *zap.Logger
 	pool            TxManager
 	accountRepo     AccountStore
+	shardRepo       ShardStore
 	transactionRepo TransactionStore
 	outboxRepo      OutboxStore
 	sanctionsClient SanctionsScreener
@@ -34,6 +38,7 @@ func NewPaymentService(
 	logger *zap.Logger,
 	pool TxManager,
 	accountRepo AccountStore,
+	shardRepo ShardStore,
 	transactionRepo TransactionStore,
 	outboxRepo OutboxStore,
 	sanctionsClient SanctionsScreener,
@@ -43,6 +48,7 @@ func NewPaymentService(
 		logger:          logger,
 		pool:            pool,
 		accountRepo:     accountRepo,
+		shardRepo:       shardRepo,
 		transactionRepo: transactionRepo,
 		outboxRepo:      outboxRepo,
 		sanctionsClient: sanctionsClient,
@@ -136,24 +142,35 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 
 	// =========================================================================
 	// Stage 1: Idempotency Check (< 10ms)
-	// =========================================================================
-	exists, err := s.transactionRepo.ExistsByUETR(ctx, uetr)
+	// Run inside a RetryTx so transient DB errors (eg. remote wall time)
+	// are retried instead of immediately failing the request.
+	var existingTx *db.Transaction
+	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
+		exists, err := s.transactionRepo.ExistsByUETRTx(ctx, tx, uetr)
+		if err != nil {
+			return fmt.Errorf("failed to check transaction existence: %w", err)
+		}
+		if !exists {
+			return nil
+		}
+		t, err := s.transactionRepo.GetByUETRTx(ctx, tx, uetr)
+		if err != nil {
+			return fmt.Errorf("failed to get existing transaction: %w", err)
+		}
+		existingTx = t
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to check idempotency: %w", err)
 	}
-	if exists {
-		// Return existing transaction
-		existing, err := s.transactionRepo.GetByUETR(ctx, uetr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get existing transaction: %w", err)
-		}
+	if existingTx != nil {
 		return &CreatePaymentResponse{
-			TransactionID:   existing.ID.String(),
-			UETR:            existing.UETR.String(),
-			Status:          existing.Status,
-			StatusReason:    existing.StatusReason,
-			SanctionsStatus: existing.SanctionsStatus,
-			CreatedAt:       existing.CreatedAt,
+			TransactionID:   existingTx.ID.String(),
+			UETR:            existingTx.UETR.String(),
+			Status:          existingTx.Status,
+			StatusReason:    existingTx.StatusReason,
+			SanctionsStatus: existingTx.SanctionsStatus,
+			CreatedAt:       existingTx.CreatedAt,
 			ProcessingTime:  time.Since(start).Milliseconds(),
 		}, nil
 	}
@@ -212,36 +229,18 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 	ledgerStart := time.Now()
 
 	// Use retry transaction for CockroachDB optimistic locking
-	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
-		// Get and lock debtor account
-		debtorAccount, err := s.accountRepo.GetForUpdate(ctx, tx, debtorAccountID)
-		if err != nil {
-			if err == db.ErrNotFound {
-				return fmt.Errorf("debtor account not found")
+	err = s.pool.RetryTx(ctx, 5, func(tx pgx.Tx) error {
+		// Sharded fund reservation: debits a single shard row instead of the
+		// main account row, reducing write contention from N-on-1 to N/K-on-1.
+		// Validates account status, currency, and limit via read-only account lookup.
+		if err := s.shardRepo.ReserveFundsShard(ctx, tx, debtorAccountID, req.Amount, req.Currency); err != nil {
+			if err == db.ErrInsufficientFunds || err == db.ErrNotFound || err == db.ErrAccountInactive || err == db.ErrCurrencyMismatch || err == db.ErrTransactionLimitExceeded || err == db.ErrShardsNotInitialized {
+				return err
 			}
-			return fmt.Errorf("failed to get debtor account: %w", err)
+			return fmt.Errorf("failed to reserve funds: %w", err)
 		}
 
-		// Validate debtor account
-		if debtorAccount.Status != "ACTIVE" {
-			return fmt.Errorf("debtor account is not active")
-		}
-		if debtorAccount.Currency != req.Currency {
-			return fmt.Errorf("currency mismatch: account is %s, payment is %s", debtorAccount.Currency, req.Currency)
-		}
-
-		// Check available balance
-		availableBalance := debtorAccount.Balance.Add(debtorAccount.PendingCredits).Sub(debtorAccount.PendingDebits)
-		if availableBalance.LessThan(req.Amount) && !debtorAccount.AllowNegative {
-			return db.ErrInsufficientFunds
-		}
-
-		// Check transaction limit
-		if req.Amount.GreaterThan(debtorAccount.TransactionLimit) {
-			return fmt.Errorf("amount exceeds transaction limit")
-		}
-
-		// Get creditor account (no lock needed for credit)
+		// Get creditor account (read-only, no lock needed)
 		creditorAccount, err := s.accountRepo.GetByID(ctx, creditorAccountID)
 		if err != nil {
 			if err == db.ErrNotFound {
@@ -255,13 +254,10 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 			return fmt.Errorf("creditor account is not active")
 		}
 
-		// Reserve funds on debtor account
-		if err := s.accountRepo.ReserveFunds(ctx, tx, debtorAccountID, req.Amount); err != nil {
-			return fmt.Errorf("failed to reserve funds: %w", err)
-		}
-
-		// Determine initial status based on sanctions
-		initialStatus := "PENDING"
+		// Determine initial status based on sanctions. A payment that clears
+		// synchronous compliance screening is ready for settlement; review paths
+		// remain blocked until an explicit operator/system transition clears them.
+		initialStatus := "CLEARED"
 		if sanctionsStatus == sanctions.StatusReview {
 			initialStatus = "SANCTIONED" // Under sanctions review
 			statusReason = "Pending sanctions review"
@@ -295,6 +291,33 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 
 		if err := s.transactionRepo.Create(ctx, tx, transaction); err != nil {
 			return fmt.Errorf("failed to create transaction: %w", err)
+		}
+
+		// Double-entry ledger: record debit leg (debtor) and credit leg (creditor)
+		debitLeg := &db.TransactionLeg{
+			TransactionID:  transactionID,
+			AccountID:      debtorAccountID,
+			LegType:        "DEBIT",
+			Amount:         req.Amount,
+			Currency:       req.Currency,
+			Description:    fmt.Sprintf("Debit for UETR %s", uetr),
+			SequenceNumber: 1,
+		}
+		if err := s.transactionRepo.CreateLeg(ctx, tx, debitLeg); err != nil {
+			return fmt.Errorf("failed to create debit leg: %w", err)
+		}
+
+		creditLeg := &db.TransactionLeg{
+			TransactionID:  transactionID,
+			AccountID:      creditorAccountID,
+			LegType:        "CREDIT",
+			Amount:         req.Amount,
+			Currency:       req.Currency,
+			Description:    fmt.Sprintf("Credit for UETR %s", uetr),
+			SequenceNumber: 2,
+		}
+		if err := s.transactionRepo.CreateLeg(ctx, tx, creditLeg); err != nil {
+			return fmt.Errorf("failed to create credit leg: %w", err)
 		}
 
 		// Create outbox event for downstream processing
@@ -348,6 +371,42 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 				ProcessingTime: time.Since(start).Milliseconds(),
 			}, nil
 		}
+		if err == db.ErrAccountInactive || err == db.ErrCurrencyMismatch || err == db.ErrTransactionLimitExceeded || err == db.ErrShardsNotInitialized {
+			return &CreatePaymentResponse{
+				UETR:           req.UETR,
+				Status:         "REJECTED",
+				StatusReason:   err.Error(),
+				CreatedAt:      time.Now(),
+				ProcessingTime: time.Since(start).Milliseconds(),
+			}, nil
+		}
+
+		// UETR duplicate: if Redis idempotency failed open and two concurrent
+		// requests created the same UETR, the DB UNIQUE constraint catches it.
+		// Return the existing transaction instead of a 500 error.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "uetr") {
+			existing, lookupErr := s.transactionRepo.GetByUETR(ctx, uetr)
+			if lookupErr == nil {
+				s.logger.Warn("UETR duplicate detected, returning existing transaction",
+					zap.String("uetr", req.UETR),
+					zap.String("existingTxId", existing.ID.String()),
+				)
+				return &CreatePaymentResponse{
+					TransactionID:   existing.ID.String(),
+					UETR:            req.UETR,
+					Status:          existing.Status,
+					StatusReason:    existing.StatusReason,
+					SanctionsStatus: existing.SanctionsStatus,
+					CreatedAt:       existing.CreatedAt,
+					ProcessingTime:  time.Since(start).Milliseconds(),
+				}, nil
+			}
+			s.logger.Error("UETR duplicate detected but lookup failed",
+				zap.Error(lookupErr),
+				zap.String("uetr", req.UETR),
+			)
+		}
 
 		return nil, err
 	}
@@ -365,6 +424,27 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 		zap.String("status", finalStatus),
 		zap.Duration("processingTime", totalDuration),
 	)
+
+	// Async: check if debtor shards need rebalancing (non-blocking)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("shard rebalance panic", zap.Any("panic", r), zap.String("account_id", debtorAccountID.String()))
+			}
+		}()
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		needs, err := s.shardRepo.NeedsRebalance(bgCtx, debtorAccountID)
+		if err != nil {
+			s.logger.Warn("shard rebalance check failed", zap.Error(err))
+			return
+		}
+		if needs {
+			if err := s.shardRepo.Rebalance(bgCtx, debtorAccountID); err != nil {
+				s.logger.Warn("shard rebalance failed", zap.Error(err))
+			}
+		}
+	}()
 
 	return &CreatePaymentResponse{
 		TransactionID:   transactionID.String(),
@@ -505,7 +585,9 @@ func (s *PaymentService) GetPaymentStatus(ctx context.Context, uetrStr string) (
 	return response, nil
 }
 
-// SettlePayment settles a pending payment
+// SettlePayment settles a cleared payment by crediting the creditor's shards.
+// The debtor shard was already debited in CreatePayment; no further debtor
+// balance operations are needed. Legs were already created in CreatePayment.
 func (s *PaymentService) SettlePayment(ctx context.Context, uetrStr string) error {
 	ctx, span := observability.StartSpan(ctx, "PaymentService.SettlePayment")
 	defer span.End()
@@ -516,57 +598,20 @@ func (s *PaymentService) SettlePayment(ctx context.Context, uetrStr string) erro
 	}
 
 	return s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
-		// Get transaction
-		transaction, err := s.transactionRepo.GetByUETR(ctx, uetr)
+		// Read inside the TX to eliminate TOCTOU race
+		transaction, err := s.transactionRepo.GetByUETRTx(ctx, tx, uetr)
 		if err != nil {
 			return fmt.Errorf("failed to get transaction: %w", err)
 		}
 
-		// Validate status
-		if transaction.Status != "CLEARED" && transaction.Status != "PENDING" && transaction.Status != "SANCTIONED" {
-			return fmt.Errorf("transaction cannot be settled in status: %s", transaction.Status)
+		// Enforce state machine: only CLEARED → SETTLED is valid
+		if err := db.ValidateTransition(transaction.Status, "SETTLED"); err != nil {
+			return err
 		}
 
-		// Perform double-entry bookkeeping
-		// Debit the debtor
-		debtorBalanceAfter, err := s.accountRepo.DebitAccount(ctx, tx, transaction.DebtorAccountID, transaction.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to debit debtor: %w", err)
-		}
-
-		// Credit the creditor
-		creditorBalanceAfter, err := s.accountRepo.CreditAccount(ctx, tx, transaction.CreditorAccountID, transaction.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to credit creditor: %w", err)
-		}
-
-		// Create transaction legs
-		debitLeg := &db.TransactionLeg{
-			TransactionID:  transaction.ID,
-			AccountID:      transaction.DebtorAccountID,
-			LegType:        "DEBIT",
-			Amount:         transaction.Amount,
-			Currency:       transaction.Currency,
-			BalanceAfter:   debtorBalanceAfter,
-			Description:    fmt.Sprintf("Payment to %s", transaction.CreditorName),
-			SequenceNumber: 1,
-		}
-		if err := s.transactionRepo.CreateLeg(ctx, tx, debitLeg); err != nil {
-			return fmt.Errorf("failed to create debit leg: %w", err)
-		}
-
-		creditLeg := &db.TransactionLeg{
-			TransactionID:  transaction.ID,
-			AccountID:      transaction.CreditorAccountID,
-			LegType:        "CREDIT",
-			Amount:         transaction.Amount,
-			Currency:       transaction.Currency,
-			BalanceAfter:   creditorBalanceAfter,
-			Description:    fmt.Sprintf("Payment from %s", transaction.DebtorName),
-			SequenceNumber: 2,
-		}
-		if err := s.transactionRepo.CreateLeg(ctx, tx, creditLeg); err != nil {
-			return fmt.Errorf("failed to create credit leg: %w", err)
+		// Credit the creditor's shards (debtor was already debited in CreatePayment)
+		if err := s.shardRepo.CreditShard(ctx, tx, transaction.CreditorAccountID, transaction.Amount); err != nil {
+			return fmt.Errorf("failed to credit creditor shards: %w", err)
 		}
 
 		// Update transaction status
@@ -607,7 +652,7 @@ type ReturnPaymentResponse struct {
 }
 
 // ReturnPayment reverses a settled payment (pacs.004 flow).
-// It debits the creditor and credits the debtor, reversing the original legs.
+// It reverses shard operations: credits debtor shards, debits creditor shards.
 func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reasonCode string) (*ReturnPaymentResponse, error) {
 	ctx, span := observability.StartSpan(ctx, "PaymentService.ReturnPayment")
 	defer span.End()
@@ -620,35 +665,40 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 	var resp *ReturnPaymentResponse
 
 	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
-		transaction, err := s.transactionRepo.GetByUETR(ctx, uetr)
+		// Read inside the TX to eliminate TOCTOU race
+		transaction, err := s.transactionRepo.GetByUETRTx(ctx, tx, uetr)
 		if err != nil {
 			return fmt.Errorf("transaction not found: %w", err)
 		}
 
-		// Only SETTLED or CLEARED transactions can be returned
-		if transaction.Status != "SETTLED" && transaction.Status != "CLEARED" {
-			return fmt.Errorf("transaction cannot be returned in status: %s (must be SETTLED or CLEARED)", transaction.Status)
+		// Enforce state machine: SETTLED → RETURNED or CLEARED → RETURNED
+		if err := db.ValidateTransition(transaction.Status, "RETURNED"); err != nil {
+			return err
 		}
 
-		// Reverse the ledger: debit creditor, credit debtor
-		debtorBalanceAfter, err := s.accountRepo.CreditAccount(ctx, tx, transaction.DebtorAccountID, transaction.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to credit debtor (return): %w", err)
+		// Reverse shard operations:
+		// 1. Credit debtor shards (reverses the debit from CreatePayment)
+		if err := s.shardRepo.CreditShard(ctx, tx, transaction.DebtorAccountID, transaction.Amount); err != nil {
+			return fmt.Errorf("failed to reverse debtor shard debit: %w", err)
 		}
 
-		creditorBalanceAfter, err := s.accountRepo.DebitAccount(ctx, tx, transaction.CreditorAccountID, transaction.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to debit creditor (return): %w", err)
+		// 2. Debit creditor shards (reverses the credit from SettlePayment).
+		// Guard: a CLEARED payment was never settled, so the creditor shards were
+		// never credited from this payment. Debiting them would incorrectly drain
+		// pre-existing creditor balance. Only debit when status == SETTLED.
+		if transaction.Status == "SETTLED" {
+			if err := s.shardRepo.DebitShard(ctx, tx, transaction.CreditorAccountID, transaction.Amount); err != nil {
+				return fmt.Errorf("failed to reverse creditor shard credit: %w", err)
+			}
 		}
 
-		// Create return legs
+		// Create return legs (seq 3, 4 — genuinely new legs for the reversal)
 		debitLeg := &db.TransactionLeg{
 			TransactionID:  transaction.ID,
 			AccountID:      transaction.CreditorAccountID,
 			LegType:        "DEBIT",
 			Amount:         transaction.Amount,
 			Currency:       transaction.Currency,
-			BalanceAfter:   creditorBalanceAfter,
 			Description:    fmt.Sprintf("Return of payment to %s (%s)", transaction.DebtorName, reasonCode),
 			SequenceNumber: 3,
 		}
@@ -662,7 +712,6 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 			LegType:        "CREDIT",
 			Amount:         transaction.Amount,
 			Currency:       transaction.Currency,
-			BalanceAfter:   debtorBalanceAfter,
 			Description:    fmt.Sprintf("Return of payment from %s (%s)", transaction.CreditorName, reasonCode),
 			SequenceNumber: 4,
 		}
@@ -689,7 +738,7 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 		outboxEvent := &db.OutboxEvent{
 			AggregateType: "transaction",
 			AggregateID:   transaction.ID,
-			EventType:     "payment.returned",
+			EventType:     db.EventPaymentReturned,
 			Payload:       eventPayload,
 			Topic:         db.TopicPaymentsCompleted,
 			PartitionKey:  transaction.DebtorAccountID.String(),
@@ -714,6 +763,83 @@ func (s *PaymentService) ReturnPayment(ctx context.Context, uetrStr string, reas
 		return nil, err
 	}
 
+	return resp, nil
+}
+
+// CancelPaymentResponse represents a cancelled unsettled payment.
+type CancelPaymentResponse struct {
+	UETR        string    `json:"uetr"`
+	Status      string    `json:"status"`
+	ReasonCode  string    `json:"reasonCode"`
+	CancelledAt time.Time `json:"cancelledAt"`
+}
+
+// CancelPayment cancels an unsettled payment and releases the debtor shard debit.
+func (s *PaymentService) CancelPayment(ctx context.Context, uetrStr string, reasonCode string) (*CancelPaymentResponse, error) {
+	ctx, span := observability.StartSpan(ctx, "PaymentService.CancelPayment")
+	defer span.End()
+
+	uetr, err := uuid.Parse(uetrStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid UETR: %w", err)
+	}
+	if strings.TrimSpace(reasonCode) == "" {
+		reasonCode = "CUST"
+	}
+
+	var resp *CancelPaymentResponse
+	err = s.pool.RetryTx(ctx, 3, func(tx pgx.Tx) error {
+		transaction, err := s.transactionRepo.GetByUETRTx(ctx, tx, uetr)
+		if err != nil {
+			return fmt.Errorf("transaction not found: %w", err)
+		}
+		if err := db.ValidateTransition(transaction.Status, "CANCELLED"); err != nil {
+			return err
+		}
+
+		// CreatePayment debits debtor shards before the transaction is settled.
+		// Cancelling before settlement must put those funds back.
+		if err := s.shardRepo.CreditShard(ctx, tx, transaction.DebtorAccountID, transaction.Amount); err != nil {
+			return fmt.Errorf("failed to release debtor funds: %w", err)
+		}
+
+		if err := s.transactionRepo.UpdateStatus(ctx, tx, transaction.ID, "CANCELLED", reasonCode); err != nil {
+			return fmt.Errorf("failed to update transaction status: %w", err)
+		}
+
+		eventPayload, err := json.Marshal(map[string]interface{}{
+			"transactionId": transaction.ID.String(),
+			"uetr":          transaction.UETR.String(),
+			"status":        "CANCELLED",
+			"reasonCode":    reasonCode,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to marshal outbox event payload: %w", err)
+		}
+
+		outboxEvent := &db.OutboxEvent{
+			AggregateType: "transaction",
+			AggregateID:   transaction.ID,
+			EventType:     "payment.cancelled",
+			Payload:       eventPayload,
+			Topic:         db.TopicPaymentsCompleted,
+			PartitionKey:  transaction.DebtorAccountID.String(),
+		}
+		if err := s.outboxRepo.Insert(ctx, tx, outboxEvent); err != nil {
+			return err
+		}
+
+		resp = &CancelPaymentResponse{
+			UETR:        uetrStr,
+			Status:      "CANCELLED",
+			ReasonCode:  reasonCode,
+			CancelledAt: time.Now(),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return resp, nil
 }
 

@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   transpilePackages: ['@nexus/ui'],
-  
+
   // Enable experimental features
   experimental: {
     // Enable Server Actions

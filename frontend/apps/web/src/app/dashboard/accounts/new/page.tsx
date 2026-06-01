@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Create Account Page
- * 
+ *
  * Account creation form with:
  * - Account type selection
  * - IBAN/BIC generation or manual entry
@@ -16,17 +16,17 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
   CardTitle,
   CardDescription,
   Button,
   Input,
   Badge,
 } from '@nexus/ui';
-import { 
+import {
   ArrowLeft,
   Loader2,
   CheckCircle2,
@@ -46,7 +46,7 @@ import type { AccountType, Currency } from '@/lib/api/types';
 
 const createAccountFormSchema = z.object({
   name: z.string().min(1, 'Account name is required').max(140, 'Name must be less than 140 characters'),
-  type: z.enum(['CHECKING', 'SAVINGS', 'TREASURY', 'SETTLEMENT', 'NOSTRO', 'VOSTRO', 'INTERNAL'] as const),
+  type: z.enum(['CHECKING', 'SAVINGS', 'TREASURY', 'SETTLEMENT', 'NOSTRO', 'VOSTRO', 'INTERNAL', 'OPERATING'] as const),
   currency: z.enum(['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'CNY', 'INR'] as const),
   accountNumber: z.string().optional(),
   iban: z.string().optional(),
@@ -66,6 +66,12 @@ const ACCOUNT_TYPES: Array<{
   description: string;
   icon: React.ReactNode;
 }> = [
+  {
+    value: 'OPERATING',
+    label: 'Operating',
+    description: 'Customer operating account for daily payment activity',
+    icon: <Wallet className="h-6 w-6" />,
+  },
   {
     value: 'SETTLEMENT',
     label: 'Settlement',
@@ -111,8 +117,8 @@ function AccountTypeSelector({
           onClick={() => onChange(type.value)}
           className={`
             relative flex flex-col items-start p-4 rounded-lg border-2 transition-all text-left
-            ${value === type.value 
-              ? 'border-primary bg-primary/5' 
+            ${value === type.value
+              ? 'border-primary bg-primary/5'
               : 'border-border hover:border-primary/50'
             }
             ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
@@ -149,7 +155,7 @@ const CURRENCIES = [
 export default function CreateAccountPage() {
   const router = useRouter();
   const createAccount = useCreateAccount();
-  
+
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
@@ -375,8 +381,8 @@ export default function CreateAccountPage() {
           >
             Cancel
           </Button>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             disabled={isSubmitting || createAccount.isPending}
           >
             {(isSubmitting || createAccount.isPending) ? (

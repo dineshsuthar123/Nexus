@@ -3,13 +3,16 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/nexus-rtp/payment-service/internal/db"
 	"github.com/nexus-rtp/payment-service/internal/service"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -31,6 +34,7 @@ func RegisterRoutes(router *gin.Engine, paymentService *service.PaymentService, 
 			payments.GET("/:uetr/status", handler.GetPaymentStatus) // Alias for ISO 20022 style
 			payments.POST("/:uetr/settle", handler.SettlePayment)
 			payments.POST("/:uetr/return", handler.ReturnPayment)
+			payments.POST("/:uetr/cancel", handler.CancelPayment)
 		}
 
 		// ISO 20022 Message Endpoints
@@ -63,6 +67,62 @@ type ErrorResponse struct {
 	Details   string    `json:"details,omitempty"`
 	TraceID   string    `json:"traceId,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+// handleServiceError maps well-known service-layer errors to structured HTTP
+// responses with the correct status code. Unknown errors become 500.
+func (h *Handler) handleServiceError(c *gin.Context, operation string, err error) {
+	switch {
+	case errors.Is(err, db.ErrNotFound):
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Code:      "NOT_FOUND",
+			Message:   "Payment not found",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrInvalidTransition):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "INVALID_STATE_TRANSITION",
+			Message:   "Payment is not in a valid state for this operation",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrInsufficientFunds):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "INSUFFICIENT_FUNDS",
+			Message:   "Account has insufficient funds for this operation",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrAccountInactive):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "ACCOUNT_INACTIVE",
+			Message:   "One or more accounts are not active",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrCurrencyMismatch):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "CURRENCY_MISMATCH",
+			Message:   "Payment currency does not match account currency",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	case errors.Is(err, db.ErrTransactionLimitExceeded):
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Code:      "TRANSACTION_LIMIT_EXCEEDED",
+			Message:   "Amount exceeds the account transaction limit",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+	default:
+		h.logger.Error(operation+" failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:      "INTERNAL_ERROR",
+			Message:   "An unexpected error occurred. Please try again later.",
+			Timestamp: time.Now(),
+		})
+	}
 }
 
 // ListPayments handles GET /api/v1/payments
@@ -227,7 +287,15 @@ func (h *Handler) CreatePayment(c *gin.Context) {
 	// Build remittance info as JSON
 	var remittanceJSON json.RawMessage
 	if frontReq.RemittanceInfo != "" {
-		remittanceJSON = json.RawMessage(`{"unstructured":"` + frontReq.RemittanceInfo + `"}`)
+		remittanceJSON, err = json.Marshal(map[string]string{"unstructured": frontReq.RemittanceInfo})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Code:      "INVALID_REMITTANCE",
+				Message:   "Remittance information is invalid",
+				Timestamp: time.Now(),
+			})
+			return
+		}
 	}
 
 	// Build the internal ISO 20022 request
@@ -337,13 +405,8 @@ func (h *Handler) SettlePayment(c *gin.Context) {
 
 	err := h.paymentService.SettlePayment(c.Request.Context(), uetr)
 	if err != nil {
-		h.logger.Error("Failed to settle payment", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:      "SETTLEMENT_ERROR",
-			Message:   "Failed to settle payment",
-			Details:   err.Error(),
-			Timestamp: time.Now(),
-		})
+		h.logger.Error("Failed to settle payment", zap.String("uetr", uetr), zap.Error(err))
+		h.handleServiceError(c, "SettlePayment", err)
 		return
 	}
 
@@ -392,12 +455,7 @@ func (h *Handler) ReturnPayment(c *gin.Context) {
 	result, err := h.paymentService.ReturnPayment(c.Request.Context(), uetr, req.ReasonCode)
 	if err != nil {
 		h.logger.Error("Failed to return payment", zap.String("uetr", uetr), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:      "RETURN_FAILED",
-			Message:   "Failed to process payment return",
-			Details:   err.Error(),
-			Timestamp: time.Now(),
-		})
+		h.handleServiceError(c, "ReturnPayment", err)
 		return
 	}
 
@@ -409,6 +467,45 @@ type ReturnPaymentRequest struct {
 	ReasonCode   string `json:"reasonCode" binding:"required"`
 	ReasonText   string `json:"reasonText,omitempty"`
 	ReturnAmount string `json:"returnAmount,omitempty"` // Optional partial return
+}
+
+// CancelPayment handles POST /api/v1/payments/:uetr/cancel
+func (h *Handler) CancelPayment(c *gin.Context) {
+	uetr := c.Param("uetr")
+	if uetr == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:      "MISSING_UETR",
+			Message:   "UETR is required",
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
+	var req CancelPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:      "INVALID_REQUEST",
+			Message:   "Invalid request body",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
+	result, err := h.paymentService.CancelPayment(c.Request.Context(), uetr, req.ReasonCode)
+	if err != nil {
+		h.logger.Error("Failed to cancel payment", zap.String("uetr", uetr), zap.Error(err))
+		h.handleServiceError(c, "CancelPayment", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// CancelPaymentRequest represents a payment cancellation request.
+type CancelPaymentRequest struct {
+	ReasonCode string `json:"reasonCode,omitempty"`
+	ReasonText string `json:"reasonText,omitempty"`
 }
 
 // CreatePaymentFromPacs008 handles POST /api/v1/messages/pacs.008
