@@ -41,6 +41,8 @@ type mockTransactionStore struct {
 	updateFraudStatusFn   func(ctx context.Context, tx pgx.Tx, id uuid.UUID, status string, score decimal.Decimal) error
 	existsByUETRFn        func(ctx context.Context, uetr uuid.UUID) (bool, error)
 	listAllFn             func(ctx context.Context, limit, offset int) ([]db.Transaction, int, error)
+	// transactional exists check (used in tests when RetryTx wraps idempotency)
+	existsByUETRTxFn func(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error)
 
 	// Track calls for assertions
 	createCalls    int
@@ -109,6 +111,14 @@ func (m *mockTransactionStore) ExistsByUETR(ctx context.Context, uetr uuid.UUID)
 	if m.existsByUETRFn != nil {
 		return m.existsByUETRFn(ctx, uetr)
 	}
+	return false, nil
+}
+
+func (m *mockTransactionStore) ExistsByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error) {
+	if m.existsByUETRTxFn != nil {
+		return m.existsByUETRTxFn(ctx, tx, uetr)
+	}
+	// default to non-existence
 	return false, nil
 }
 
@@ -358,8 +368,8 @@ func TestCreatePayment_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if resp.Status != "PENDING" {
-		t.Errorf("expected status PENDING, got %s", resp.Status)
+	if resp.Status != "CLEARED" {
+		t.Errorf("expected status CLEARED, got %s", resp.Status)
 	}
 	if resp.UETR != req.UETR {
 		t.Errorf("expected UETR %s, got %s", req.UETR, resp.UETR)
@@ -380,7 +390,7 @@ func TestCreatePayment_Idempotency_DuplicateUETR(t *testing.T) {
 	uetr := uuid.New()
 
 	txnStore := &mockTransactionStore{
-		existsByUETRFn: func(ctx context.Context, u uuid.UUID) (bool, error) {
+		existsByUETRTxFn: func(ctx context.Context, tx pgx.Tx, u uuid.UUID) (bool, error) {
 			return true, nil
 		},
 		getByUETRFn: func(ctx context.Context, u uuid.UUID) (*db.Transaction, error) {

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,7 +27,19 @@ var (
 		Name: "sanctions_cache_misses_total",
 		Help: "Sanctions cache misses",
 	})
+	sanctionsCircuitOpenTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sanctions_circuit_open_total",
+		Help: "Sanctions requests skipped because the remote screening circuit is open",
+	})
 )
+
+const (
+	defaultHTTPTimeout             = 750 * time.Millisecond
+	defaultCircuitFailureThreshold = 2
+	defaultCircuitCooldown         = 30 * time.Second
+)
+
+var ErrCircuitOpen = errors.New("sanctions screening circuit open")
 
 // cacheEntry holds a cached sanctions screening result with expiry.
 type cacheEntry struct {
@@ -41,6 +54,12 @@ type Client struct {
 	logger     *zap.Logger
 	cache      sync.Map
 	cacheTTL   time.Duration
+
+	failureMu        sync.Mutex
+	failureCount     int
+	failureThreshold int
+	circuitOpenUntil time.Time
+	circuitCooldown  time.Duration
 }
 
 // NewClient creates a new sanctions screening client
@@ -48,15 +67,17 @@ func NewClient(baseURL string, logger *zap.Logger) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: defaultHTTPTimeout,
 			Transport: &http.Transport{
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 25,
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		logger:   logger,
-		cacheTTL: 5 * time.Minute,
+		logger:           logger,
+		cacheTTL:         5 * time.Minute,
+		failureThreshold: defaultCircuitFailureThreshold,
+		circuitCooldown:  defaultCircuitCooldown,
 	}
 }
 
@@ -145,6 +166,15 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 	}
 	sanctionsCacheMisses.Inc()
 
+	if openUntil, ok := c.isCircuitOpen(time.Now()); ok {
+		sanctionsCircuitOpenTotal.Inc()
+		c.logger.Warn("Sanctions circuit open, sending payment to review",
+			zap.String("name", req.Name),
+			zap.Time("openUntil", openUntil),
+		)
+		return nil, fmt.Errorf("%w until %s", ErrCircuitOpen, openUntil.Format(time.RFC3339))
+	}
+
 	// Build search URL (URL-encode user inputs to prevent parameter injection)
 	url := fmt.Sprintf("%s/search?name=%s&limit=5&minMatch=0.80", c.baseURL, neturl.QueryEscape(req.Name))
 	if req.Country != "" {
@@ -164,6 +194,7 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 	// Execute request
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
+		c.recordFailure()
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -171,18 +202,22 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.recordFailure()
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		c.recordFailure()
 		return nil, fmt.Errorf("sanctions API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
 	var searchResp SDNSearchResponse
 	if err := json.Unmarshal(body, &searchResp); err != nil {
+		c.recordFailure()
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
+	c.recordSuccess()
 
 	// Analyze results
 	result := c.analyzeResults(req.Name, searchResp.SDNs)
@@ -198,6 +233,53 @@ func (c *Client) Screen(ctx context.Context, req *ScreeningRequest) (*ScreeningR
 	)
 
 	return result, nil
+}
+
+func (c *Client) isCircuitOpen(now time.Time) (time.Time, bool) {
+	c.failureMu.Lock()
+	defer c.failureMu.Unlock()
+
+	if c.circuitOpenUntil.IsZero() {
+		return time.Time{}, false
+	}
+	if now.Before(c.circuitOpenUntil) {
+		return c.circuitOpenUntil, true
+	}
+
+	c.circuitOpenUntil = time.Time{}
+	c.failureCount = 0
+	return time.Time{}, false
+}
+
+func (c *Client) recordFailure() {
+	c.failureMu.Lock()
+	defer c.failureMu.Unlock()
+
+	threshold := c.failureThreshold
+	if threshold <= 0 {
+		threshold = defaultCircuitFailureThreshold
+	}
+	cooldown := c.circuitCooldown
+	if cooldown <= 0 {
+		cooldown = defaultCircuitCooldown
+	}
+
+	c.failureCount++
+	if c.failureCount >= threshold {
+		c.circuitOpenUntil = time.Now().Add(cooldown)
+		c.logger.Warn("Sanctions circuit opened",
+			zap.Int("failureCount", c.failureCount),
+			zap.Duration("cooldown", cooldown),
+		)
+	}
+}
+
+func (c *Client) recordSuccess() {
+	c.failureMu.Lock()
+	defer c.failureMu.Unlock()
+
+	c.failureCount = 0
+	c.circuitOpenUntil = time.Time{}
 }
 
 // ScreenBatch performs batch sanctions screening

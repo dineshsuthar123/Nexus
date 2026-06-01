@@ -61,6 +61,7 @@ const ACCOUNT_TYPES: Record<AccountType, { label: string; color: 'default' | 'se
   NOSTRO: { label: 'Nostro', color: 'secondary' },
   VOSTRO: { label: 'Vostro', color: 'warning' },
   INTERNAL: { label: 'Internal', color: 'success' },
+  OPERATING: { label: 'Operating', color: 'default' },
 };
 
 const ACCOUNT_STATUSES: Record<AccountStatus, { label: string; color: 'default' | 'success' | 'warning' | 'danger' }> = {
@@ -85,6 +86,7 @@ function AccountTypeBadge({ type }: { type: AccountType }) {
     VOSTRO: <TrendingDown className="h-3 w-3 mr-1" />,
     SETTLEMENT: <Wallet className="h-3 w-3 mr-1" />,
     INTERNAL: <Building2 className="h-3 w-3 mr-1" />,
+    OPERATING: <Wallet className="h-3 w-3 mr-1" />,
   };
   return (
     <Badge variant={config.color} className="flex items-center">

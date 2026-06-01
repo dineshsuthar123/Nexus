@@ -14,6 +14,9 @@ export type Currency = 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CHF' | 'CAD' | 'AUD' | '
 export type PaymentStatus =
   | 'PENDING'
   | 'PROCESSING'
+  | 'SANCTIONED'
+  | 'FRAUD_REVIEW'
+  | 'CLEARED'
   | 'COMPLETED'
   | 'SETTLED'
   | 'FAILED'
@@ -23,7 +26,7 @@ export type PaymentStatus =
 
 export type AccountStatus = 'ACTIVE' | 'INACTIVE' | 'FROZEN' | 'CLOSED' | 'SUSPENDED';
 
-export type AccountType = 'CHECKING' | 'SAVINGS' | 'TREASURY' | 'SETTLEMENT' | 'NOSTRO' | 'VOSTRO' | 'INTERNAL';
+export type AccountType = 'CHECKING' | 'SAVINGS' | 'TREASURY' | 'SETTLEMENT' | 'NOSTRO' | 'VOSTRO' | 'INTERNAL' | 'OPERATING';
 
 export type KYCStatus = 'PENDING' | 'VERIFIED' | 'REJECTED' | 'EXPIRED';
 
@@ -43,6 +46,9 @@ export interface ApiResponse<T> {
   data: T;
   success?: boolean;
   status?: number;
+  statusText?: string;
+  headers?: unknown;
+  config?: unknown;
   message?: string;
   timestamp?: string;
 }
@@ -57,6 +63,11 @@ export interface ApiError {
 
 export interface PaginatedResponse<T> {
   data: T[];
+  items: T[];
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
   pagination: {
     page: number;
     pageSize: number;
@@ -78,11 +89,19 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  tokenType: 'Bearer';
   user: User;
+  tokens?: {
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    tokenType: 'Bearer';
+  };
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  tokenType?: 'Bearer';
+  mfaRequired?: boolean;
+  mfaSessionId?: string;
   requiresMfa?: boolean;
   mfaToken?: string;
 }
@@ -90,10 +109,12 @@ export interface LoginResponse {
 export interface RegisterRequest {
   email: string;
   password: string;
-  firstName: string;
-  lastName: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   organizationName?: string;
-  acceptTerms: boolean;
+  organization?: string;
+  acceptTerms?: boolean;
 }
 
 export interface RegisterResponse {
@@ -139,8 +160,9 @@ export interface User {
   firstName: string;
   lastName: string;
   role: 'ADMIN' | 'OPERATOR' | 'VIEWER' | 'API_USER';
-  organizationId: string;
-  organizationName: string;
+  organizationId?: string;
+  organizationName?: string;
+  organization?: string;
   avatar?: string;
   mfaEnabled: boolean;
   emailVerified: boolean;
@@ -158,7 +180,7 @@ export type PaymentType = 'INSTANT' | 'STANDARD' | 'SCHEDULED';
 export interface Payment {
   id: string;
   uetr: string; // Unique End-to-End Transaction Reference (UUID)
-  amount: number;
+  amount: number | MoneyAmount | string;
   currency: Currency;
   status: PaymentStatus;
   type?: PaymentType;
@@ -168,9 +190,11 @@ export interface Payment {
   toAccountName?: string;
   debtorName?: string;
   debtorAccount?: string;
+  debtorAccountId?: string;
   debtorBic?: string;
   creditorName?: string;
   creditorAccount?: string;
+  creditorAccountId?: string;
   creditorBic?: string;
   remittanceInfo?: string;
   endToEndId?: string;
@@ -186,8 +210,8 @@ export interface Payment {
 }
 
 export interface CreatePaymentRequest {
-  amount: number;
-  currency: Currency;
+  amount: number | MoneyAmount;
+  currency?: Currency;
   debtorName: string;
   debtorAccount: string;
   debtorBic: string;
@@ -280,7 +304,10 @@ export interface CreateAccountRequest {
   name: string;
   type: Account['type'];
   currency: Currency;
-  customerId: string;
+  customerId?: string;
+  accountNumber?: string;
+  iban?: string;
+  bic?: string;
   initialBalance?: number;
   metadata?: Record<string, string>;
 }
@@ -295,6 +322,7 @@ export interface AccountBalance {
   currency: Currency;
   balance: number;
   availableBalance: number;
+  available?: number;
   pendingBalance: number;
   asOf: string;
 }
@@ -328,6 +356,7 @@ export interface ReconciliationCycle {
   endTime?: string;
   progress?: number;
   totalTransactions: number;
+  transactionsProcessed?: number;
   matchedTransactions: number;
   matchedCount?: number;
   unmatchedCount?: number;
@@ -593,7 +622,7 @@ export interface AlertPayload {
 // =============================================================================
 
 export interface PaymentFilters {
-  status?: PaymentStatus[];
+  status?: PaymentStatus | PaymentStatus[];
   type?: PaymentType[];
   currency?: Currency[];
   fromDate?: string;
@@ -606,8 +635,8 @@ export interface PaymentFilters {
 }
 
 export interface AccountFilters {
-  status?: AccountStatus[];
-  type?: Account['type'][];
+  status?: AccountStatus | AccountStatus[];
+  type?: Account['type'] | Account['type'][];
   currency?: Currency[];
   search?: string;
 }

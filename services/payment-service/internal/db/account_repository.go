@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,15 +25,15 @@ import (
 //   - Account.AvailableBalance is similarly stale and is provided only for
 //     display purposes (e.g., account management UIs).
 type Account struct {
-	ID               uuid.UUID       `json:"id"`
-	CustomerID       uuid.UUID       `json:"customerId"`
-	AccountNumber    string          `json:"accountNumber"`
-	AccountType      string          `json:"accountType"`
-	Currency         string          `json:"currency"`
+	ID            uuid.UUID `json:"id"`
+	CustomerID    uuid.UUID `json:"customerId"`
+	AccountNumber string    `json:"accountNumber"`
+	AccountType   string    `json:"accountType"`
+	Currency      string    `json:"currency"`
 	// Balance is a stale denormalised cache of SUM(account_shard.balance).
 	// Updated every ~5 min by the reconciliation goroutine. Do NOT use for
 	// payment authorisation — use ShardRepository methods instead.
-	Balance          decimal.Decimal `json:"balance"`
+	Balance decimal.Decimal `json:"balance"`
 	// AvailableBalance is maintained for display only. Not authoritative.
 	AvailableBalance decimal.Decimal `json:"availableBalance"`
 	PendingCredits   decimal.Decimal `json:"pendingCredits"`
@@ -121,10 +122,17 @@ func (r *AccountRepository) GetByAccountNumber(ctx context.Context, accountNumbe
 
 // GetIDByIBAN retrieves an account ID by IBAN
 func (r *AccountRepository) GetIDByIBAN(ctx context.Context, iban string) (uuid.UUID, error) {
-	query := `SELECT id FROM account WHERE account_number = $1 AND status = 'ACTIVE' LIMIT 1`
+	normalized := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(iban), " ", ""))
+	query := `
+		SELECT id
+		FROM account
+		WHERE status = 'ACTIVE'
+		  AND (UPPER(REPLACE(iban, ' ', '')) = $1 OR account_number = $1)
+		LIMIT 1
+	`
 
 	var id uuid.UUID
-	err := r.pool.QueryRow(ctx, query, iban).Scan(&id)
+	err := r.pool.QueryRow(ctx, query, normalized).Scan(&id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return uuid.Nil, ErrNotFound

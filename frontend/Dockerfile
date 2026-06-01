@@ -17,27 +17,19 @@ COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile
 
 # Stage 2: Build UI library
-FROM node:20-alpine AS ui-build
-RUN corepack enable && corepack prepare pnpm@9.1.0 --activate
+FROM deps AS ui-build
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
 COPY packages/ui ./packages/ui
-COPY pnpm-workspace.yaml package.json ./
 
-RUN cd packages/ui && npx tsup
+RUN pnpm --filter @nexus/ui build
 
 # Stage 3: Build Next.js app
-FROM node:20-alpine AS builder
-RUN corepack enable && corepack prepare pnpm@9.1.0 --activate
+FROM deps AS builder
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=ui-build /app/packages/ui ./packages/ui
 COPY apps/web ./apps/web
-COPY pnpm-workspace.yaml package.json ./
 
 # Build args for API URLs
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -50,7 +42,7 @@ ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_MOCK_MODE=$NEXT_PUBLIC_MOCK_MODE
 ENV NEXT_PUBLIC_ENABLE_REALTIME=$NEXT_PUBLIC_ENABLE_REALTIME
 
-RUN cd apps/web && npx next build
+RUN pnpm --filter @nexus/web build
 
 # Stage 4: Production runner
 FROM node:20-alpine AS runner

@@ -21,6 +21,8 @@ type TransactionStore interface {
 	UpdateSanctionsStatus(ctx context.Context, tx pgx.Tx, id uuid.UUID, status string, score decimal.Decimal) error
 	UpdateFraudStatus(ctx context.Context, tx pgx.Tx, id uuid.UUID, status string, score decimal.Decimal) error
 	ExistsByUETR(ctx context.Context, uetr uuid.UUID) (bool, error)
+	// ExistsByUETRTx checks for existence of a transaction by UETR within a transaction.
+	ExistsByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error)
 	ListAll(ctx context.Context, limit, offset int) ([]db.Transaction, int, error)
 }
 

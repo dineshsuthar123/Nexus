@@ -245,6 +245,17 @@ func (r *TransactionRepository) GetByUETRTx(ctx context.Context, tx pgx.Tx, uetr
 	return &t, nil
 }
 
+// ExistsByUETRTx checks if a transaction with the given UETR exists using the provided transaction.
+func (r *TransactionRepository) ExistsByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM transaction WHERE uetr = $1)`
+	var exists bool
+	err := tx.QueryRow(ctx, query, uetr).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check transaction existence: %w", err)
+	}
+	return exists, nil
+}
+
 // GetByID retrieves a transaction by ID
 func (r *TransactionRepository) GetByID(ctx context.Context, id uuid.UUID) (*Transaction, error) {
 	query := `
@@ -295,9 +306,9 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id uuid.UUID) (*Tra
 // validTransitions defines the allowed state machine transitions for transaction status.
 var validTransitions = map[string][]string{
 	"PENDING":      {"SANCTIONED", "CLEARED", "REJECTED", "CANCELLED"},
-	"SANCTIONED":   {"FRAUD_REVIEW", "CLEARED", "REJECTED"},
-	"FRAUD_REVIEW": {"CLEARED", "REJECTED"},
-	"CLEARED":      {"SETTLED", "RETURNED"},
+	"SANCTIONED":   {"FRAUD_REVIEW", "CLEARED", "REJECTED", "CANCELLED"},
+	"FRAUD_REVIEW": {"CLEARED", "REJECTED", "CANCELLED"},
+	"CLEARED":      {"SETTLED", "RETURNED", "CANCELLED"},
 	"SETTLED":      {"RETURNED"},
 	// Terminal states: REJECTED, RETURNED, CANCELLED — no outgoing transitions
 }

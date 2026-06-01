@@ -141,7 +141,8 @@ func isRetryableError(err error) bool {
 	errStr := err.Error()
 	return contains(errStr, "40001") || // Serialization failure
 		contains(errStr, "retry transaction") ||
-		contains(errStr, "TransactionRetryWithProtoRefreshError")
+		contains(errStr, "TransactionRetryWithProtoRefreshError") ||
+		contains(errStr, "remote wall time")
 }
 
 func contains(s, substr string) bool {

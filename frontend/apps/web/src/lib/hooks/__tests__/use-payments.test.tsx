@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Payment Hooks Tests
- * 
+ *
  * Tests for payment-related React Query hooks.
  */
 
@@ -9,9 +9,9 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
 
-import { 
-  usePayments, 
-  usePayment, 
+import {
+  usePayments,
+  usePayment,
   useCreatePayment,
   useSettlePayment,
   useReturnPayment,
@@ -41,10 +41,12 @@ vi.mock('@/lib/api', () => ({
 }));
 
 const mockPayment = {
+  id: 'pay_test_001',
   uetr: 'test-payment-uetr-12345678',
   status: 'PENDING',
   type: 'INSTANT',
-  amount: { value: 1500.50, currency: 'EUR' },
+  amount: 1500.50,
+  currency: 'EUR',
   debtorName: 'Test Debtor',
   debtorAccount: 'DE89370400440532013000',
   debtorBic: 'COBADEFFXXX',
@@ -57,11 +59,16 @@ const mockPayment = {
 };
 
 const mockPaginatedPayments = {
+  data: [mockPayment],
   items: [mockPayment],
-  total: 1,
-  page: 1,
-  pageSize: 20,
-  totalPages: 1,
+  pagination: {
+    page: 1,
+    pageSize: 20,
+    totalItems: 1,
+    totalPages: 1,
+    hasNext: false,
+    hasPrevious: false,
+  },
 };
 
 function createTestWrapper() {
@@ -111,7 +118,7 @@ describe('Payment Hooks', () => {
       });
 
       expect(result.current.data).toEqual(mockPaginatedPayments);
-      expect(result.current.data?.items).toHaveLength(1);
+      expect(result.current.data?.data).toHaveLength(1);
     });
 
     it('should apply filters correctly', async () => {
@@ -123,7 +130,7 @@ describe('Payment Hooks', () => {
         config: {} as any,
       });
 
-      const filters = { status: 'PENDING' as const, search: 'test' };
+      const filters = { status: ['PENDING' as const], search: 'test' };
       const pagination = { page: 1, pageSize: 10 };
 
       const { result } = renderHook(() => usePayments(filters, pagination), {
@@ -191,7 +198,7 @@ describe('Payment Hooks', () => {
   describe('useCreatePayment', () => {
     it('should create payment successfully', async () => {
       const newPayment = { ...mockPayment, uetr: 'new-payment-uetr' };
-      
+
       vi.mocked(api.postIdempotent).mockResolvedValueOnce({
         data: newPayment,
         status: 201,
@@ -205,7 +212,8 @@ describe('Payment Hooks', () => {
       });
 
       const createData = {
-        amount: { value: 1500.50, currency: 'EUR' },
+        amount: 1500.50,
+        currency: 'EUR' as const,
         debtorName: 'Test Debtor',
         debtorAccount: 'DE89370400440532013000',
         debtorBic: 'COBADEFFXXX',
@@ -231,6 +239,7 @@ describe('Payment Hooks', () => {
       await expect(
         result.current.mutateAsync({
           amount: { value: 100, currency: 'EUR' },
+          currency: 'EUR',
           debtorName: 'Test',
           debtorAccount: 'invalid-iban',
           debtorBic: 'COBADEFFXXX',
@@ -250,8 +259,8 @@ describe('Payment Hooks', () => {
   describe('useSettlePayment', () => {
     it('should settle payment successfully', async () => {
       const settledPayment = { ...mockPayment, status: 'SETTLED' };
-      
-      vi.mocked(api.put).mockResolvedValueOnce({
+
+      vi.mocked(api.post).mockResolvedValueOnce({
         data: settledPayment,
         status: 200,
         statusText: 'OK',
@@ -266,7 +275,7 @@ describe('Payment Hooks', () => {
       const updated = await result.current.mutateAsync('test-payment-uetr-12345678');
 
       expect(updated.status).toBe('SETTLED');
-      expect(api.put).toHaveBeenCalledWith(
+      expect(api.post).toHaveBeenCalledWith(
         '/api/v1/payments/test-payment-uetr-12345678/settle',
         {}
       );
@@ -280,8 +289,8 @@ describe('Payment Hooks', () => {
   describe('useReturnPayment', () => {
     it('should return payment with reason', async () => {
       const returnedPayment = { ...mockPayment, status: 'RETURNED' };
-      
-      vi.mocked(api.put).mockResolvedValueOnce({
+
+      vi.mocked(api.post).mockResolvedValueOnce({
         data: returnedPayment,
         status: 200,
         statusText: 'OK',
@@ -299,9 +308,12 @@ describe('Payment Hooks', () => {
       });
 
       expect(updated.status).toBe('RETURNED');
-      expect(api.put).toHaveBeenCalledWith(
+      expect(api.post).toHaveBeenCalledWith(
         '/api/v1/payments/test-payment-uetr-12345678/return',
-        { reason: 'Customer requested return' }
+        {
+          reasonCode: 'Customer requested return',
+          reasonText: 'Customer requested return',
+        }
       );
     });
   });
@@ -319,9 +331,9 @@ describe('Payment Hooks', () => {
     });
 
     it('should include filters and pagination in list key', () => {
-      const filters = { status: 'PENDING' as const };
+      const filters = { status: ['PENDING' as const] };
       const pagination = { page: 1, pageSize: 20 };
-      
+
       expect(paymentKeys.list(filters, pagination)).toEqual([
         'payments',
         'list',

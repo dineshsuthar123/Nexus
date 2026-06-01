@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Login Form Component Tests
- * 
+ *
  * Tests for the login form component with validation and submission.
  */
 
@@ -47,7 +47,7 @@ function MockLoginForm() {
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
-    
+
     try {
       await signIn('credentials', {
         email,
@@ -73,7 +73,7 @@ function MockLoginForm() {
         />
         <span id="email-error" role="alert" aria-live="polite" />
       </div>
-      
+
       <div>
         <label htmlFor="password">Password</label>
         <input
@@ -86,7 +86,7 @@ function MockLoginForm() {
         />
         <span id="password-error" role="alert" aria-live="polite" />
       </div>
-      
+
       <div>
         <input
           id="remember"
@@ -96,9 +96,9 @@ function MockLoginForm() {
         />
         <label htmlFor="remember">Remember me</label>
       </div>
-      
+
       <button type="submit">Sign In</button>
-      
+
       <a href="/auth/forgot-password">Forgot password?</a>
     </form>
   );
@@ -187,7 +187,7 @@ describe('LoginForm', () => {
     it('should call signIn on form submission', async () => {
       vi.mocked(signIn).mockResolvedValueOnce({
         ok: true,
-        error: undefined,
+        error: null,
         status: 200,
         url: '/dashboard',
       });
@@ -210,7 +210,7 @@ describe('LoginForm', () => {
     it('should submit form on Enter key in password field', async () => {
       vi.mocked(signIn).mockResolvedValueOnce({
         ok: true,
-        error: undefined,
+        error: null,
         status: 200,
         url: '/dashboard',
       });
@@ -271,10 +271,10 @@ describe('LoginForm', () => {
 
   describe('Loading State', () => {
     it('should disable submit button during submission', async () => {
-      vi.mocked(signIn).mockImplementation(() => 
+      vi.mocked(signIn).mockImplementation(() =>
         new Promise(resolve => setTimeout(() => resolve({
           ok: true,
-          error: undefined,
+          error: null,
           status: 200,
           url: '/dashboard',
         }), 100))
@@ -283,10 +283,10 @@ describe('LoginForm', () => {
       render(<MockLoginForm />, { wrapper: createTestWrapper() });
 
       const submitButton = screen.getByRole('button', { name: /sign in/i });
-      
+
       await user.type(screen.getByLabelText(/email/i), 'test@example.com');
       await user.type(screen.getByLabelText(/password/i), MOCK_PASSWORD);
-      
+
       // Button should be enabled before submission
       expect(submitButton).not.toBeDisabled();
 

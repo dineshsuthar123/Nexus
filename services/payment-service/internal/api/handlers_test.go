@@ -31,6 +31,7 @@ func (m *mockTxManager) RetryTx(ctx context.Context, maxRetries int, fn func(tx 
 
 type mockTransactionStore struct {
 	existsFn     func(ctx context.Context, uetr uuid.UUID) (bool, error)
+	existsTxFn   func(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error)
 	createFn     func(ctx context.Context, tx pgx.Tx, txn *db.Transaction) error
 	getByUETRFn  func(ctx context.Context, uetr uuid.UUID) (*db.Transaction, error)
 	getByIDFn    func(ctx context.Context, id uuid.UUID) (*db.Transaction, error)
@@ -44,6 +45,13 @@ type mockTransactionStore struct {
 func (m *mockTransactionStore) ExistsByUETR(ctx context.Context, uetr uuid.UUID) (bool, error) {
 	if m.existsFn != nil {
 		return m.existsFn(ctx, uetr)
+	}
+	return false, nil
+}
+
+func (m *mockTransactionStore) ExistsByUETRTx(ctx context.Context, tx pgx.Tx, uetr uuid.UUID) (bool, error) {
+	if m.existsTxFn != nil {
+		return m.existsTxFn(ctx, tx, uetr)
 	}
 	return false, nil
 }

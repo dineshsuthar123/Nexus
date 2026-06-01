@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -33,6 +34,7 @@ func RegisterRoutes(router *gin.Engine, paymentService *service.PaymentService, 
 			payments.GET("/:uetr/status", handler.GetPaymentStatus) // Alias for ISO 20022 style
 			payments.POST("/:uetr/settle", handler.SettlePayment)
 			payments.POST("/:uetr/return", handler.ReturnPayment)
+			payments.POST("/:uetr/cancel", handler.CancelPayment)
 		}
 
 		// ISO 20022 Message Endpoints
@@ -285,7 +287,15 @@ func (h *Handler) CreatePayment(c *gin.Context) {
 	// Build remittance info as JSON
 	var remittanceJSON json.RawMessage
 	if frontReq.RemittanceInfo != "" {
-		remittanceJSON = json.RawMessage(`{"unstructured":"` + frontReq.RemittanceInfo + `"}`)
+		remittanceJSON, err = json.Marshal(map[string]string{"unstructured": frontReq.RemittanceInfo})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Code:      "INVALID_REMITTANCE",
+				Message:   "Remittance information is invalid",
+				Timestamp: time.Now(),
+			})
+			return
+		}
 	}
 
 	// Build the internal ISO 20022 request
@@ -457,6 +467,45 @@ type ReturnPaymentRequest struct {
 	ReasonCode   string `json:"reasonCode" binding:"required"`
 	ReasonText   string `json:"reasonText,omitempty"`
 	ReturnAmount string `json:"returnAmount,omitempty"` // Optional partial return
+}
+
+// CancelPayment handles POST /api/v1/payments/:uetr/cancel
+func (h *Handler) CancelPayment(c *gin.Context) {
+	uetr := c.Param("uetr")
+	if uetr == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:      "MISSING_UETR",
+			Message:   "UETR is required",
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
+	var req CancelPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:      "INVALID_REQUEST",
+			Message:   "Invalid request body",
+			Details:   err.Error(),
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
+	result, err := h.paymentService.CancelPayment(c.Request.Context(), uetr, req.ReasonCode)
+	if err != nil {
+		h.logger.Error("Failed to cancel payment", zap.String("uetr", uetr), zap.Error(err))
+		h.handleServiceError(c, "CancelPayment", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// CancelPaymentRequest represents a payment cancellation request.
+type CancelPaymentRequest struct {
+	ReasonCode string `json:"reasonCode,omitempty"`
+	ReasonText string `json:"reasonText,omitempty"`
 }
 
 // CreatePaymentFromPacs008 handles POST /api/v1/messages/pacs.008
