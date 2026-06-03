@@ -82,16 +82,21 @@ func main() {
 	router.Use(observability.GinMiddleware())
 
 	// Initialize Redis client for idempotency middleware
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     cfg.Redis.URL,
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
-	})
-	if pingErr := rdb.Ping(context.Background()).Err(); pingErr != nil {
-		logger.Warn("Redis not available — idempotency disabled", zap.Error(pingErr))
-		rdb = nil
+	var rdb *redis.Client
+	redisOpts, redisOptErr := cache.BuildRedisOptions(cfg.Redis.URL, cfg.Redis.Password, cfg.Redis.DB)
+	if redisOptErr != nil {
+		logger.Warn("Failed to parse Redis config, idempotency disabled", zap.Error(redisOptErr))
 	} else {
-		logger.Info("Connected to Redis for idempotency")
+		rdb = redis.NewClient(redisOpts)
+	}
+
+	if rdb != nil {
+		if pingErr := rdb.Ping(context.Background()).Err(); pingErr != nil {
+			logger.Warn("Redis not available — idempotency disabled", zap.Error(pingErr))
+			rdb = nil
+		} else {
+			logger.Info("Connected to Redis for idempotency")
+		}
 	}
 	if rdb != nil {
 		defer rdb.Close()

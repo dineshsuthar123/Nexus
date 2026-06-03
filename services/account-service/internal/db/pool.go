@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -106,7 +107,14 @@ func (p *Pool) RetryTx(ctx context.Context, maxRetries int, fn func(tx pgx.Tx) e
 func isCRDBRetryError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return pgErr.Code == "40001" // serialization_failure
+		if pgErr.Code == "40001" { // serialization_failure
+			return true
+		}
+	}
+
+	// CockroachDB can return transient errors related to clock skew / wall time
+	if err != nil && strings.Contains(err.Error(), "remote wall time") {
+		return true
 	}
 	return false
 }
