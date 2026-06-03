@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -17,11 +18,11 @@ type Client struct {
 
 // NewRedisClient creates a new Redis client
 func NewRedisClient(url, password string, db int) (*Client, error) {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     url,
-		Password: password,
-		DB:       db,
-	})
+	opts, err := BuildRedisOptions(url, password, db)
+	if err != nil {
+		return nil, err
+	}
+	rdb := redis.NewClient(opts)
 
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -34,18 +35,47 @@ func NewRedisClient(url, password string, db int) (*Client, error) {
 	return &Client{rdb: rdb}, nil
 }
 
+// BuildRedisOptions accepts either host:port or a full redis:// URL.
+func BuildRedisOptions(url, password string, db int) (*redis.Options, error) {
+	if strings.HasPrefix(url, "redis://") {
+		opts, err := redis.ParseURL(url)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse redis URL: %w", err)
+		}
+		if db != 0 {
+			opts.DB = db
+		}
+		return opts, nil
+	}
+
+	return &redis.Options{
+		Addr:     url,
+		Password: password,
+		DB:       db,
+	}, nil
+}
+
 // Close closes the Redis connection
 func (c *Client) Close() error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
 	return c.rdb.Close()
 }
 
 // Get retrieves a value from cache
 func (c *Client) Get(ctx context.Context, key string) (string, error) {
+	if c == nil || c.rdb == nil {
+		return "", redis.Nil
+	}
 	return c.rdb.Get(ctx, key).Result()
 }
 
 // Set sets a value in cache with expiration
 func (c *Client) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
 	return c.rdb.Set(ctx, key, value, expiration).Err()
 }
 
@@ -55,11 +85,17 @@ func (c *Client) SetJSON(ctx context.Context, key string, value interface{}, exp
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
+	if c == nil || c.rdb == nil {
+		return nil
+	}
 	return c.rdb.Set(ctx, key, data, expiration).Err()
 }
 
 // GetJSON retrieves and unmarshals a JSON value from cache
 func (c *Client) GetJSON(ctx context.Context, key string, dest interface{}) error {
+	if c == nil || c.rdb == nil {
+		return redis.Nil
+	}
 	data, err := c.rdb.Get(ctx, key).Result()
 	if err != nil {
 		return err
@@ -69,47 +105,74 @@ func (c *Client) GetJSON(ctx context.Context, key string, dest interface{}) erro
 
 // Delete removes a key from cache
 func (c *Client) Delete(ctx context.Context, keys ...string) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
 	return c.rdb.Del(ctx, keys...).Err()
 }
 
 // Exists checks if a key exists
 func (c *Client) Exists(ctx context.Context, key string) (bool, error) {
+	if c == nil || c.rdb == nil {
+		return false, nil
+	}
 	n, err := c.rdb.Exists(ctx, key).Result()
 	return n > 0, err
 }
 
 // SetNX sets a value only if the key doesn't exist (for locks)
 func (c *Client) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
+	if c == nil || c.rdb == nil {
+		return false, nil
+	}
 	return c.rdb.SetNX(ctx, key, value, expiration).Result()
 }
 
 // Incr increments a counter
 func (c *Client) Incr(ctx context.Context, key string) (int64, error) {
+	if c == nil || c.rdb == nil {
+		return 0, nil
+	}
 	return c.rdb.Incr(ctx, key).Result()
 }
 
 // IncrBy increments a counter by a value
 func (c *Client) IncrBy(ctx context.Context, key string, value int64) (int64, error) {
+	if c == nil || c.rdb == nil {
+		return 0, nil
+	}
 	return c.rdb.IncrBy(ctx, key, value).Result()
 }
 
 // Expire sets expiration on a key
 func (c *Client) Expire(ctx context.Context, key string, expiration time.Duration) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
 	return c.rdb.Expire(ctx, key, expiration).Err()
 }
 
 // HSet sets hash fields
 func (c *Client) HSet(ctx context.Context, key string, values ...interface{}) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
 	return c.rdb.HSet(ctx, key, values...).Err()
 }
 
 // HGet gets a hash field
 func (c *Client) HGet(ctx context.Context, key, field string) (string, error) {
+	if c == nil || c.rdb == nil {
+		return "", redis.Nil
+	}
 	return c.rdb.HGet(ctx, key, field).Result()
 }
 
 // HGetAll gets all hash fields
 func (c *Client) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	if c == nil || c.rdb == nil {
+		return map[string]string{}, nil
+	}
 	return c.rdb.HGetAll(ctx, key).Result()
 }
 

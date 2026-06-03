@@ -4,6 +4,8 @@ package observability
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -106,11 +108,20 @@ func GinLogger(logger *zap.Logger) gin.HandlerFunc {
 // InitTracer initializes OpenTelemetry tracing with OTLP HTTP exporter.
 // otlpEndpoint should be host:port (e.g. "jaeger:4318").
 func InitTracer(otlpEndpoint, serviceName string) (func(context.Context) error, error) {
+	// Normalize endpoint input: support full URL (http(s)://host:port/path)
+	endpoint, urlPath, insecure := parseOTLPEndpoint(otlpEndpoint)
+
+	// Build OTLP HTTP exporter options
+	opts := []otlptracehttp.Option{otlptracehttp.WithEndpoint(endpoint)}
+	if insecure {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+	if urlPath != "" && urlPath != "/" {
+		opts = append(opts, otlptracehttp.WithURLPath(urlPath))
+	}
+
 	// Create OTLP HTTP exporter (Jaeger natively accepts OTLP on port 4318)
-	exp, err := otlptracehttp.New(context.Background(),
-		otlptracehttp.WithEndpoint(otlpEndpoint),
-		otlptracehttp.WithInsecure(),
-	)
+	exp, err := otlptracehttp.New(context.Background(), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +145,32 @@ func InitTracer(otlpEndpoint, serviceName string) (func(context.Context) error, 
 	))
 
 	return tp.Shutdown, nil
+}
+
+// parseOTLPEndpoint accepts either a host:port (e.g. "jaeger:4318") or a full
+// URL (e.g. "http://localhost:4318/v1/traces") and returns the normalized
+// endpoint (host:port), the URL path (if any) and whether the connection should
+// be insecure (true for http scheme or unknown inputs).
+func parseOTLPEndpoint(raw string) (endpoint, urlPath string, insecure bool) {
+	if raw == "" {
+		return "", "", true
+	}
+
+	// Fast path: if it looks like host:port, return as-is
+	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+		return raw, "", true
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		// If parse fails, fall back to original string and mark insecure
+		return raw, "", true
+	}
+
+	host := u.Host
+	path := u.Path
+	insecure = (u.Scheme == "http")
+	return host, path, insecure
 }
 
 // TracingMiddleware returns a Gin middleware for distributed tracing
