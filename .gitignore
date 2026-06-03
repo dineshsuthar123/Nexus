@@ -57,6 +57,12 @@ logs/
 *.log
 npm-debug.log*
 
+# Local smoke/check scratch output
+health.txt
+db_health.txt
+reset.txt
+round*_results.txt
+
 # Test output artifacts (generated during test runs)
 init_logs*.txt
 tests/e2e/db_out*.txt
@@ -68,6 +74,8 @@ tests/integration/error.log
 
 # Dependencies
 node_modules/
+__pycache__/
+**/__pycache__/
 
 # Docker
 docker-compose.override.yml
@@ -104,6 +112,8 @@ temp/
 # Generated files
 generated/
 *_gen.go
+*.tsbuildinfo
+**/*.tsbuildinfo
 
 # Flink checkpoints
 checkpoints/
@@ -132,6 +142,10 @@ out/
 playwright-report/
 test-results/
 .auth/
+
+# Load/performance run artifacts
+loadtest/results/*
+!loadtest/results/.gitkeep
 
 # Storybook
 storybook-static/
