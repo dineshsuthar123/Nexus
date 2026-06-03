@@ -32,7 +32,6 @@ import { useTheme } from 'next-themes';
 import { useSession, signOut } from 'next-auth/react';
 import {
   Avatar,
-  AvatarImage,
   AvatarFallback,
   DropdownMenu,
   DropdownMenuContent,
@@ -313,7 +312,6 @@ export default function DashboardLayout({
                       className="flex w-full items-center justify-center rounded-lg p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800/60"
                     >
                       <Avatar size="sm">
-                        <AvatarImage src="/avatars/user.jpg" alt={userName} />
                         <AvatarFallback className="bg-gradient-to-br from-primary-400 to-secondary-400 text-white text-xs">
                           {userInitials}
                         </AvatarFallback>
@@ -332,7 +330,6 @@ export default function DashboardLayout({
                   <DropdownMenuTrigger asChild>
                     <button className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800/60">
                       <Avatar size="sm">
-                        <AvatarImage src="/avatars/user.jpg" alt={userName} />
                         <AvatarFallback className="bg-gradient-to-br from-primary-400 to-secondary-400 text-white text-xs">
                           {userInitials}
                         </AvatarFallback>
@@ -450,7 +447,6 @@ export default function DashboardLayout({
                     className="flex items-center gap-2 rounded-lg p-1 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
                   >
                     <Avatar size="sm">
-                      <AvatarImage src="/avatars/user.jpg" alt={userName} />
                       <AvatarFallback className="bg-gradient-to-br from-primary-400 to-secondary-400 text-white text-xs">
                         {userInitials}
                       </AvatarFallback>

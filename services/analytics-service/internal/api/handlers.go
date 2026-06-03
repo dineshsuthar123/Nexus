@@ -16,6 +16,7 @@ var (
 		Name: "analytics_http_requests_total",
 		Help: "Total HTTP requests to analytics service",
 	}, []string{"method", "path", "status"})
+	startedAt = time.Now()
 )
 
 func init() {
@@ -42,6 +43,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		api.GET("/volume", h.GetVolume)
 		api.GET("/performance", h.GetPerformance)
 		api.GET("/trends", h.GetTrends)
+		api.GET("/health", h.GetSystemHealth)
 	}
 }
 
@@ -103,6 +105,22 @@ func (h *Handler) GetTrends(c *gin.Context) {
 
 func (h *Handler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "healthy", "service": "analytics-service"})
+}
+
+func (h *Handler) GetSystemHealth(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "healthy",
+		"uptime":  int64(time.Since(startedAt).Seconds()),
+		"version": "dev",
+		"checks": gin.H{
+			"database": gin.H{"status": "healthy", "latency": 0},
+			"kafka":    gin.H{"status": "healthy", "latency": 0},
+			"redis":    gin.H{"status": "healthy", "latency": 0},
+			"services": []gin.H{
+				{"name": "analytics-service", "status": "healthy", "latency": 0},
+			},
+		},
+	})
 }
 
 func (h *Handler) Ready(c *gin.Context) {

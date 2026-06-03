@@ -6,7 +6,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import { get, ANALYTICS_ENDPOINTS, SYSTEM_ENDPOINTS } from '@/lib/api';
+import { get, ANALYTICS_ENDPOINTS } from '@/lib/api';
 import type { 
   DashboardSummary, 
   VolumeData, 
@@ -119,7 +119,7 @@ export function useSystemHealth(options?: { refetchInterval?: number }) {
   return useQuery({
     queryKey: analyticsKeys.health(),
     queryFn: async () => {
-      const response = await get<SystemHealth>(SYSTEM_ENDPOINTS.HEALTH);
+      const response = await get<SystemHealth>(ANALYTICS_ENDPOINTS.HEALTH);
       return response.data;
     },
     staleTime: 10 * 1000, // 10 seconds

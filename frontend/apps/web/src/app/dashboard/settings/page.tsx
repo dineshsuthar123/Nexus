@@ -21,7 +21,6 @@ import {
   TabsTrigger,
   Avatar,
   AvatarFallback,
-  AvatarImage,
   Badge,
   Skeleton,
 } from '@nexus/ui';
@@ -155,7 +154,6 @@ export default function SettingsPage() {
                     <Skeleton className="h-16 w-16 rounded-full" />
                   ) : (
                     <Avatar size="xl">
-                      <AvatarImage src="/avatars/user.jpg" alt="Profile" />
                       <AvatarFallback>
                         {(profile?.firstName?.[0] ?? '') + (profile?.lastName?.[0] ?? '')}
                       </AvatarFallback>

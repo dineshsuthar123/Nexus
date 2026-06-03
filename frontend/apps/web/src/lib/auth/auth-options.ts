@@ -12,7 +12,7 @@ import type { AuthOptions, User as NextAuthUser, Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
-import { AUTH_ENDPOINTS, getBaseUrl } from '@/lib/api/endpoints';
+import { AUTH_ENDPOINTS, getServerBaseUrl } from '@/lib/api/endpoints';
 import type { LoginResponse, User } from '@/lib/api/types';
 
 // =============================================================================
@@ -73,7 +73,7 @@ declare module 'next-auth/jwt' {
  */
 async function refreshAccessToken(token: JWT): Promise<JWT> {
   try {
-    const response = await fetch(`${getBaseUrl()}${AUTH_ENDPOINTS.REFRESH}`, {
+    const response = await fetch(`${getServerBaseUrl()}${AUTH_ENDPOINTS.REFRESH}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -148,7 +148,7 @@ export const authOptions: AuthOptions = {
 
         try {
           // Call the backend login endpoint
-          const response = await fetch(`${getBaseUrl()}${AUTH_ENDPOINTS.LOGIN}`, {
+          const response = await fetch(`${getServerBaseUrl()}${AUTH_ENDPOINTS.LOGIN}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

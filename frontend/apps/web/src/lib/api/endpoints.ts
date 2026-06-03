@@ -10,9 +10,11 @@
 // =============================================================================
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_INTERNAL_BASE_URL = process.env.API_INTERNAL_URL || API_BASE_URL;
 const API_VERSION = 'v1';
 
 export const getBaseUrl = () => `${API_BASE_URL}/api/${API_VERSION}`;
+export const getServerBaseUrl = () => `${API_INTERNAL_BASE_URL}/api/${API_VERSION}`;
 
 // =============================================================================
 // Auth Endpoints
@@ -102,6 +104,7 @@ export const ANALYTICS_ENDPOINTS = {
   VOLUME: '/analytics/volume',
   PERFORMANCE: '/analytics/performance',
   TRENDS: '/analytics/trends',
+  HEALTH: '/analytics/health',
 } as const;
 
 // =============================================================================

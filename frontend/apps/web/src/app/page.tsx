@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@nexus/ui';
+import { Card, CardContent, CardHeader, CardTitle, Badge } from '@nexus/ui';
 import { ArrowRight, Shield, Zap, Globe, BarChart3, Lock, CheckCircle } from 'lucide-react';
 
 const fadeInUp = {
@@ -47,12 +47,13 @@ export default function HomePage() {
             <Link href="/auth/login" className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-slate-400 dark:hover:text-white">
               Sign In
             </Link>
-            <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40">
-              <Link href="/dashboard">
-                Dashboard
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+            <Link
+              href="/dashboard"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-4 text-sm font-medium text-white shadow-lg shadow-blue-500/25 transition-colors hover:shadow-blue-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+            >
+              Dashboard
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
           </nav>
         </div>
       </header>
@@ -102,15 +103,19 @@ export default function HomePage() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
-            <Button size="lg" asChild className="bg-gradient-to-r from-blue-600 to-blue-500 px-8 text-white shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40">
-              <Link href="/dashboard">
-                Open Dashboard
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
-            </Button>
-            <Button variant="outline" size="lg" asChild className="border-neutral-300 text-neutral-700 hover:bg-neutral-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-              <Link href="/docs">View Documentation</Link>
-            </Button>
+            <Link
+              href="/dashboard"
+              className="inline-flex h-12 min-w-[172px] items-center justify-center gap-2 rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-8 text-base font-medium text-white shadow-xl shadow-blue-500/25 transition-colors hover:shadow-blue-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+            >
+              Open Dashboard
+              <ArrowRight className="h-5 w-5" aria-hidden="true" />
+            </Link>
+            <Link
+              href="/docs"
+              className="inline-flex h-12 min-w-[172px] items-center justify-center rounded-md border-2 border-neutral-300 px-8 text-base font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              View Documentation
+            </Link>
           </motion.div>
         </motion.div>
       </section>
@@ -187,12 +192,13 @@ export default function HomePage() {
                 Ready to transform your payment infrastructure?
               </h2>
               <p className="mt-4 text-lg text-blue-100">Get started with Nexus RTP Platform today.</p>
-              <Button variant="secondary" size="lg" className="mt-8 bg-white px-8 text-blue-600 shadow-xl hover:bg-neutral-50" asChild>
-                <Link href="/dashboard">
-                  Get Started
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
+              <Link
+                href="/dashboard"
+                className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-md bg-white px-8 text-base font-medium text-blue-600 shadow-xl transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-blue-600"
+              >
+                Get Started
+                <ArrowRight className="h-5 w-5" aria-hidden="true" />
+              </Link>
             </div>
           </div>
         </div>
