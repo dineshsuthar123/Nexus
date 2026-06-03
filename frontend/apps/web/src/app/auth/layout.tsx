@@ -57,7 +57,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </Link>
         </div>
         <p>
-          © {new Date().getFullYear()} Nexus RTP Platform. All rights reserved.
+          &copy; {new Date().getFullYear()} Nexus RTP Platform. All rights reserved.
         </p>
       </footer>
     </div>
