@@ -1,6 +1,6 @@
 /**
  * Nexus RTP Platform - Reconciliation Hooks Tests
- * 
+ *
  * Tests for reconciliation-related React Query hooks.
  */
 
@@ -9,7 +9,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
 
-import { 
+import {
   useReconciliationCycles,
   useReconciliationCycle,
   useDiscrepancies,
@@ -129,8 +129,63 @@ describe('Reconciliation Hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      expect(result.current.data).toEqual(mockPaginatedCycles);
+      expect(result.current.data?.data[0]).toMatchObject({
+        id: 'recon-12345678',
+        status: 'COMPLETED',
+        accounts: ['acc-1', 'acc-2'],
+        date: '2024-01-01',
+        totalTransactions: 1500,
+        discrepancyCount: 3,
+      });
       expect(result.current.data?.items).toHaveLength(1);
+    });
+
+    it('should normalize live reconciliation-service cycle responses', async () => {
+      vi.mocked(api.get).mockResolvedValueOnce({
+        data: {
+          cycles: [
+            {
+              id: 'cycle-live',
+              status: 'RUNNING',
+              startTime: '2026-06-04T00:00:00.000Z',
+              accountIds: ['acc-live'],
+              transactionsProcessed: 42,
+              matchedCount: 40,
+              discrepanciesFound: 2,
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 20,
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const { result } = renderHook(() => useReconciliationCycles(), {
+        wrapper: createTestWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(result.current.data?.data[0]).toMatchObject({
+        id: 'cycle-live',
+        status: 'RUNNING',
+        accounts: ['acc-live'],
+        totalTransactions: 42,
+        matchedTransactions: 40,
+        discrepancyCount: 2,
+      });
+      expect(result.current.data?.pagination).toMatchObject({
+        page: 1,
+        pageSize: 20,
+        totalItems: 1,
+        totalPages: 1,
+      });
     });
 
     it('should filter by status', async () => {
@@ -306,7 +361,7 @@ describe('Reconciliation Hooks', () => {
   describe('useRunReconciliation', () => {
     it('should start a new reconciliation cycle', async () => {
       const newCycle = { ...mockReconciliationCycle, id: 'recon-new-123', status: 'RUNNING' };
-      
+
       vi.mocked(api.post).mockResolvedValueOnce({
         data: newCycle,
         status: 201,
@@ -374,7 +429,7 @@ describe('Reconciliation Hooks', () => {
   describe('useResolveDiscrepancy', () => {
     it('should resolve discrepancy with ACCEPT_SOURCE action', async () => {
       const resolved = { ...mockDiscrepancy, status: 'RESOLVED', resolution: 'ACCEPT_SOURCE' };
-      
+
       vi.mocked(api.post).mockResolvedValueOnce({
         data: resolved,
         status: 200,
@@ -399,7 +454,7 @@ describe('Reconciliation Hooks', () => {
 
     it('should resolve discrepancy with MANUAL action and adjustment', async () => {
       const resolved = { ...mockDiscrepancy, status: 'RESOLVED', resolution: 'MANUAL' };
-      
+
       vi.mocked(api.post).mockResolvedValueOnce({
         data: resolved,
         status: 200,
@@ -456,7 +511,7 @@ describe('Reconciliation Hooks', () => {
     it('should include filters in cycleList key', () => {
       const filters = { status: 'COMPLETED' as const };
       const pagination = { page: 1, pageSize: 20 };
-      
+
       expect(reconciliationKeys.cycleList(filters, pagination)).toEqual([
         'reconciliation',
         'cycles',

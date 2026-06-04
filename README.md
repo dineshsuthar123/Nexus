@@ -383,9 +383,9 @@ pnpm dev    # http://localhost:3000
 | Watchman (OFAC) | 8084 | HTTP |
 | CockroachDB SQL | 26257 | PostgreSQL wire |
 | CockroachDB Console | 8080 | HTTP |
-| Kafka Brokers | 9092-9094 | Kafka |
+| Kafka Brokers | 19092, 19095, 19096 | Kafka |
 | Kafka UI | 8090 | HTTP |
-| Redis | 6379 | Redis |
+| Redis | 16379 | Redis |
 | Prometheus | 9090 | HTTP |
 | AlertManager | 9093 | HTTP |
 | Grafana | 3002 | HTTP |

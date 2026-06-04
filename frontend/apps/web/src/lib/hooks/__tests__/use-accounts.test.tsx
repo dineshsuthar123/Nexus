@@ -117,8 +117,67 @@ describe('Account Hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      expect(result.current.data).toEqual(mockPaginatedAccounts);
+      expect(result.current.data?.data[0]).toMatchObject({
+        id: 'acc-12345678',
+        name: 'Test Operating Account',
+        type: 'OPERATING',
+        balance: 50000,
+        availableBalance: 50000,
+        pendingBalance: 1500,
+      });
       expect(result.current.data?.items).toHaveLength(1);
+    });
+
+    it('should normalize live account-service list responses', async () => {
+      vi.mocked(api.get).mockResolvedValueOnce({
+        data: {
+          accounts: [
+            {
+              id: 'acc-live',
+              accountNumber: 'ACCT123',
+              accountType: 'SETTLEMENT',
+              currency: 'USD',
+              balance: '125.50',
+              availableBalance: '120.25',
+              pendingDebits: '5.25',
+              status: 'ACTIVE',
+              metadata: { name: 'Settlement Main' },
+              createdAt: '2026-06-04T00:00:00.000Z',
+              updatedAt: '2026-06-04T00:01:00.000Z',
+            },
+          ],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const { result } = renderHook(() => useAccounts(), {
+        wrapper: createTestWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(result.current.data?.data[0]).toMatchObject({
+        id: 'acc-live',
+        name: 'Settlement Main',
+        type: 'SETTLEMENT',
+        balance: 125.5,
+        availableBalance: 120.25,
+        pendingBalance: 5.25,
+      });
+      expect(result.current.data?.pagination).toMatchObject({
+        page: 1,
+        pageSize: 20,
+        totalItems: 1,
+        totalPages: 1,
+      });
     });
 
     it('should filter by account type', async () => {

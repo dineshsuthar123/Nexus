@@ -82,12 +82,28 @@ const STATUS_CONFIG: Record<ReconciliationStatus, {
   },
 };
 
+function formatEnumLabel(value: string | undefined) {
+  if (!value) {
+    return 'Unknown';
+  }
+  return value
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 // =============================================================================
 // Components
 // =============================================================================
 
 function CycleStatusBadge({ status }: { status: ReconciliationStatus }) {
-  const config = STATUS_CONFIG[status];
+  const config = STATUS_CONFIG[status] ?? {
+    label: formatEnumLabel(status),
+    color: 'default' as const,
+    icon: <Clock className="h-4 w-4" />,
+  };
   return (
     <Badge variant={config.color} className="flex items-center gap-1">
       {config.icon}
@@ -130,9 +146,10 @@ function ReconciliationSkeleton() {
 // =============================================================================
 
 function SummaryCards({ data }: { data: PaginatedResponse<ReconciliationCycle> | undefined }) {
-  const completed = data?.data.filter(c => c.status === 'COMPLETED').length || 0;
-  const running = data?.data.filter(c => c.status === 'RUNNING').length || 0;
-  const withIssues = data?.data.filter(c => (c.discrepancyCount || 0) > 0).length || 0;
+  const cycles = data?.data ?? [];
+  const completed = cycles.filter(c => c.status === 'COMPLETED').length;
+  const running = cycles.filter(c => c.status === 'RUNNING').length;
+  const withIssues = cycles.filter(c => (c.discrepancyCount || 0) > 0).length;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -217,6 +234,9 @@ export default function ReconciliationPage() {
 
   // Fetch reconciliation cycles
   const { data, isLoading, error, refetch, isFetching } = useReconciliationCycles(filters, pagination);
+  const cycles = data?.data ?? [];
+  const totalCycles = data?.pagination?.totalItems ?? cycles.length;
+  const totalPages = data?.pagination?.totalPages ?? 1;
 
   const hasActiveFilters = !!statusFilter;
 
@@ -312,7 +332,7 @@ export default function ReconciliationPage() {
             <Button onClick={() => refetch()}>Try Again</Button>
           </CardContent>
         </Card>
-      ) : data?.data.length === 0 ? (
+      ) : cycles.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
@@ -338,14 +358,17 @@ export default function ReconciliationPage() {
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <p>
               Showing {(((pagination.page || 1) - 1) * (pagination.pageSize || 10)) + 1} - {' '}
-              {Math.min((pagination.page || 1) * (pagination.pageSize || 10), data?.pagination?.totalItems || 0)} of{' '}
-              {data?.pagination?.totalItems || 0} cycles
+              {Math.min((pagination.page || 1) * (pagination.pageSize || 10), totalCycles)} of{' '}
+              {totalCycles} cycles
             </p>
           </div>
 
           {/* Cycles List */}
           <div className="space-y-4">
-            {data?.data.map((cycle) => (
+            {cycles.map((cycle) => {
+              const accountCount = Array.isArray(cycle.accounts) ? cycle.accounts.length : 0;
+
+              return (
               <Card
                 key={cycle.id}
                 className="cursor-pointer hover:border-primary/50 transition-colors"
@@ -363,8 +386,8 @@ export default function ReconciliationPage() {
                           <Calendar className="h-4 w-4" />
                           {new Date(cycle.startTime).toLocaleDateString()}
                         </span>
-                        {cycle.accounts && (
-                          <span>{cycle.accounts.length} accounts</span>
+                        {accountCount > 0 && (
+                          <span>{accountCount} accounts</span>
                         )}
                         {cycle.discrepancyCount != null && cycle.discrepancyCount > 0 && (
                           <Badge variant="danger" size="sm">
@@ -387,14 +410,15 @@ export default function ReconciliationPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
 
           {/* Pagination */}
-          {data && (data.pagination?.totalPages || 1) > 1 && (
+          {totalPages > 1 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Page {pagination.page || 1} of {data.pagination.totalPages}
+                Page {pagination.page || 1} of {totalPages}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -410,7 +434,7 @@ export default function ReconciliationPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setPagination({ ...pagination, page: (pagination.page || 1) + 1 })}
-                  disabled={(pagination.page || 1) >= (data.pagination?.totalPages || 1)}
+                  disabled={(pagination.page || 1) >= totalPages}
                 >
                   Next
                   <ChevronRight className="h-4 w-4 ml-1" />
