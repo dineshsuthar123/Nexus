@@ -51,6 +51,14 @@ type BackendReconciliationCycleListResponse = Partial<PaginatedResponse<Reconcil
   offset?: number;
 };
 
+type BackendDiscrepancyListResponse = Partial<PaginatedResponse<Discrepancy>> & {
+  discrepancies?: Discrepancy[];
+  data?: Discrepancy[];
+  items?: Discrepancy[];
+  limit?: number;
+  offset?: number;
+};
+
 function normalizeReconciliationCycle(raw: BackendReconciliationCycle): ReconciliationCycle {
   const startedAt = raw.startedAt ?? raw.startTime ?? raw.createdAt ?? new Date(0).toISOString();
   const completedAt = raw.completedAt ?? raw.endTime;
@@ -114,6 +122,38 @@ function normalizePaginatedCycles(
   };
 }
 
+function normalizePaginatedDiscrepancies(
+  response: BackendDiscrepancyListResponse
+): PaginatedResponse<Discrepancy> {
+  const discrepancies = response.data ?? response.items ?? response.discrepancies ?? [];
+  const pageSize = response.pagination?.pageSize ?? response.pageSize ?? response.limit ?? discrepancies.length;
+  const page = response.pagination?.page ?? response.page ?? (
+    response.offset !== undefined && pageSize > 0 ? Math.floor(response.offset / pageSize) + 1 : 1
+  );
+  const totalItems = response.pagination?.totalItems ?? response.total ?? discrepancies.length;
+  const totalPages = response.pagination?.totalPages ?? response.totalPages ?? (
+    pageSize > 0 ? Math.max(1, Math.ceil(totalItems / pageSize)) : 1
+  );
+
+  return {
+    ...response,
+    data: discrepancies,
+    items: discrepancies,
+    total: totalItems,
+    page,
+    pageSize,
+    totalPages,
+    pagination: {
+      page,
+      pageSize,
+      totalItems,
+      totalPages,
+      hasNext: response.pagination?.hasNext ?? page < totalPages,
+      hasPrevious: response.pagination?.hasPrevious ?? page > 1,
+    },
+  };
+}
+
 /**
  * Fetch list of reconciliation cycles
  */
@@ -143,7 +183,7 @@ export function useReconciliationCycle(id: string, options?: { enabled?: boolean
     queryKey: reconciliationKeys.cycle(id),
     queryFn: async () => {
       const response = await get<ReconciliationCycle>(RECONCILIATION_ENDPOINTS.GET_CYCLE(id));
-      return response.data;
+      return normalizeReconciliationCycle(response.data as BackendReconciliationCycle);
     },
     enabled: options?.enabled !== false && !!id,
     staleTime: 30 * 1000,
@@ -166,7 +206,7 @@ export function useDiscrepancies(
         RECONCILIATION_ENDPOINTS.GET_DISCREPANCIES(cycleId),
         { params }
       );
-      return response.data;
+      return normalizePaginatedDiscrepancies(response.data as BackendDiscrepancyListResponse);
     },
     enabled: options?.enabled !== false && !!cycleId,
     staleTime: 30 * 1000,

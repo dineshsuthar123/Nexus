@@ -248,7 +248,14 @@ describe('Account Hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      expect(result.current.data).toEqual(mockAccount);
+      expect(result.current.data).toMatchObject({
+        id: 'acc-12345678',
+        name: 'Test Operating Account',
+        type: 'OPERATING',
+        balance: 50000,
+        availableBalance: 50000,
+        pendingBalance: 1500,
+      });
       expect(api.get).toHaveBeenCalledWith('/api/v1/accounts/acc-12345678');
     });
 
@@ -299,7 +306,13 @@ describe('Account Hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      expect(result.current.data).toEqual(mockAccountBalance);
+      expect(result.current.data).toMatchObject({
+        accountId: 'acc-12345678',
+        available: 50000,
+        availableBalance: 50000,
+        pendingBalance: 1500,
+        currency: 'EUR',
+      });
       expect(result.current.data?.available).toBe(50000.00);
     });
 

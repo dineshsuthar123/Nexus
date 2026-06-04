@@ -59,6 +59,19 @@ type BackendAccountListResponse = Partial<PaginatedResponse<Account>> & {
   offset?: number;
 };
 
+type BackendBalance = Partial<Omit<Balance, 'balance' | 'availableBalance' | 'pendingBalance'>> & {
+  currentBalance?: number | string;
+  balance?: number | string;
+  availableBalance?: number | string;
+  available?: number | string;
+  pendingBalance?: number | string;
+  pending?: number | string;
+  pendingDebits?: number | string;
+  pendingCredits?: number | string;
+  reserved?: number | string;
+  lastUpdated?: string;
+};
+
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -136,6 +149,25 @@ function normalizePaginatedAccounts(response: BackendAccountListResponse): Pagin
   };
 }
 
+function normalizeBalance(raw: BackendBalance, accountId: string): Balance {
+  const balance = toNumber(raw.balance ?? raw.currentBalance);
+  const availableBalance = toNumber(raw.availableBalance ?? raw.available, balance);
+  const pendingBalance = toNumber(
+    raw.pendingBalance ?? raw.pending,
+    toNumber(raw.pendingDebits) + toNumber(raw.pendingCredits)
+  );
+
+  return {
+    accountId: raw.accountId ?? accountId,
+    currency: raw.currency ?? 'USD',
+    balance,
+    availableBalance,
+    available: availableBalance,
+    pendingBalance,
+    asOf: raw.asOf ?? raw.lastUpdated ?? new Date().toISOString(),
+  };
+}
+
 /**
  * Fetch paginated list of accounts
  */
@@ -195,7 +227,7 @@ export function useAccount(id: string, options?: { enabled?: boolean }) {
     queryKey: accountKeys.detail(id),
     queryFn: async () => {
       const response = await get<Account>(ACCOUNT_ENDPOINTS.GET_BY_ID(id));
-      return response.data;
+      return normalizeAccount(response.data as BackendAccount);
     },
     enabled: options?.enabled !== false && !!id,
     staleTime: 30 * 1000, // 30 seconds
@@ -210,7 +242,7 @@ export function useAccountBalance(id: string, options?: { enabled?: boolean; ref
     queryKey: accountKeys.balance(id),
     queryFn: async () => {
       const response = await get<Balance>(ACCOUNT_ENDPOINTS.GET_BALANCE(id));
-      return response.data;
+      return normalizeBalance(response.data as BackendBalance, id);
     },
     enabled: options?.enabled !== false && !!id,
     refetchInterval: options?.refetchInterval,

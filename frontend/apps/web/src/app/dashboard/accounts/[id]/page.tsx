@@ -76,6 +76,18 @@ const STATUS_CONFIG: Record<AccountStatus, { label: string; color: 'success' | '
   CLOSED: { label: 'Closed', color: 'danger' },
 };
 
+function formatEnumLabel(value: string | undefined) {
+  if (!value) {
+    return 'Unknown';
+  }
+  return value
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 // =============================================================================
 // Copy Button
 // =============================================================================
@@ -260,8 +272,15 @@ export default function AccountDetailPage() {
     );
   }
 
-  const typeConfig = TYPE_CONFIG[account.type];
-  const statusConfig = STATUS_CONFIG[account.status];
+  const typeConfig = TYPE_CONFIG[account.type] ?? {
+    label: `${formatEnumLabel(account.type)} Account`,
+    icon: <Wallet className="h-5 w-5" />,
+    color: 'bg-slate-500',
+  };
+  const statusConfig = STATUS_CONFIG[account.status] ?? {
+    label: formatEnumLabel(account.status),
+    color: 'default' as const,
+  };
 
   const handleSuspend = async () => {
     try {
