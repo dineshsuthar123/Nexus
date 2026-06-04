@@ -72,12 +72,24 @@ const ACCOUNT_STATUSES: Record<AccountStatus, { label: string; color: 'default' 
   CLOSED: { label: 'Closed', color: 'danger' },
 };
 
+function formatEnumLabel(value: string | undefined) {
+  if (!value) {
+    return 'Unknown';
+  }
+  return value
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 // =============================================================================
 // Components
 // =============================================================================
 
 function AccountTypeBadge({ type }: { type: AccountType }) {
-  const config = ACCOUNT_TYPES[type];
+  const config = ACCOUNT_TYPES[type] ?? { label: formatEnumLabel(type), color: 'default' as const };
   const icons: Record<AccountType, React.ReactNode> = {
     CHECKING: <Wallet className="h-3 w-3 mr-1" />,
     SAVINGS: <Building2 className="h-3 w-3 mr-1" />,
@@ -90,14 +102,14 @@ function AccountTypeBadge({ type }: { type: AccountType }) {
   };
   return (
     <Badge variant={config.color} className="flex items-center">
-      {icons[type]}
+      {icons[type] ?? <Wallet className="h-3 w-3 mr-1" />}
       {config.label}
     </Badge>
   );
 }
 
 function AccountStatusBadge({ status }: { status: AccountStatus }) {
-  const config = ACCOUNT_STATUSES[status];
+  const config = ACCOUNT_STATUSES[status] ?? { label: formatEnumLabel(status), color: 'default' as const };
   return <Badge variant={config.color}>{config.label}</Badge>;
 }
 
@@ -163,6 +175,9 @@ export default function AccountsPage() {
 
   // Fetch accounts
   const { data, isLoading, error, refetch, isFetching } = useAccounts(filters, pagination);
+  const accounts = data?.data ?? [];
+  const totalAccounts = data?.pagination?.totalItems ?? accounts.length;
+  const totalPages = data?.pagination?.totalPages ?? 1;
 
   // Real-time updates
   useAccountUpdates(() => {
@@ -325,15 +340,15 @@ export default function AccountsPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <AccountBalance
           accountName="Total Assets"
-          balance={data?.data?.reduce((sum, a) => sum + a.balance, 0) || 0}
+          balance={accounts.reduce((sum, a) => sum + a.balance, 0)}
         />
         <AccountBalance
           accountName="Available Balance"
-          balance={data?.data?.reduce((sum, a) => sum + a.availableBalance, 0) || 0}
+          balance={accounts.reduce((sum, a) => sum + a.availableBalance, 0)}
         />
         <AccountBalance
           accountName="Pending"
-          balance={data?.data?.reduce((sum, a) => sum + a.pendingBalance, 0) || 0}
+          balance={accounts.reduce((sum, a) => sum + a.pendingBalance, 0)}
         />
         <Card>
           <CardContent className="pt-6">
@@ -341,11 +356,11 @@ export default function AccountsPage() {
               Total Accounts
             </div>
             <div className="mt-1 text-2xl font-bold text-neutral-900 dark:text-neutral-100">
-              {data?.pagination?.totalItems || 0}
+              {totalAccounts}
             </div>
             <div className="mt-1 flex items-center gap-2">
               <Badge variant="success" size="sm">
-                {data?.data?.filter(a => a.status === 'ACTIVE').length || 0} active
+                {accounts.filter(a => a.status === 'ACTIVE').length} active
               </Badge>
             </div>
           </CardContent>
@@ -462,7 +477,7 @@ export default function AccountsPage() {
             <Button onClick={() => refetch()}>Try Again</Button>
           </CardContent>
         </Card>
-      ) : data?.data?.length === 0 ? (
+      ) : accounts.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
@@ -488,8 +503,8 @@ export default function AccountsPage() {
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <p>
               Showing {((page - 1) * pageSize) + 1} - {' '}
-              {Math.min(page * pageSize, data?.pagination?.totalItems || 0)} of{' '}
-              {data?.pagination?.totalItems || 0} accounts
+              {Math.min(page * pageSize, totalAccounts)} of{' '}
+              {totalAccounts} accounts
             </p>
           </div>
 
@@ -497,7 +512,7 @@ export default function AccountsPage() {
           <Card>
             <CardContent className="p-0">
               <DataTable
-                data={data?.data || []}
+                data={accounts}
                 columns={columns}
                 onRowClick={(account) => router.push(`/dashboard/accounts/${account.id}`)}
               />
@@ -505,10 +520,10 @@ export default function AccountsPage() {
           </Card>
 
           {/* Pagination */}
-          {data && data.pagination.totalPages > 1 && (
+          {totalPages > 1 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Page {page} of {data.pagination.totalPages}
+                Page {page} of {totalPages}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -524,7 +539,7 @@ export default function AccountsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setPage(page + 1)}
-                  disabled={page >= data.pagination.totalPages}
+                  disabled={page >= totalPages}
                 >
                   Next
                   <ChevronRight className="h-4 w-4 ml-1" />

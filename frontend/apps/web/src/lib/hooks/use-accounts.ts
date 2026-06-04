@@ -10,6 +10,9 @@ import { useCallback } from 'react';
 import { get, post, put, ACCOUNT_ENDPOINTS, buildQueryParams } from '@/lib/api';
 import type {
   Account,
+  AccountStatus,
+  AccountType,
+  Currency,
   CreateAccountRequest,
   UpdateAccountRequest,
   Balance,
@@ -38,6 +41,101 @@ export const accountKeys = {
 // Queries
 // =============================================================================
 
+type BackendAccount = Partial<Omit<Account, 'balance' | 'availableBalance' | 'pendingBalance'>> & {
+  accountType?: AccountType;
+  balance?: number | string | { available?: number | string; pending?: number | string };
+  availableBalance?: number | string;
+  pendingBalance?: number | string;
+  pendingDebits?: number | string;
+  pendingCredits?: number | string;
+  metadata?: { name?: string } & Record<string, unknown>;
+};
+
+type BackendAccountListResponse = Partial<PaginatedResponse<Account>> & {
+  accounts?: BackendAccount[];
+  data?: BackendAccount[];
+  items?: BackendAccount[];
+  limit?: number;
+  offset?: number;
+};
+
+function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+function normalizeAccount(raw: BackendAccount): Account {
+  const balanceObject = typeof raw.balance === 'object' && raw.balance !== null ? raw.balance : undefined;
+  const balance = toNumber(balanceObject?.available ?? raw.balance);
+  const availableBalance = toNumber(raw.availableBalance ?? balanceObject?.available, balance);
+  const pendingBalance = toNumber(
+    raw.pendingBalance ?? balanceObject?.pending,
+    toNumber(raw.pendingDebits) + toNumber(raw.pendingCredits)
+  );
+  const type = (raw.type ?? raw.accountType ?? 'OPERATING') as AccountType;
+  const status = (raw.status ?? 'ACTIVE') as AccountStatus;
+  const currency = (raw.currency ?? 'USD') as Currency;
+  const accountNumber = raw.accountNumber ?? raw.iban ?? raw.id ?? 'Unknown account';
+
+  return {
+    id: raw.id ?? accountNumber,
+    name: raw.name ?? raw.metadata?.name ?? accountNumber,
+    type,
+    currency,
+    balance,
+    availableBalance,
+    pendingBalance,
+    status,
+    kycStatus: raw.kycStatus ?? 'PENDING',
+    iban: raw.iban,
+    bic: raw.bic,
+    routingNumber: raw.routingNumber,
+    accountNumber,
+    customerId: raw.customerId ?? '',
+    customerName: raw.customerName,
+    createdAt: raw.createdAt ?? new Date(0).toISOString(),
+    updatedAt: raw.updatedAt ?? raw.createdAt ?? new Date(0).toISOString(),
+    lastActivityAt: raw.lastActivityAt,
+  };
+}
+
+function normalizePaginatedAccounts(response: BackendAccountListResponse): PaginatedResponse<Account> {
+  const rawAccounts = response.data ?? response.items ?? response.accounts ?? [];
+  const accounts = rawAccounts.map(normalizeAccount);
+  const pageSize = response.pagination?.pageSize ?? response.pageSize ?? response.limit ?? accounts.length;
+  const page = response.pagination?.page ?? response.page ?? (
+    response.offset !== undefined && pageSize > 0 ? Math.floor(response.offset / pageSize) + 1 : 1
+  );
+  const totalItems = response.pagination?.totalItems ?? response.total ?? accounts.length;
+  const totalPages = response.pagination?.totalPages ?? response.totalPages ?? (
+    pageSize > 0 ? Math.max(1, Math.ceil(totalItems / pageSize)) : 1
+  );
+
+  return {
+    ...response,
+    data: accounts,
+    items: accounts,
+    total: totalItems,
+    page,
+    pageSize,
+    totalPages,
+    pagination: {
+      page,
+      pageSize,
+      totalItems,
+      totalPages,
+      hasNext: response.pagination?.hasNext ?? page < totalPages,
+      hasPrevious: response.pagination?.hasPrevious ?? page > 1,
+    },
+  };
+}
+
 /**
  * Fetch paginated list of accounts
  */
@@ -53,7 +151,7 @@ export function useAccounts(
         ACCOUNT_ENDPOINTS.BASE,
         { params }
       );
-      return response.data;
+      return normalizePaginatedAccounts(response.data as BackendAccountListResponse);
     },
     staleTime: 60 * 1000, // 1 minute
   });
