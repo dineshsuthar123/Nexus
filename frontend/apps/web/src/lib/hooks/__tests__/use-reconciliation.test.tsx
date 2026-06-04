@@ -261,7 +261,14 @@ describe('Reconciliation Hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      expect(result.current.data).toEqual(mockReconciliationCycle);
+      expect(result.current.data).toMatchObject({
+        id: 'recon-12345678',
+        status: 'COMPLETED',
+        accounts: ['acc-1', 'acc-2'],
+        date: '2024-01-01',
+        totalTransactions: 1500,
+        discrepancyCount: 3,
+      });
       expect(result.current.data?.transactionsProcessed).toBe(1500);
     });
 
@@ -316,8 +323,47 @@ describe('Reconciliation Hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      expect(result.current.data).toEqual(mockPaginatedDiscrepancies);
+      expect(result.current.data).toMatchObject({
+        data: [mockDiscrepancy],
+        items: [mockDiscrepancy],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      });
       expect(result.current.data?.items[0].type).toBe('AMOUNT_MISMATCH');
+    });
+
+    it('should normalize live discrepancy list responses', async () => {
+      vi.mocked(api.get).mockResolvedValueOnce({
+        data: {
+          discrepancies: [mockDiscrepancy],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const { result } = renderHook(
+        () => useDiscrepancies('recon-12345678'),
+        { wrapper: createTestWrapper() }
+      );
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(result.current.data?.data).toHaveLength(1);
+      expect(result.current.data?.pagination).toMatchObject({
+        page: 1,
+        pageSize: 20,
+        totalItems: 1,
+        totalPages: 1,
+      });
     });
 
     it('should handle pagination', async () => {

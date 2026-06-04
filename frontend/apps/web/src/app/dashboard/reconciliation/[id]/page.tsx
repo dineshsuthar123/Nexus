@@ -128,6 +128,18 @@ const RESOLUTION_OPTIONS: Array<{
   },
 ];
 
+function formatEnumLabel(value: string | undefined) {
+  if (!value) {
+    return 'Unknown';
+  }
+  return value
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 // =============================================================================
 // Components
 // =============================================================================
@@ -382,7 +394,12 @@ export default function ReconciliationDetailPage() {
     );
   }
 
-  const statusConfig = STATUS_CONFIG[cycle.status];
+  const statusConfig = STATUS_CONFIG[cycle.status] ?? {
+    label: formatEnumLabel(cycle.status),
+    color: 'default' as const,
+    icon: <Clock className="h-4 w-4" />,
+    description: 'Status reported by reconciliation service',
+  };
   const unresolvedCount = discrepancies?.filter(d => d.resolution === 'PENDING_REVIEW' || !d.resolution).length || 0;
 
   // Discrepancy table columns

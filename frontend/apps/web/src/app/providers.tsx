@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { SessionProvider } from 'next-auth/react';
+import { SessionProvider, useSession } from 'next-auth/react';
 import { ThemeProvider } from 'next-themes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ToastProvider } from '@nexus/ui';
 
 import { WebSocketProvider } from './websocket-provider';
+import { setApiSessionCache } from '@/lib/api/client';
 
 function makeQueryClient() {
   return new QueryClient({
@@ -44,11 +45,28 @@ interface ProvidersProps {
   session?: unknown;
 }
 
+function ApiSessionBridge() {
+  const { data: session, status } = useSession();
+
+  React.useEffect(() => {
+    if (status !== 'loading') {
+      setApiSessionCache(session ?? null);
+    }
+  }, [session, status]);
+
+  return null;
+}
+
 export function Providers({ children, session }: ProvidersProps) {
   const queryClient = getQueryClient();
 
   return (
-    <SessionProvider session={session as any}>
+    <SessionProvider
+      session={session as any}
+      refetchInterval={0}
+      refetchOnWindowFocus={false}
+    >
+      <ApiSessionBridge />
       <QueryClientProvider client={queryClient}>
         <ThemeProvider
           attribute="class"

@@ -57,12 +57,48 @@ const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second base delay
 const RETRYABLE_STATUSES = [408, 429, 500, 502, 503, 504];
+const SESSION_CACHE_TTL_MS = 5000;
 
 // Methods that are safe to retry (idempotent)
 const IDEMPOTENT_METHODS = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'];
 
 // Headers that require special handling
 const SENSITIVE_HEADERS = ['authorization', 'x-api-key', 'cookie'];
+
+type ClientSession = Awaited<ReturnType<typeof getSession>>;
+
+let cachedSession: ClientSession | undefined;
+let cachedSessionExpiresAt = 0;
+let pendingSessionRequest: Promise<ClientSession> | undefined;
+
+async function getCachedSession(forceRefresh = false): Promise<ClientSession> {
+  const now = Date.now();
+
+  if (!forceRefresh && cachedSession !== undefined && now < cachedSessionExpiresAt) {
+    return cachedSession;
+  }
+
+  if (!forceRefresh && pendingSessionRequest) {
+    return pendingSessionRequest;
+  }
+
+  pendingSessionRequest = getSession()
+    .then((session) => {
+      cachedSession = session;
+      cachedSessionExpiresAt = Date.now() + SESSION_CACHE_TTL_MS;
+      return session;
+    })
+    .finally(() => {
+      pendingSessionRequest = undefined;
+    });
+
+  return pendingSessionRequest;
+}
+
+export function setApiSessionCache(session: ClientSession): void {
+  cachedSession = session;
+  cachedSessionExpiresAt = Date.now() + SESSION_CACHE_TTL_MS;
+}
 
 // =============================================================================
 // API Client Class
@@ -171,7 +207,7 @@ class ApiClient {
 
   private async injectAuthHeader(config: InternalAxiosRequestConfig): Promise<void> {
     try {
-      const session = await getSession();
+      const session = await getCachedSession();
       if (session?.accessToken) {
         config.headers.Authorization = `Bearer ${session.accessToken}`;
       }
@@ -203,7 +239,7 @@ class ApiClient {
 
     try {
       // Try to refresh the token using NextAuth's session refresh
-      const session = await getSession();
+      const session = await getCachedSession(true);
 
       if (session?.accessToken) {
         // Token was refreshed
