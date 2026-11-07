@@ -239,13 +239,14 @@ docs: ## Serve documentation (placeholder — mkdocs not yet configured)
 # Development Shortcuts
 # ============================================================================
 
+performance: ## Run isolated real-service performance test (Go, Docker, k6, Python required)
+	python scripts/performance/run.py
+
+performance-check: ## Check performance evidence, documentation and UI synchronization
+	python scripts/performance/publish.py --check
+
 dev: infra-up db-migrate ## Start development environment
 	@echo "$(GREEN)Development environment ready!$(NC)"
-
-release-manifest: ## Compute SHA-256 hashes for release manifest
-	@echo "$(GREEN)Computing release manifest hashes...$(NC)"
-	bash scripts/compute-release-hashes.sh
-	@echo "$(GREEN)Release manifest updated.$(NC)"
 
 run-payment: ## Run payment service locally
 	cd services/payment-service && go run ./cmd/server

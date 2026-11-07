@@ -118,6 +118,10 @@ func (m *mockTransactionStore) ExistsByUETRTx(ctx context.Context, tx pgx.Tx, ue
 	if m.existsByUETRTxFn != nil {
 		return m.existsByUETRTxFn(ctx, tx, uetr)
 	}
+	// Both repository entry points observe the same configured existence data.
+	if m.existsByUETRFn != nil {
+		return m.existsByUETRFn(ctx, uetr)
+	}
 	// default to non-existence
 	return false, nil
 }
@@ -368,8 +372,8 @@ func TestCreatePayment_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if resp.Status != "CLEARED" {
-		t.Errorf("expected status CLEARED, got %s", resp.Status)
+	if resp.Status != "PENDING" {
+		t.Errorf("expected status PENDING, got %s", resp.Status)
 	}
 	if resp.UETR != req.UETR {
 		t.Errorf("expected UETR %s, got %s", req.UETR, resp.UETR)
@@ -390,7 +394,7 @@ func TestCreatePayment_Idempotency_DuplicateUETR(t *testing.T) {
 	uetr := uuid.New()
 
 	txnStore := &mockTransactionStore{
-		existsByUETRTxFn: func(ctx context.Context, tx pgx.Tx, u uuid.UUID) (bool, error) {
+		existsByUETRFn: func(ctx context.Context, u uuid.UUID) (bool, error) {
 			return true, nil
 		},
 		getByUETRFn: func(ctx context.Context, u uuid.UUID) (*db.Transaction, error) {

@@ -1,0 +1,367 @@
+{
+  "measured_at": "2026-11-07T08:20:09.365Z",
+  "build_seconds": 54.464332399999996,
+  "node": "v22.17.0",
+  "next": "14.2.35",
+  "mode": "production Node server; .next-performance output; standalone packaging disabled; public pages; no API mocks; fresh browser context per navigation",
+  "viewport": {
+    "width": 1365,
+    "height": 768
+  },
+  "samples_per_route": 10,
+  "routes": [
+    {
+      "path": "/",
+      "samples": [
+        {
+          "ttfb_ms": 6.799999952316284,
+          "dom_content_loaded_ms": 106.09999990463257,
+          "load_ms": 231.19999992847443,
+          "fcp_ms": 664,
+          "lcp_ms": 664,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 5.299999952316284,
+          "dom_content_loaded_ms": 27,
+          "load_ms": 115.70000004768372,
+          "fcp_ms": 76,
+          "lcp_ms": 784,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 4,
+          "dom_content_loaded_ms": 19.300000071525574,
+          "load_ms": 103.80000007152557,
+          "fcp_ms": 92,
+          "lcp_ms": 752,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.899999976158142,
+          "dom_content_loaded_ms": 25.100000023841858,
+          "load_ms": 106,
+          "fcp_ms": 76,
+          "lcp_ms": 752,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 4.399999976158142,
+          "dom_content_loaded_ms": 22.600000023841858,
+          "load_ms": 98.60000002384186,
+          "fcp_ms": 68,
+          "lcp_ms": 748,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.399999976158142,
+          "dom_content_loaded_ms": 21.40000009536743,
+          "load_ms": 100.40000009536743,
+          "fcp_ms": 68,
+          "lcp_ms": 744,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.299999952316284,
+          "dom_content_loaded_ms": 62.700000047683716,
+          "load_ms": 106,
+          "fcp_ms": 76,
+          "lcp_ms": 752,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 5.300000071525574,
+          "dom_content_loaded_ms": 23.399999976158142,
+          "load_ms": 105.60000002384186,
+          "fcp_ms": 76,
+          "lcp_ms": 752,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.5,
+          "dom_content_loaded_ms": 23.300000071525574,
+          "load_ms": 109,
+          "fcp_ms": 92,
+          "lcp_ms": 744,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.700000047683716,
+          "dom_content_loaded_ms": 21,
+          "load_ms": 98.39999997615814,
+          "fcp_ms": 68,
+          "lcp_ms": 748,
+          "cls": 0,
+          "script_encoded_bytes": 558925,
+          "script_requests": 25,
+          "page_errors": []
+        }
+      ]
+    },
+    {
+      "path": "/auth/login",
+      "samples": [
+        {
+          "ttfb_ms": 3.299999952316284,
+          "dom_content_loaded_ms": 24.700000047683716,
+          "load_ms": 109.79999995231628,
+          "fcp_ms": 56,
+          "lcp_ms": 152,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 4,
+          "dom_content_loaded_ms": 25,
+          "load_ms": 111.79999995231628,
+          "fcp_ms": 72,
+          "lcp_ms": 144,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.299999952316284,
+          "dom_content_loaded_ms": 21.5,
+          "load_ms": 104.60000002384186,
+          "fcp_ms": 68,
+          "lcp_ms": 136,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3,
+          "dom_content_loaded_ms": 23.399999976158142,
+          "load_ms": 109.5,
+          "fcp_ms": 68,
+          "lcp_ms": 140,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 5.199999928474426,
+          "dom_content_loaded_ms": 30,
+          "load_ms": 121.60000002384186,
+          "fcp_ms": 56,
+          "lcp_ms": 156,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.700000047683716,
+          "dom_content_loaded_ms": 30,
+          "load_ms": 128.60000002384186,
+          "fcp_ms": 80,
+          "lcp_ms": 164,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.0999999046325684,
+          "dom_content_loaded_ms": 23.700000047683716,
+          "load_ms": 110.20000004768372,
+          "fcp_ms": 52,
+          "lcp_ms": 152,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.5,
+          "dom_content_loaded_ms": 39.699999928474426,
+          "load_ms": 114.19999992847443,
+          "fcp_ms": 52,
+          "lcp_ms": 152,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.5,
+          "dom_content_loaded_ms": 24.200000047683716,
+          "load_ms": 108.39999997615814,
+          "fcp_ms": 48,
+          "lcp_ms": 148,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 5.200000047683716,
+          "dom_content_loaded_ms": 28.699999928474426,
+          "load_ms": 115,
+          "fcp_ms": 76,
+          "lcp_ms": 152,
+          "cls": 0.06907745083569258,
+          "script_encoded_bytes": 566894,
+          "script_requests": 25,
+          "page_errors": []
+        }
+      ]
+    },
+    {
+      "path": "/performance",
+      "samples": [
+        {
+          "ttfb_ms": 4.200000047683716,
+          "dom_content_loaded_ms": 22.799999952316284,
+          "load_ms": 86.69999992847443,
+          "fcp_ms": 56,
+          "lcp_ms": 56,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 2.700000047683716,
+          "dom_content_loaded_ms": 23.09999990463257,
+          "load_ms": 93.59999990463257,
+          "fcp_ms": 72,
+          "lcp_ms": 72,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.200000047683716,
+          "dom_content_loaded_ms": 23,
+          "load_ms": 95.39999997615814,
+          "fcp_ms": 80,
+          "lcp_ms": 80,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.5,
+          "dom_content_loaded_ms": 22.40000009536743,
+          "load_ms": 87.10000002384186,
+          "fcp_ms": 60,
+          "lcp_ms": 60,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 2.899999976158142,
+          "dom_content_loaded_ms": 21.299999952316284,
+          "load_ms": 92.69999992847443,
+          "fcp_ms": 72,
+          "lcp_ms": 72,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.4000000953674316,
+          "dom_content_loaded_ms": 20.200000047683716,
+          "load_ms": 88,
+          "fcp_ms": 68,
+          "lcp_ms": 68,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.100000023841858,
+          "dom_content_loaded_ms": 21.800000071525574,
+          "load_ms": 89.80000007152557,
+          "fcp_ms": 72,
+          "lcp_ms": 72,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 2.700000047683716,
+          "dom_content_loaded_ms": 22.100000023841858,
+          "load_ms": 86,
+          "fcp_ms": 56,
+          "lcp_ms": 56,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 3.100000023841858,
+          "dom_content_loaded_ms": 20.799999952316284,
+          "load_ms": 86.10000002384186,
+          "fcp_ms": 68,
+          "lcp_ms": 68,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        },
+        {
+          "ttfb_ms": 4,
+          "dom_content_loaded_ms": 50.10000002384186,
+          "load_ms": 90.19999992847443,
+          "fcp_ms": 60,
+          "lcp_ms": 60,
+          "cls": 0,
+          "script_encoded_bytes": 289576,
+          "script_requests": 18,
+          "page_errors": []
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Local desktop browser without CPU or network throttling",
+    "Ten samples per route; p95 is exploratory, not a field Core Web Vitals assessment",
+    "Public navigation only; authenticated financial workflows are not measured",
+    "LCP observed through load plus 800ms; late content and user interactions are outside the window"
+  ],
+  "browser": "145.0.7632.6",
+  "source_sha256": "97b68082ce87d71f266d0769a4f248b553ff564653007f8698a492bb157dfd53"
+}

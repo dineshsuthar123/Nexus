@@ -7,7 +7,9 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^docs/performance/runs/
       - id: end-of-file-fixer
+        exclude: ^docs/performance/runs/
       - id: check-yaml
         args: ['--allow-multiple-documents']
       - id: check-json
@@ -24,13 +26,24 @@ repos:
     hooks:
       - id: gitleaks
 
-  # Go formatting and linting
-  - repo: https://github.com/dnephin/pre-commit-golang
-    rev: v0.5.1
+  # Native Go commands work with Windows paths and this multi-module workspace.
+  - repo: local
     hooks:
       - id: go-fmt
+        name: Go formatting
+        entry: gofmt -w
+        language: system
+        types: [go]
       - id: go-vet
+        name: Go vet changed modules
+        entry: python scripts/vet_changed_go.py
+        language: system
+        types: [go]
       - id: go-imports
+        name: Go imports
+        entry: go run golang.org/x/tools/cmd/goimports@v0.28.0 -w
+        language: system
+        types: [go]
 
   # Custom PAN scanner
   - repo: local
@@ -41,17 +54,16 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        stages: [commit]
+        stages: [pre-commit]
 
       - id: no-hardcoded-secrets
         name: Check for hardcoded secrets
-        entry: bash -c 'grep -rE "(password|secret|api_key)\s*=\s*\"[^$]" --include="*.go" --include="*.java" --include="*.yml" . && exit 1 || exit 0'
+        entry: python scripts/check_staged_config.py secrets
         language: system
         pass_filenames: false
 
       - id: no-localhost-in-prod-configs
         name: Check for localhost in production configs
-        entry: >
-          bash -c 'grep -rE "localhost|127\.0\.0\.1" --include="values.yaml" --include="*-prod*.yml" . && echo "WARNING localhost found in config" || exit 0'
+        entry: python scripts/check_staged_config.py production-hosts
         language: system
         pass_filenames: false

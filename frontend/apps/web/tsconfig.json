@@ -1,6 +1,10 @@
 {
   "compilerOptions": {
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "target": "ES2020",
     "allowJs": true,
     "skipLibCheck": true,
@@ -20,11 +24,25 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@nexus/ui": ["../../packages/ui/src"],
-      "@nexus/ui/*": ["../../packages/ui/src/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@nexus/ui": [
+        "../../packages/ui/src"
+      ],
+      "@nexus/ui/*": [
+        "../../packages/ui/src/*"
+      ]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next-performance/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

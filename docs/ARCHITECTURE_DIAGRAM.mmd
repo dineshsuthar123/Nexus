@@ -1,0 +1,28 @@
+flowchart LR
+  subgraph Infra
+    CR["CockroachDB Cluster"]
+    K[Kafka]
+    R[Redis]
+    J[Jaeger]
+    P[Prometheus]
+  end
+  subgraph Services
+    AUTH[Auth Service]
+    PAYMENT[Payment Service]
+    ACCOUNT[Account Service]
+    RECON[Reconciliation Service]
+    NOTIF[Notification Service]
+  end
+  CLIENTS[Clients & UI]
+  CR --> PAYMENT
+  K --> PAYMENT
+  PAYMENT --> K
+  PAYMENT --> R
+  PAYMENT --> J
+  PAYMENT --> P
+  CLIENTS --> AUTH
+  CLIENTS --> PAYMENT
+  AUTH --> PAYMENT
+  PAYMENT --> ACCOUNT
+  RECON --> PAYMENT
+  PAYMENT --> NOTIF

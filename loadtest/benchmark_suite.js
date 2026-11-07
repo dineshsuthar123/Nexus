@@ -13,6 +13,7 @@
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
+import { evaluateMetric } from './lib/summary.mjs';
 
 const paymentLatency = new Trend('payment_latency_ms', true);
 const authLatency = new Trend('auth_latency_ms', true);
@@ -263,7 +264,9 @@ function uuidv4() {
 }
 
 function isCreateAccepted(res) {
-  return [200, 201, 202].includes(res.status);
+  return [200, 201, 202].includes(res.status)
+    && Boolean(jsonValue(res, 'transactionId'))
+    && isReviewOrProcessableStatus(jsonValue(res, 'status'));
 }
 
 function isReviewOrProcessableStatus(status) {
@@ -285,7 +288,7 @@ function testPaymentCreation(data) {
   const success = check(res, {
     'payment create accepted': isCreateAccepted,
     'payment has uetr': (r) => jsonValue(r, 'uetr') !== undefined,
-    'payment has transaction id or review response': (r) => jsonValue(r, 'transactionId') !== undefined || jsonValue(r, 'status') === 'REJECTED',
+    'payment has durable transaction id': (r) => Boolean(jsonValue(r, 'transactionId')),
     'payment latency under p99 SLO': () => duration < SLO.payment_p99_ms,
   });
 
@@ -425,31 +428,11 @@ export function handleSummary(data) {
       auth: AUTH_URL,
     },
     slo_results: {
-      payment_p95_ms: {
-        target: SLO.payment_p95_ms,
-        actual: data.metrics.payment_latency_ms?.values?.['p(95)'] || 'N/A',
-        pass: (data.metrics.payment_latency_ms?.values?.['p(95)'] || 0) < SLO.payment_p95_ms,
-      },
-      payment_p99_ms: {
-        target: SLO.payment_p99_ms,
-        actual: data.metrics.payment_latency_ms?.values?.['p(99)'] || 'N/A',
-        pass: (data.metrics.payment_latency_ms?.values?.['p(99)'] || 0) < SLO.payment_p99_ms,
-      },
-      payment_success_rate: {
-        target: SLO.payment_success_rate,
-        actual: data.metrics.payment_success_rate?.values?.rate || 'N/A',
-        pass: (data.metrics.payment_success_rate?.values?.rate || 0) > SLO.payment_success_rate,
-      },
-      auth_p99_ms: {
-        target: SLO.auth_p99_ms,
-        actual: data.metrics.auth_latency_ms?.values?.['p(99)'] || 'N/A',
-        pass: (data.metrics.auth_latency_ms?.values?.['p(99)'] || 0) < SLO.auth_p99_ms,
-      },
-      e2e_p99_ms: {
-        target: SLO.e2e_p99_ms,
-        actual: data.metrics.e2e_latency_ms?.values?.['p(99)'] || 'N/A',
-        pass: (data.metrics.e2e_latency_ms?.values?.['p(99)'] || 0) < SLO.e2e_p99_ms,
-      },
+      payment_p95_ms: evaluateMetric(data, 'payment_latency_ms', 'p(95)', SLO.payment_p95_ms),
+      payment_p99_ms: evaluateMetric(data, 'payment_latency_ms', 'p(99)', SLO.payment_p99_ms),
+      payment_success_rate: evaluateMetric(data, 'payment_success_rate', 'rate', SLO.payment_success_rate, { higherIsBetter: true }),
+      auth_p99_ms: evaluateMetric(data, 'auth_latency_ms', 'p(99)', SLO.auth_p99_ms, { enabled: INCLUDE_AUTH_FLOW }),
+      e2e_p99_ms: evaluateMetric(data, 'e2e_latency_ms', 'p(99)', SLO.e2e_p99_ms),
     },
     totals: {
       requests: data.metrics.total_requests?.values?.count || 0,

@@ -1,0 +1,24 @@
+# Isolated, disposable dependencies for scripts/performance/run.py.
+# Never shares application volumes or the normal development service ports.
+services:
+  database:
+    image: cockroachdb/cockroach:v23.2.0
+    command: start-single-node --insecure --store=type=mem,size=1GiB --cache=128MiB --max-sql-memory=256MiB
+    ports:
+      - "127.0.0.1:26270:26257"
+    healthcheck:
+      test: ["CMD", "cockroach", "sql", "--insecure", "--execute", "SELECT 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    mem_limit: 2g
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "127.0.0.1:6390:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 256m

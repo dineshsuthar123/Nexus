@@ -1,5 +1,7 @@
 # Runbook: Payment Latency SLO Breach
 
+Refer to [recorded local measurements](../docs/performance/README.md) for reproducible development evidence. Use the live rolling-window telemetry below for incident decisions.
+
 ## Alert: SLO_PaymentLatencyP95High / SLO_PaymentLatencyP99Critical
 
 ### Severity: WARNING / CRITICAL
@@ -77,8 +79,8 @@ curl -s http://payment-service:8080/metrics | grep external_call_duration
 ```bash
 # Check for long-running queries
 cockroach sql --host=cockroachdb:26257 --certs-dir=/certs -e "
-  SELECT query, phase, elapsed, application_name 
-  FROM [SHOW QUERIES] 
+  SELECT query, phase, elapsed, application_name
+  FROM [SHOW QUERIES]
   WHERE elapsed > '1s'::interval;"
 
 # Kill long-running queries if blocking

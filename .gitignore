@@ -58,6 +58,7 @@ logs/
 npm-debug.log*
 
 # Local smoke/check scratch output
+diagnostics/local/
 health.txt
 db_health.txt
 reset.txt
@@ -73,6 +74,7 @@ tests/integration/error.txt
 tests/integration/error.log
 
 # Dependencies
+.venv/
 node_modules/
 __pycache__/
 **/__pycache__/
@@ -133,6 +135,7 @@ redis-data/
 artifacts/
 
 # Next.js
+.next-performance/
 .next/
 **/.next/
 out/

@@ -16,8 +16,14 @@ echo "=============================================="
 ERRORS=0
 WARNINGS=0
 
-# Directories to exclude
-EXCLUDE_DIRS="node_modules|vendor|\.git|bin|dist|target|\.idea|storybook-static"
+# Scan the staged repository contents, including all supported source/config types.
+# Ignored local files and dependency/build directories are outside the commit.
+EXCLUDE_DIRS="(^|/)(node_modules|vendor|\.git|bin|dist|target|\.idea|storybook-static)/"
+tracked_scan() {
+  git grep --cached -I -n -E "$1" -- \
+    '*.go' '*.java' '*.py' '*.js' '*.ts' '*.tsx' '*.mjs' '*.cjs' \
+    '*.json' '*.yml' '*.yaml' '*.xml' '*.sql' '*.env' '*.pem' '*.key' '*.p12'
+}
 
 # ============================================================
 # 1. Scan for Credit Card PANs (Luhn-valid 13-19 digit numbers)
@@ -28,19 +34,7 @@ echo -e "\n${YELLOW}[1/6] Scanning for potential credit card numbers...${NC}"
 TEST_CARDS="4111111111111111|5500000000000004|378282246310005|6011111111111117|3530111333300000"
 
 # Look for 13-19 digit numbers that could be PANs
-PAN_MATCHES=$(grep -rEn '\b[0-9]{13,19}\b' \
-  --include="*.go" \
-  --include="*.java" \
-  --include="*.py" \
-  --include="*.js" \
-  --include="*.ts" \
-  --include="*.json" \
-  --include="*.yml" \
-  --include="*.yaml" \
-  --include="*.xml" \
-  --include="*.sql" \
-  --include="*.env" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "$TEST_CARDS" | grep -vE "uuid|timestamp|nano|millisecond|maxAmount|MaxAmount|NewFromFloat|decimal\.New" || true)
+PAN_MATCHES=$(tracked_scan '\b[0-9]{13,19}\b' 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "$TEST_CARDS" | grep -vE "uuid|timestamp|nano|millisecond|maxAmount|MaxAmount|NewFromFloat|decimal\.New" || true)
 
 if [ -n "$PAN_MATCHES" ]; then
   echo -e "${YELLOW}WARNING: Potential card numbers found (review manually):${NC}"
@@ -55,17 +49,7 @@ fi
 # ============================================================
 echo -e "\n${YELLOW}[2/6] Scanning for private keys...${NC}"
 
-PRIVATE_KEY_MATCHES=$(grep -rEln 'BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY' \
-  --include="*.go" \
-  --include="*.java" \
-  --include="*.pem" \
-  --include="*.key" \
-  --include="*.p12" \
-  --include="*.yml" \
-  --include="*.yaml" \
-  --include="*.json" \
-  --include="*.env" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "infra/mtls/certs/|services/auth-service/keys/dev_" || true)
+PRIVATE_KEY_MATCHES=$(tracked_scan 'BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY' 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "infra/mtls/certs/|services/auth-service/keys/dev_" || true)
 
 if [ -n "$PRIVATE_KEY_MATCHES" ]; then
   echo -e "${RED}ERROR: Private keys found in repository:${NC}"
@@ -80,16 +64,7 @@ fi
 # ============================================================
 echo -e "\n${YELLOW}[3/6] Scanning for AWS credentials...${NC}"
 
-AWS_KEY_MATCHES=$(grep -rEn 'AKIA[0-9A-Z]{16}' \
-  --include="*.go" \
-  --include="*.java" \
-  --include="*.py" \
-  --include="*.js" \
-  --include="*.yml" \
-  --include="*.yaml" \
-  --include="*.json" \
-  --include="*.env" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" || true)
+AWS_KEY_MATCHES=$(tracked_scan 'AKIA[0-9A-Z]{16}' 2>/dev/null | grep -vE "$EXCLUDE_DIRS" || true)
 
 if [ -n "$AWS_KEY_MATCHES" ]; then
   echo -e "${RED}ERROR: AWS access keys found:${NC}"
@@ -106,15 +81,7 @@ echo -e "\n${YELLOW}[4/6] Scanning for hardcoded secrets...${NC}"
 
 SECRET_PATTERNS='(api[_-]?key|apikey|secret[_-]?key|secretkey|password|passwd|pwd|token|auth[_-]?token)\s*[:=]\s*["\x27][a-zA-Z0-9_\-]{16,}["\x27]'
 
-SECRET_MATCHES=$(grep -rEin "$SECRET_PATTERNS" \
-  --include="*.go" \
-  --include="*.java" \
-  --include="*.py" \
-  --include="*.js" \
-  --include="*.yml" \
-  --include="*.yaml" \
-  --include="*.json" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "example|sample|placeholder|your[-_]|_test\.go|REPLACE_WITH_" || true)
+SECRET_MATCHES=$(tracked_scan "$SECRET_PATTERNS" 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "example|sample|placeholder|your[-_]|_test\.go|REPLACE_WITH_" || true)
 
 if [ -n "$SECRET_MATCHES" ]; then
   echo -e "${YELLOW}WARNING: Potential hardcoded secrets found (review manually):${NC}"
@@ -129,16 +96,7 @@ fi
 # ============================================================
 echo -e "\n${YELLOW}[5/6] Scanning for database passwords in connection strings...${NC}"
 
-DB_CONN_MATCHES=$(grep -rEin '(postgres|mysql|mongodb|redis)://[^:]+:[^@]+@' \
-  --include="*.go" \
-  --include="*.java" \
-  --include="*.py" \
-  --include="*.js" \
-  --include="*.yml" \
-  --include="*.yaml" \
-  --include="*.json" \
-  --include="*.env" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "localhost|127\.0\.0\.1|root:@|:@" || true)
+DB_CONN_MATCHES=$(tracked_scan '(postgres|mysql|mongodb|redis)://[^:]+:[^@]+@' 2>/dev/null | grep -vE "$EXCLUDE_DIRS" | grep -vE "localhost|127\.0\.0\.1|root:@|:@" || true)
 
 if [ -n "$DB_CONN_MATCHES" ]; then
   echo -e "${YELLOW}WARNING: Database connection strings with credentials found:${NC}"
@@ -153,16 +111,7 @@ fi
 # ============================================================
 echo -e "\n${YELLOW}[6/6] Scanning for JWT tokens/secrets...${NC}"
 
-JWT_MATCHES=$(grep -rEn 'eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*' \
-  --include="*.go" \
-  --include="*.java" \
-  --include="*.py" \
-  --include="*.js" \
-  --include="*.yml" \
-  --include="*.yaml" \
-  --include="*.json" \
-  --include="*.env" \
-  . 2>/dev/null | grep -vE "$EXCLUDE_DIRS" || true)
+JWT_MATCHES=$(tracked_scan 'eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*' 2>/dev/null | grep -vE "$EXCLUDE_DIRS" || true)
 
 if [ -n "$JWT_MATCHES" ]; then
   echo -e "${YELLOW}WARNING: JWT tokens found (ensure these are test tokens only):${NC}"

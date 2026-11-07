@@ -283,5 +283,5 @@ if [ "$response" = "y" ]; then
 fi
 
 echo -e "${GREEN}Welcome to Nexus RTP!${NC}"
-echo "For detailed testing guide, see: TESTING_CHECKLIST.md"
+echo "For detailed testing guide, see: docs/guides/TESTING_CHECKLIST.md"
 echo ""

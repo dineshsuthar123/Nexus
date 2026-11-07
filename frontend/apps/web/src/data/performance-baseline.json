@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "run_id": "20261107T080650Z",
+  "measured_at": "2026-11-07T08:10:14.914052+00:00",
+  "git_commit": "93b0021ae72d25f1c8a74d618edafb61c5892f3f",
+  "working_tree_dirty": true,
+  "source_sha256": "032c5644399a27b15baeb29191dcbcbb73cd1852b7f912047d31727ff5cf392d",
+  "scope": "Local direct payment API acceptance with sanctions unavailable (REVIEW), real CockroachDB and Redis",
+  "limitations": [
+    "Single-node in-memory CockroachDB on shared Docker Desktop hardware",
+    "Sanctions endpoint intentionally unavailable; payments enter SANCTIONED review",
+    "No gateway, auth, Kafka delivery, fraud processing, settlement or cross-region network measured",
+    "Closed-loop users with 50ms think time; achieved rate is not maximum capacity",
+    "Load generator and service share the host; no production throughput or uptime inference"
+  ],
+  "payment": {
+    "samples": 14709,
+    "average_ms": 44.411472119110826,
+    "p50_ms": 35.3672,
+    "p95_ms": 109.08171999999985,
+    "p99_ms": 152.94082,
+    "max_ms": 253.6748
+  },
+  "http_requests": 33840,
+  "http_failure_rate": 0,
+  "payment_failure_rate": 0,
+  "sustained_payments_per_second": 107.35480429419218,
+  "readback_success_rate": 1,
+  "replay_success_rate": 1,
+  "status": {
+    "average_ms": 6.837401012985243,
+    "p50_ms": 5.8702,
+    "p95_ms": 14.497479999999998,
+    "p99_ms": 25.982608,
+    "max_ms": 97.6
+  },
+  "list": {
+    "average_ms": 50.290632858112644,
+    "p50_ms": 27.3097,
+    "p95_ms": 200.02601999999993,
+    "p99_ms": 281.09473599999984,
+    "max_ms": 361.3633
+  },
+  "replay": {
+    "average_ms": 1.7420759850543426,
+    "p50_ms": 1.58865,
+    "p95_ms": 3.819785,
+    "p99_ms": 6.421527,
+    "max_ms": 18.0454
+  },
+  "thresholds_passed": true,
+  "failed_thresholds": [],
+  "database_validation_passed": true,
+  "phases": [
+    {
+      "name": "baseline",
+      "samples": 244,
+      "average_ms": 27.37511885245903,
+      "p50_ms": 26.459000000000003,
+      "p95_ms": 32.841145,
+      "p99_ms": 43.85567999999999,
+      "max_ms": 92.2159,
+      "accepted": 244,
+      "elapsed_seconds": 20.0,
+      "accepted_per_second": 12.2,
+      "failure_rate": 0
+    },
+    {
+      "name": "ramp",
+      "samples": 2357,
+      "average_ms": 25.91361030971573,
+      "p50_ms": 24.5098,
+      "p95_ms": 37.48833999999995,
+      "p99_ms": 48.329720000000016,
+      "max_ms": 92.7409,
+      "accepted": 2357,
+      "elapsed_seconds": 40.019,
+      "accepted_per_second": 58.89702391364102,
+      "failure_rate": 0
+    },
+    {
+      "name": "sustain",
+      "samples": 6440,
+      "average_ms": 34.264128618012364,
+      "p50_ms": 32.6871,
+      "p95_ms": 52.70455999999998,
+      "p99_ms": 77.23897399999996,
+      "max_ms": 134.3882,
+      "accepted": 6440,
+      "elapsed_seconds": 59.988,
+      "accepted_per_second": 107.35480429419218,
+      "failure_rate": 0
+    },
+    {
+      "name": "spike",
+      "samples": 5556,
+      "average_ms": 63.35946025917934,
+      "p50_ms": 51.405699999999996,
+      "p95_ms": 133.55372500000001,
+      "p99_ms": 176.37677499999995,
+      "max_ms": 253.6748,
+      "accepted": 5556,
+      "elapsed_seconds": 30.132,
+      "accepted_per_second": 184.38868976503383,
+      "failure_rate": 0
+    },
+    {
+      "name": "recovery",
+      "samples": 112,
+      "average_ms": 114.32397678571431,
+      "p50_ms": 112.7997,
+      "p95_ms": 139.33974999999995,
+      "p99_ms": 156.38255900000001,
+      "max_ms": 182.0279,
+      "accepted": 112,
+      "elapsed_seconds": 20.051,
+      "accepted_per_second": 5.58575632138048,
+      "failure_rate": 0
+    }
+  ],
+  "resources": {
+    "api_average_cpu_core_percent": 31.15085514806626,
+    "api_rss_after_mib": 62.91015625,
+    "containers": {
+      "nexus-performance-database-1": {
+        "max_cpu_core_percent": 1097.52,
+        "max_memory_percent": 42.99,
+        "max_memory_usage": "880.4MiB / 2GiB"
+      },
+      "nexus-performance-redis-1": {
+        "max_cpu_core_percent": 14.76,
+        "max_memory_percent": 5.82,
+        "max_memory_usage": "14.9MiB / 256MiB"
+      }
+    },
+    "container_sample_count": 40
+  },
+  "findings": [
+    "Recovery p95 was 139.34ms versus 32.84ms at baseline. Passing global latency gates does not establish a return to baseline; investigate with a longer recovery/soak and database profiles.",
+    "No before/after optimization comparison was run; no speedup claim is established."
+  ]
+}

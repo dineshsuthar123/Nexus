@@ -1,0 +1,3 @@
+# Evidence checksums cover the original bytes, including original line endings.
+# Disable Git EOL conversion for promoted runs so Windows/Linux checkouts agree.
+docs/performance/runs/** -text whitespace=cr-at-eol

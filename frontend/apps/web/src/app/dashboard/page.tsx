@@ -36,6 +36,7 @@ import Link from 'next/link';
 
 import { useDashboardData, usePayments } from '@/lib/hooks';
 import { useWebSocketContext } from '../websocket-provider';
+import { BenchmarkSummary } from '@/components/BenchmarkSummary';
 
 // Stagger animation for card grids
 const containerVariants = {
@@ -399,6 +400,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Performance Metrics */}
+      <BenchmarkSummary />
       <motion.div
         className="grid gap-6 lg:grid-cols-3"
         variants={containerVariants}
@@ -415,12 +417,12 @@ export default function DashboardPage() {
                   </p>
                   <div className="mt-1.5 flex items-baseline gap-2">
                     <span className="text-3xl font-bold tabular-nums text-neutral-900 dark:text-neutral-50">
-                      {performance.data?.averageLatency || 47}
+                      {performance.data?.averageLatency ?? '—'}
                     </span>
                     <span className="text-sm font-medium text-neutral-400">ms</span>
                   </div>
                   <p className="mt-1 text-xs text-neutral-500">
-                    p99: <span className="font-medium text-neutral-700 dark:text-neutral-300">{performance.data?.p99Latency || 120}ms</span>
+                    p99: <span className="font-medium text-neutral-700 dark:text-neutral-300">{performance.data?.p99Latency ?? '—'}ms</span>
                   </p>
                 </div>
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400">
@@ -441,11 +443,11 @@ export default function DashboardPage() {
                   </p>
                   <div className="mt-1.5 flex items-baseline gap-2">
                     <span className="text-3xl font-bold tabular-nums text-neutral-900 dark:text-neutral-50">
-                      {formatCompactNumber(performance.data?.throughput || 12400)}
+                      {performance.data?.throughput == null ? '—' : formatCompactNumber(performance.data.throughput)}
                     </span>
                     <span className="text-sm font-medium text-neutral-400">/sec</span>
                   </div>
-                  <p className="mt-1 text-xs text-neutral-500">Peak transactions per second</p>
+                  <p className="mt-1 text-xs text-neutral-500">Live transactions per second</p>
                 </div>
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary-50 text-secondary-600 dark:bg-secondary-950/50 dark:text-secondary-400">
                   <Zap className="h-5 w-5" />
@@ -465,12 +467,12 @@ export default function DashboardPage() {
                   </p>
                   <div className="mt-1.5 flex items-baseline gap-2">
                     <span className="text-3xl font-bold tabular-nums text-neutral-900 dark:text-neutral-50">
-                      {(performance.data?.errorRate || 0.03).toFixed(2)}
+                      {performance.data?.errorRate == null ? '—' : performance.data.errorRate.toFixed(2)}
                     </span>
                     <span className="text-sm font-medium text-neutral-400">%</span>
                   </div>
                   <p className="mt-1 text-xs text-neutral-500">
-                    Uptime: <span className="font-medium text-success-600 dark:text-success-400">{(performance.data?.uptimePercentage || 99.99).toFixed(2)}%</span>
+                    Uptime: <span className="font-medium text-success-600 dark:text-success-400">{performance.data?.uptimePercentage == null ? '—' : performance.data.uptimePercentage.toFixed(2)}%</span>
                   </p>
                 </div>
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success-50 text-success-600 dark:bg-success-100/10 dark:text-success-400">

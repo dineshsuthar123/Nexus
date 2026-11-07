@@ -1,6 +1,6 @@
 # Mermaid Diagrams
 
-**Document:** Nexus RTP Platform Architecture Diagrams  
+**Document:** Nexus RTP Platform Architecture Diagrams
 **Format:** Mermaid (render with GitHub, VS Code extension, or mermaid.live)
 
 ---
@@ -50,19 +50,19 @@ flowchart TB
 
     PS -->|Score Request| FS
     FS -->|Risk Score| PS
-    
+
     PS -->|Debit/Credit| AS
     AS -->|Verify Balance| IG
     IG -->|OK| AS
     AS -->|Atomic TX| DB
-    
+
     PS -->|Emit Event| KF
     KF -->|Stream| RE
     KF -->|Stream| AB
-    
+
     RE -->|Verify Hash Chain| RE
     AB -->|Sign Bundle| V
-    
+
     V -->|Certs| CM
     CM -->|mTLS Certs| AUTH
 
@@ -90,26 +90,26 @@ sequenceDiagram
     Auditor->>CLI: replay --from T1 --to T2
     CLI->>SS: Find snapshot before T1
     SS-->>CLI: Snapshot at T0
-    
+
     CLI->>KF: Consume events [T0, T2]
     KF-->>CLI: Events stream
-    
+
     loop For each event
         CLI->>RE: Apply event
         RE->>RE: Update state
         RE->>HV: Verify hash chain
         HV-->>RE: Hash valid ✓
     end
-    
+
     CLI->>CLI: Compute final hash
     CLI-->>Auditor: replay_state.json
-    
+
     Auditor->>Live: GET /state?at=T2
     Live-->>Auditor: live_state.json
-    
+
     Auditor->>CLI: compare --replay --live
     CLI->>CLI: Diff states
-    
+
     alt States match
         CLI-->>Auditor: MATCH ✓
     else States differ
@@ -148,13 +148,13 @@ flowchart LR
     TX --> CB
     BP --> CB
     IR --> CB
-    
+
     CB --> MR
     MR --> SN
-    
+
     SN -.->|Production| V
     SN -.->|Future| HSM
-    
+
     SN --> AB
     AB --> CH
     CH -->|prev_hash| AB
@@ -174,9 +174,9 @@ stateDiagram-v2
     GeneratingNew --> ValidatingChain: Verify CA chain
     ValidatingChain --> SwappingCert: Update service
     SwappingCert --> Active: New cert active
-    
+
     Active --> Active: Metrics updated hourly
-    
+
     Rotating --> Failed: Error
     Failed --> NeedsRotation: Retry
 ```
@@ -192,23 +192,23 @@ stateDiagram-v2
     Pending --> Validating: Begin processing
     Validating --> FraudCheck: Pass basic validation
     Validating --> Rejected: Fail validation
-    
+
     FraudCheck --> Approved: Low risk
     FraudCheck --> Review: Medium risk
     FraudCheck --> Rejected: High risk
-    
+
     Review --> Approved: Manual approve
     Review --> Rejected: Manual reject
-    
+
     Approved --> Debiting: Reserve funds
     Debiting --> Crediting: Debit success
     Debiting --> Failed: Insufficient funds
-    
+
     Crediting --> Completed: Credit success
     Crediting --> Reversing: Credit failed
-    
+
     Reversing --> Failed: Reversal complete
-    
+
     Completed --> [*]
     Rejected --> [*]
     Failed --> [*]
@@ -274,7 +274,7 @@ flowchart TB
     style DB3 fill:#9cf,stroke:#333
 ```
 
-**Note:** Multi-region is a P0 gap. See [p0_gaps.md](../p0_gaps.md).
+**Note:** Multi-region production behavior remains unverified. See [architecture](../ARCHITECTURE.md) and [recorded measurement limits](../performance/README.md).
 
 ---
 

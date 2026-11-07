@@ -2,6 +2,15 @@
 
 All notable changes for the Nexus RTP production-readiness effort.
 
+## [Unreleased] — 2026-11-07
+
+- Added a reproducible isolated performance run with real payment-service, CockroachDB and Redis, persisted ledger checks, source/environment manifests and raw evidence checksums.
+- Recorded five-phase API acceptance and production-browser measurements in [the performance report](docs/performance/README.md). Recovery slowdown and the sanctions-review scope are explicit.
+- Synchronized measured results across project documentation and the UI, removed fabricated live telemetry fallbacks, and added evidence drift checks to CI.
+- Organized useful guides under `docs/guides/` and current evidence under `docs/performance/`. Removed obsolete reports, duplicate documentation, marketing claims, patch/PR instructions and superseded benchmark/release helpers; repaired links and ignored local output.
+- Restored the missing cancellation method in its own source file and corrected the duplicate-payment test mock. Added regression checks for missing/disabled/zero benchmark observations.
+- Made commit hooks portable for the Go workspace, kept raw evidence out of formatters, and scoped credential scans to staged repository files so ignored dependencies and local backups are excluded.
+
 ## [Unreleased] — 2025-01-15
 
 ### P0-1: Vault & HSM Integration (`agent/secrets-vault-hsm`)

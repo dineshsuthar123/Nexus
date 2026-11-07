@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-11-07T08:06:50.949354+00:00",
+  "git_commit": "93b0021ae72d25f1c8a74d618edafb61c5892f3f",
+  "working_tree_dirty": true,
+  "source_sha256": "032c5644399a27b15baeb29191dcbcbb73cd1852b7f912047d31727ff5cf392d",
+  "host": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "architecture": "AMD64",
+    "logical_cpus": 16,
+    "processor": "AMD64 Family 25 Model 117 Stepping 2, AuthenticAMD"
+  },
+  "tools": {
+    "go": "go version go1.25.6 windows/amd64",
+    "k6": "k6.exe v1.6.1 (commit/2ac2bb560e, go1.25.7, windows/amd64)",
+    "docker": "29.4.3"
+  },
+  "scope": "Local direct payment API acceptance with sanctions unavailable (REVIEW), real CockroachDB and Redis",
+  "limitations": [
+    "Single-node in-memory CockroachDB on shared Docker Desktop hardware",
+    "Sanctions endpoint intentionally unavailable; payments enter SANCTIONED review",
+    "No gateway, auth, Kafka delivery, fraud processing, settlement or cross-region network measured",
+    "Closed-loop users with 50ms think time; achieved rate is not maximum capacity",
+    "Load generator and service share the host; no production throughput or uptime inference"
+  ],
+  "docker_info": {
+    "cpus": "16",
+    "memory_bytes": "7956787200"
+  },
+  "images": [
+    {
+      "ID": "sha256:d4cae01f1db1b4056c75ada36cb6c3e4994fc84e38cf28930c4a9c8b191c9085",
+      "ContainerName": "nexus-performance-database-1",
+      "Repository": "cockroachdb/cockroach",
+      "Tag": "v23.2.0",
+      "Platform": "linux/amd64",
+      "Size": 169009622,
+      "Created": "2024-02-05T16:30:19.648358775Z",
+      "LastTagTime": "2026-11-07T08:01:43.525016067Z"
+    },
+    {
+      "ID": "sha256:3d2b46efa3280299fe6e117a33fccdfeb495c39098f95d076fadd12a88005b0a",
+      "ContainerName": "nexus-performance-redis-1",
+      "Repository": "redis",
+      "Tag": "7.2-alpine",
+      "Platform": "linux/amd64",
+      "Size": 15866487,
+      "Created": "2026-11-05T19:11:28.697313438Z",
+      "LastTagTime": "2026-11-07T08:00:40.661823195Z"
+    }
+  ],
+  "load_elapsed_seconds": 190.8053557999665,
+  "k6_exit_code": 0,
+  "database_validation_passed": true,
+  "finished_at": "2026-11-07T08:10:14.914052+00:00"
+}

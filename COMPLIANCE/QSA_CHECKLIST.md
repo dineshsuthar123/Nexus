@@ -18,7 +18,7 @@ Items marked ⚠️ have partial evidence. Items marked 🔲 are in progress wit
 | # | Item | Status | Artifact |
 |---|------|--------|----------|
 | 1.1 | System architecture diagram | ✅ | [mermaid_diagrams.md](../docs/appendix/mermaid_diagrams.md) |
-| 1.2 | Data flow diagram (cardholder data) | ✅ | [whitepaper.md](../docs/whitepaper.md) §3 |
+| 1.2 | Data flow diagram (cardholder data) | ✅ | [Architecture and payment flow](../docs/ARCHITECTURE.md) |
 | 1.3 | Network segmentation evidence | ✅ | K8s NetworkPolicy manifests |
 | 1.4 | Firewall / gateway rules | ✅ | [kong-setup.sh](../infra/kong/kong-setup.sh) |
 | 1.5 | DMZ architecture | ✅ | Kong → K8s internal services |

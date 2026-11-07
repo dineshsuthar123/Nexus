@@ -4,6 +4,8 @@
 **Last Updated:** 2025-01-15
 **Review Cadence:** Monthly
 
+These are production SLO targets. The [recorded local acceptance baseline](../docs/performance/README.md) supplies test evidence with a narrower environment and scope; production SLO compliance requires live telemetry.
+
 ---
 
 ## 1. Service Level Objectives

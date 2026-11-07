@@ -1,5 +1,22 @@
 # Production Performance Tuning Guide — Nexus RTP Platform
 
+<!-- performance-results:start -->
+### Measured local performance (2026-11-07)
+
+| Payment attempts | p50 | p95 | p99 | Sustained accepted payments/s | Acceptance failures |
+|---:|---:|---:|---:|---:|---:|
+| 14,709 | 35.37 ms | 109.08 ms | 152.94 ms | 107.35 | 0.00% |
+
+Direct API, 1–25 closed-loop users, real single-node in-memory CockroachDB and Redis.
+Sanctions unavailable: payments were accepted for review. Settlement, Kafka delivery,
+gateway/auth, production capacity and uptime were not measured.
+Thresholds: **PASS**; persisted database invariants: **PASS**.
+
+Frontend production lab, ten fresh-context navigations per route: median LCP `/` 750 ms, `/auth/login` 152 ms, `/performance` 68 ms. No CPU/network throttling.
+
+See [methodology and raw evidence](performance/README.md). Other performance figures below are design targets or historical claims unless linked to a recorded run.
+<!-- performance-results:end -->
+
 ## 1. Go Service Tuning
 
 ### 1.1 Runtime Settings
@@ -231,6 +248,8 @@ db_cache_ttl: 0  # If DB-less mode
 
 ## 7. Benchmark Baseline Targets
 
+The generated results above measure local direct-API acceptance. The table below lists unverified deployment goals; it does not describe the measured machine or production capacity.
+
 | Metric | Target | Measured | Status |
 |--------|--------|----------|--------|
 | Payment TPS (sustained) | 1,000 | — | Run benchmark_suite.js |
@@ -245,8 +264,11 @@ db_cache_ttl: 0  # If DB-less mode
 
 **Run benchmarks:**
 ```bash
-# Ramp test (default)
+# Fast contract smoke (default)
 k6 run loadtest/benchmark_suite.js
+
+# Isolated measured local baseline, ramp, sustain, spike and recovery
+python scripts/performance/run.py
 
 # Soak test (2 hours)
 k6 run -e SCENARIO=soak loadtest/benchmark_suite.js

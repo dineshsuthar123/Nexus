@@ -1,0 +1,11 @@
+SET
+transactions,unique_uetrs,review_transactions
+14712,14712,14712
+unbalanced_transactions
+0
+negative_shards
+0
+outbox_events
+14712
+reservation_difference
+0.0000

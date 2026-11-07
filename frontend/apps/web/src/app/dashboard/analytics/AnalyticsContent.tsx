@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { BenchmarkSummary } from '@/components/BenchmarkSummary';
 import {
   Card,
   CardContent,
@@ -52,24 +53,28 @@ export default function AnalyticsContent() {
 
   if (summaryError) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <AlertCircle className="h-12 w-12 text-danger-500" />
-        <h2 className="mt-4 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-          Failed to load analytics
-        </h2>
-        <p className="mt-2 text-sm text-neutral-500">
-          Could not fetch analytics data. Please try again.
-        </p>
-        <Button className="mt-4" onClick={() => refetchSummary()}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Retry
-        </Button>
+      <div className="space-y-6">
+        <BenchmarkSummary />
+        <div className="flex flex-col items-center justify-center py-20">
+          <AlertCircle className="h-12 w-12 text-danger-500" />
+          <h2 className="mt-4 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+            Failed to load analytics
+          </h2>
+          <p className="mt-2 text-sm text-neutral-500">
+            Could not fetch analytics data. Please try again.
+          </p>
+          <Button className="mt-4" onClick={() => refetchSummary()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <BenchmarkSummary />
       {/* Page header */}
       <div className="page-header">
         <div>
@@ -451,18 +456,18 @@ export default function AnalyticsContent() {
                   ) : (
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">
-                        {performance?.averageLatency ?? 0}ms
+                        {performance?.averageLatency == null ? '—' : `${performance.averageLatency}ms`}
                       </span>
                     </div>
                   )}
-                  <p className="text-sm text-neutral-500">End-to-end latency</p>
+                  <p className="text-sm text-neutral-500">Live processing telemetry</p>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Peak Throughput</CardTitle>
+                <CardTitle className="text-base">Live Throughput</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -471,7 +476,7 @@ export default function AnalyticsContent() {
                   ) : (
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">
-                        {((performance?.throughput ?? 0) / 1000).toFixed(1)}K
+                        {performance?.throughput == null ? '—' : performance.throughput.toFixed(1)}
                       </span>
                       <span className="text-sm text-neutral-500">/sec</span>
                     </div>
@@ -492,7 +497,7 @@ export default function AnalyticsContent() {
                   ) : (
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold text-success-600 dark:text-success-400">
-                        {performance?.uptimePercentage ?? 0}%
+                        {performance?.uptimePercentage == null ? '—' : `${performance.uptimePercentage}%`}
                       </span>
                     </div>
                   )}
@@ -512,7 +517,7 @@ export default function AnalyticsContent() {
                   ) : (
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">
-                        {performance?.errorRate ?? 0}%
+                        {performance?.errorRate == null ? '—' : `${performance.errorRate}%`}
                       </span>
                     </div>
                   )}
@@ -532,7 +537,7 @@ export default function AnalyticsContent() {
                   ) : (
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">
-                        {performance?.p95Latency ?? 0}ms
+                        {performance?.p95Latency == null ? '—' : `${performance.p95Latency}ms`}
                       </span>
                       <span className="text-sm text-neutral-500">p95</span>
                     </div>
@@ -553,7 +558,7 @@ export default function AnalyticsContent() {
                   ) : (
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">
-                        {performance?.p99Latency ?? 0}ms
+                        {performance?.p99Latency == null ? '—' : `${performance.p99Latency}ms`}
                       </span>
                       <span className="text-sm text-neutral-500">p99</span>
                     </div>

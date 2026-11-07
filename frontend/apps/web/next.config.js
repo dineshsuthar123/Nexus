@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone',
+  // Keep local measurements separate from deployment packaging. On Windows,
+  // pnpm junctions in standalone output can be followed during build cleanup.
+  output: process.env.NEXUS_PERFORMANCE === 'true' ? undefined : 'standalone',
+  distDir: process.env.NEXUS_PERFORMANCE === 'true' ? '.next-performance' : '.next',
   transpilePackages: ['@nexus/ui'],
 
   // Enable experimental features

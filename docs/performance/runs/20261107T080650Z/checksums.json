@@ -1,0 +1,9 @@
+{
+  "database-validation.csv": "890fca1c49fd9561dff5c26a319882529dcec3df29fffd5ec2727071d7df4030",
+  "frontend.json": "74bbf6d0954d2e6d5507d605713d837cf990506df563268f927a91a80b55f1be",
+  "k6-summary.json": "251ecc9609d645510318669fee04d2e2c326c56f99271c108ba287d6f6bd62d8",
+  "manifest.json": "d2a2e8f67ff14634bce892582b7bf446888c56dae3dc26e5f6459a77a094de52",
+  "prometheus-after.txt": "117bb979f02d4a383de48cbb6502b65a7da539906aef6b3c7dfe2f2965932da0",
+  "prometheus-before.txt": "5c249e10f2ae18fb5e9465153f08481c81256310aadc4582aece80af8c6ad6d7",
+  "resources.ndjson": "a73187ab41566946f42486a7a6470a20769d4744b48cff4a5eef32d83e50c17e"
+}

@@ -70,7 +70,7 @@
 ## Artifacts Checklist (for QSA/Auditor)
 
 - [x] System architecture diagram → [mermaid_diagrams.md](../docs/appendix/mermaid_diagrams.md)
-- [x] Data flow diagram → [whitepaper.md](../docs/whitepaper.md)
+- [x] Data flow diagram → [architecture](../docs/ARCHITECTURE.md)
 - [x] Encryption key management policy → [KEY_ROTATION.md](../SECURITY/KEY_ROTATION.md)
 - [x] Network segmentation diagram → Kubernetes namespace topology
 - [x] Access control matrix → [vault_policy.hcl](../security/vault_policy.hcl)

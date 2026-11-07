@@ -1,5 +1,22 @@
 # Nexus RTP Platform - Frontend
 
+<!-- performance-results:start -->
+### Measured local performance (2026-11-07)
+
+| Payment attempts | p50 | p95 | p99 | Sustained accepted payments/s | Acceptance failures |
+|---:|---:|---:|---:|---:|---:|
+| 14,709 | 35.37 ms | 109.08 ms | 152.94 ms | 107.35 | 0.00% |
+
+Direct API, 1–25 closed-loop users, real single-node in-memory CockroachDB and Redis.
+Sanctions unavailable: payments were accepted for review. Settlement, Kafka delivery,
+gateway/auth, production capacity and uptime were not measured.
+Thresholds: **PASS**; persisted database invariants: **PASS**.
+
+Frontend production lab, ten fresh-context navigations per route: median LCP `/` 750 ms, `/auth/login` 152 ms, `/performance` 68 ms. No CPU/network throttling.
+
+See [methodology and raw evidence](../docs/performance/README.md). Other performance figures below are design targets or historical claims unless linked to a recorded run.
+<!-- performance-results:end -->
+
 Production-grade React/Next.js frontend for the Nexus Real-Time Payment & Settlement Network.
 
 ## 🚀 Features
@@ -178,9 +195,9 @@ import { useRequireAuth } from '@/lib/auth';
 
 function ProtectedPage() {
   const { isAuthenticated, isLoading } = useRequireAuth();
-  
+
   if (isLoading) return <Loading />;
-  
+
   return <div>Protected content</div>;
 }
 ```

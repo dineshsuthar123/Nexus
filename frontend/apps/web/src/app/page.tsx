@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, Badge } from '@nexus/ui';
 import { ArrowRight, Shield, Zap, Globe, BarChart3, Lock, CheckCircle } from 'lucide-react';
+import { BenchmarkSummary } from '@/components/BenchmarkSummary';
 
 const fadeInUp = {
   initial: { opacity: 0, y: 24 },
@@ -16,19 +17,12 @@ const staggerContainer = {
 };
 
 const features = [
-  { title: 'Real-Time Processing', description: 'Sub-second transaction processing with guaranteed delivery and zero message loss.', icon: Zap, gradient: 'from-blue-500/20 to-cyan-500/20', iconColor: 'text-blue-500', ring: 'ring-blue-500/30' },
+  { title: 'Payment Processing', description: 'Payment acceptance with durable ledger writes and transactional outbox events.', icon: Zap, gradient: 'from-blue-500/20 to-cyan-500/20', iconColor: 'text-blue-500', ring: 'ring-blue-500/30' },
   { title: 'Cryptographic Proofs', description: 'Every transaction secured with SHA-384 hashing and immutable audit trails.', icon: Shield, gradient: 'from-emerald-500/20 to-teal-500/20', iconColor: 'text-emerald-500', ring: 'ring-emerald-500/30' },
-  { title: 'Global Reach', description: 'Multi-currency support with automatic FX across 150+ countries.', icon: Globe, gradient: 'from-violet-500/20 to-purple-500/20', iconColor: 'text-violet-500', ring: 'ring-violet-500/30' },
+  { title: 'Multi-Currency Accounts', description: 'Currency-aware account and payment models with explicit payment validation.', icon: Globe, gradient: 'from-violet-500/20 to-purple-500/20', iconColor: 'text-violet-500', ring: 'ring-violet-500/30' },
   { title: 'Advanced Analytics', description: 'Real-time dashboards with predictive insights and trend detection.', icon: BarChart3, gradient: 'from-amber-500/20 to-orange-500/20', iconColor: 'text-amber-500', ring: 'ring-amber-500/30' },
-  { title: 'Enterprise Security', description: 'SOC 2 Type II, PCI-DSS certified infrastructure with mTLS.', icon: Lock, gradient: 'from-rose-500/20 to-pink-500/20', iconColor: 'text-rose-500', ring: 'ring-rose-500/30' },
+  { title: 'Security Controls', description: 'Service security controls including mTLS and authenticated access.', icon: Lock, gradient: 'from-rose-500/20 to-pink-500/20', iconColor: 'text-rose-500', ring: 'ring-rose-500/30' },
   { title: 'Deterministic Replay', description: 'Full transaction replay and reconciliation for auditing.', icon: CheckCircle, gradient: 'from-sky-500/20 to-indigo-500/20', iconColor: 'text-sky-500', ring: 'ring-sky-500/30' },
-];
-
-const stats = [
-  { value: '99.99%', label: 'Uptime SLA' },
-  { value: '<100ms', label: 'Avg. Latency' },
-  { value: '10M+', label: 'Daily Transactions' },
-  { value: '150+', label: 'Countries Supported' },
 ];
 
 export default function HomePage() {
@@ -95,7 +89,7 @@ export default function HomePage() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-6 max-w-2xl text-lg text-neutral-600 dark:text-slate-400 sm:text-xl"
           >
-            Process millions of transactions with cryptographic audit proofs, deterministic replay, and enterprise-grade security.
+            Explore payment processing with cryptographic audit proofs, deterministic replay, and recorded performance evidence.
           </motion.p>
 
           <motion.div
@@ -123,26 +117,7 @@ export default function HomePage() {
       {/* ======= Stats ======= */}
       <section className="relative border-y border-neutral-200/60 bg-neutral-50/80 py-16 dark:border-slate-800/50 dark:bg-slate-900/50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial="initial"
-            whileInView="animate"
-            viewport={{ once: true }}
-            variants={staggerContainer}
-            className="grid gap-6 text-center sm:grid-cols-2 lg:grid-cols-4"
-          >
-            {stats.map((stat) => (
-              <motion.div
-                key={stat.label}
-                variants={fadeInUp}
-                className="group rounded-2xl border border-neutral-200/60 bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 dark:border-slate-700/50 dark:bg-slate-800/30 dark:ring-1 dark:ring-slate-700/50"
-              >
-                <div className="bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-4xl font-bold tabular-nums text-transparent dark:from-blue-400 dark:to-emerald-400">
-                  {stat.value}
-                </div>
-                <div className="mt-2 text-sm font-medium text-neutral-500 dark:text-slate-400">{stat.label}</div>
-              </motion.div>
-            ))}
-          </motion.div>
+          <BenchmarkSummary />
         </div>
       </section>
 
